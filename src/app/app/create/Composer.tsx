@@ -39,6 +39,8 @@ import {
   ShoppingBag,
 } from 'lucide-react'
 import { MenuItem, MenuLabel, Popover } from '@/components/ui/Popover'
+import { useRouter } from 'next/navigation'
+import { savePost } from '../posts/actions'
 import { createPost, type CreatedPost } from './actions'
 import { HashtagModal, type Library } from './HashtagModal'
 
@@ -127,6 +129,9 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
   const [listening, setListening] = useState(false)
   const [speechOk, setSpeechOk] = useState(false)
   const [pending, start] = useTransition()
+  const [saving, startSave] = useTransition()
+  const [planFor, setPlanFor] = useState('')
+  const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
   const recRef = useRef<SpeechRec | null>(null)
   const sugRef = useRef<HTMLDivElement>(null)
@@ -195,6 +200,23 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
     })
   }
 
+  // Keep the generated post as a draft (or planned post) and open it in the editor.
+  const keep = (scheduledAt: string | null) =>
+    result &&
+    startSave(async () => {
+      const res = await savePost({
+        kind: 'SOCIAL',
+        content: result.caption,
+        hashtags: result.hashtags,
+        mediaIds: result.images.map((i) => i.id),
+        channels: [],
+        scheduledAt,
+        aiGenerated: true,
+      })
+      if (res.error) setError(res.error)
+      else router.push(`/app/posts/${res.id}`)
+    })
+
   const fullText = result
     ? [result.caption, result.hashtags.map((h) => `#${h}`).join(' ')].filter(Boolean).join('\n\n')
     : ''
@@ -214,10 +236,10 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
             <span className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-1.5 font-semibold shadow-sm">
               <Sparkles size={15} /> Social post
             </span>
-            <span className="inline-flex cursor-not-allowed items-center gap-2 px-3 py-1.5 text-zinc-500" title="Coming soon">
+            <Link href="/app/blog/ai" className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-zinc-600 hover:text-zinc-900">
               <FileText size={15} /> Blog article
-              <span className="rounded bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">SOON</span>
-            </span>
+              <span className="rounded bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">NEW</span>
+            </Link>
           </div>
 
           <div className="mt-8 flex items-center justify-center gap-3">
@@ -491,12 +513,41 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
                   >
                     {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy text'}
                   </button>
-                  <span
-                    className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg bg-zinc-100 px-3 py-1.5 text-sm text-zinc-500"
-                    title="Connect a channel to schedule"
+                  <button
+                    onClick={() => keep(null)}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-60"
                   >
-                    <CalendarClock size={14} /> Schedule
-                  </span>
+                    <FileText size={14} /> Save draft
+                  </button>
+                  <Popover
+                    align="right"
+                    width="w-72"
+                    trigger={() => (
+                      <span className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800">
+                        <CalendarClock size={14} /> Add to planner
+                      </span>
+                    )}
+                  >
+                    {() => (
+                      <div className="p-2">
+                        <p className="mb-2 text-sm font-medium">Plan for</p>
+                        <input
+                          type="datetime-local"
+                          value={planFor}
+                          onChange={(e) => setPlanFor(e.target.value)}
+                          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400"
+                        />
+                        <button
+                          onClick={() => planFor && keep(new Date(planFor).toISOString())}
+                          disabled={!planFor || saving}
+                          className="mt-2 w-full rounded-lg bg-zinc-900 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                        >
+                          {saving ? 'Saving…' : 'Add to planner'}
+                        </button>
+                      </div>
+                    )}
+                  </Popover>
                 </div>
               </div>
               {result.images.length > 0 && (

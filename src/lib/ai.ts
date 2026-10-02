@@ -134,3 +134,95 @@ export async function generateImage(
   }
   throw lastError ?? new Error('Image generation failed')
 }
+
+// ─── Campaigns & blog ──────────────────────────────────────────────────────
+
+async function json<T>(system: string, prompt: string, maxOutputTokens: number, timeoutMs = 60_000): Promise<T> {
+  if (!client) throw new Error('AI is not configured')
+  const res = await client.models.generateContent({
+    model: MODEL,
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: {
+      systemInstruction: system,
+      responseMimeType: 'application/json',
+      maxOutputTokens,
+      abortSignal: AbortSignal.timeout(timeoutMs),
+    },
+  })
+  return JSON.parse(res.text ?? 'null') as T
+}
+
+export type PlannedPost = { angle: string; caption: string; hashtags: string[] }
+
+// One coherent run of posts: each slot gets a distinct angle that moves the
+// campaign forward (tease → launch → proof → reminder → last call …).
+export async function generateCampaignPosts(
+  brandName: string,
+  brand: BrandKit | null,
+  o: { brief: string; dates: string[]; tone: PostOptions['tone']; language: PostOptions['language'] },
+): Promise<PlannedPost[]> {
+  const system = [
+    'You are a social media strategist planning one campaign for a brand. Never invent prices, dates, offers or facts beyond the brief and brand details.',
+    brandContext(brandName, brand),
+    `Tone: ${o.tone} — ${TONE_HINT[o.tone]}. Write in ${o.language}. Captions 300–600 characters, no hashtags inside captions.`,
+    `Return JSON: an array of exactly ${o.dates.length} objects {"angle": short label, "caption": string, "hashtags": string[3-6 without #]}, in date order. Every post must have a different angle and build on the previous ones.`,
+  ].join('\n\n')
+  const prompt = `Campaign brief: ${o.brief}\n\nPublishing dates: ${o.dates.join(', ')}`
+  const out = await json<PlannedPost[]>(system, prompt, Math.min(8000, 700 * o.dates.length + 500), 90_000)
+  if (!Array.isArray(out) || out.length === 0) throw new Error('Empty campaign plan')
+  return out.slice(0, o.dates.length).map((p) => ({
+    angle: String(p.angle ?? '').slice(0, 120),
+    caption: String(p.caption ?? '').trim(),
+    hashtags: (p.hashtags ?? []).map((h) => String(h).replace(/^#/, '').trim()).filter(Boolean).slice(0, 8),
+  }))
+}
+
+export type BlogOutline = { title: string; summary: string; keywords: string[] }
+
+export async function generateBlogOutlines(
+  brandName: string,
+  brand: BrandKit | null,
+  o: { brief: string; count: number; language: PostOptions['language'] },
+): Promise<BlogOutline[]> {
+  const system = [
+    'You plan a series of blog articles for a brand: useful, search-friendly topics that the brand can credibly write about. Never invent facts about the brand.',
+    brandContext(brandName, brand),
+    `Write in ${o.language}. Return JSON: an array of exactly ${o.count} objects {"title": string, "summary": 2–3 sentence outline, "keywords": string[3-6]}. Topics must not overlap.`,
+  ].join('\n\n')
+  const out = await json<BlogOutline[]>(system, `Series goal: ${o.brief}`, 400 * o.count + 400)
+  if (!Array.isArray(out) || out.length === 0) throw new Error('Empty blog plan')
+  return out.slice(0, o.count).map((b) => ({
+    title: String(b.title ?? '').slice(0, 200),
+    summary: String(b.summary ?? '').slice(0, 1000),
+    keywords: (b.keywords ?? []).map(String).slice(0, 8),
+  }))
+}
+
+export type BlogArticle = { title: string; body: string }
+
+const BLOG_LENGTH = { Short: '500–700 words', Medium: '900–1200 words', Long: '1500–2000 words' }
+
+export async function generateBlogArticle(
+  brandName: string,
+  brand: BrandKit | null,
+  o: {
+    topic: string
+    keywords: string[]
+    tone: PostOptions['tone']
+    length: PostOptions['length']
+    language: PostOptions['language']
+  },
+): Promise<BlogArticle> {
+  const system = [
+    'You write blog articles for a brand. Structure with an engaging intro, H2/H3 sections, short paragraphs, lists where useful and a closing call to action. Never invent statistics, prices or facts about the brand; speak generally where unsure.',
+    brandContext(brandName, brand),
+    `Tone: ${o.tone} — ${TONE_HINT[o.tone]}. Length: ${BLOG_LENGTH[o.length]}. Write in ${o.language}.`,
+    o.keywords.length ? `Work these keywords in naturally: ${o.keywords.join(', ')}.` : '',
+    'Return JSON: {"title": string, "body": Markdown string without the title as H1}.',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  const out = await json<BlogArticle>(system, `Article topic: ${o.topic}`, 8000, 120_000)
+  if (!out?.title || !out?.body) throw new Error('Empty article')
+  return { title: String(out.title).slice(0, 200), body: String(out.body).trim() }
+}

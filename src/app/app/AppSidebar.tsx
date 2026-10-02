@@ -7,7 +7,12 @@ import {
   CalendarDays,
   ChevronDown,
   Coins,
+  FilePen,
+  FileText,
   Headphones,
+  Newspaper,
+  Sparkles,
+  StickyNote,
   Inbox,
   LayoutTemplate,
   Link2,
@@ -80,12 +85,7 @@ function SidebarBody({ workspace, logoUrl, user, credits, planLabel, path }: Sid
     <div className="flex min-h-full flex-1 flex-col">
       <WorkspaceMenu workspace={workspace} logoUrl={logoUrl} user={user} />
 
-      <Link
-        href="/app/create"
-        className="mt-3 flex items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white py-2.5 text-sm font-medium shadow-sm transition hover:bg-zinc-50"
-      >
-        <Plus size={16} className="text-emerald-600" /> Create new
-      </Link>
+      <CreateMenu />
 
       <nav className="mt-4 space-y-0.5">
         {NAV.map((n) => {
@@ -158,6 +158,76 @@ function SidebarBody({ workspace, logoUrl, user, credits, planLabel, path }: Sid
           <span className="mt-0.5 block text-xs text-zinc-500">{planLabel}</span>
         </Link>
       </div>
+    </div>
+  )
+}
+
+const CREATE = [
+  { href: '/app/posts/new', label: 'New post or thread', icon: StickyNote, tint: 'bg-emerald-100 text-emerald-700' },
+  { href: '/app/create', label: 'New AI social post', icon: Sparkles, tint: 'bg-sky-100 text-sky-700' },
+  { href: '/app/campaigns/new?kind=social', label: 'New AI social campaign', icon: Target, tint: 'bg-violet-100 text-violet-700' },
+  { href: '/app/blog/new', label: 'New blog', icon: FileText, tint: 'bg-amber-100 text-amber-700', badge: 'bg-amber-100 text-amber-700' },
+  { href: '/app/blog/ai', label: 'New AI blog', icon: FilePen, tint: 'bg-orange-100 text-orange-700', badge: 'bg-orange-100 text-orange-700' },
+  { href: '/app/campaigns/new?kind=blog', label: 'New AI blog campaign', icon: Newspaper, tint: 'bg-rose-100 text-rose-700', badge: 'bg-rose-100 text-rose-700' },
+]
+
+// The menu is wider than the sidebar, and the sidebar scrolls — so it is
+// positioned fixed under the button instead of inside the scroll box.
+function CreateMenu() {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const open = pos !== null
+  const ref = useRef<HTMLDivElement>(null)
+  const btn = useRef<HTMLButtonElement>(null)
+  const setOpen = (v: boolean) => {
+    const r = btn.current?.getBoundingClientRect()
+    setPos(v && r ? { top: r.bottom + 8, left: r.left } : null)
+  }
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setPos(null)
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setPos(null)
+    const away = () => setPos(null)
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', esc)
+    window.addEventListener('resize', away)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', esc)
+      window.removeEventListener('resize', away)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative mt-3">
+      <button
+        ref={btn}
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white py-2.5 text-sm font-medium shadow-sm transition hover:bg-zinc-50"
+      >
+        <Plus size={16} className="text-emerald-600" /> Create new
+      </button>
+      {open && (
+        <div
+          style={pos}
+          className="fixed z-[60] w-72 max-w-[calc(100vw-1.5rem)] rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"
+        >
+          {CREATE.map((c) => (
+            <Link
+              key={c.href}
+              href={c.href}
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm text-zinc-800 hover:bg-zinc-100"
+            >
+              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${c.tint}`}>
+                <c.icon size={16} />
+              </span>
+              <span className="flex-1">{c.label}</span>
+              {c.badge && <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${c.badge}`}>NEW</span>}
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

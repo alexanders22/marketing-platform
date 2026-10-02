@@ -104,6 +104,7 @@ enum CreditReason {
   AI_TEXT
   AI_IMAGE
   AI_VIDEO
+  AI_BLOG
   ADJUSTMENT
 }
 
@@ -146,6 +147,9 @@ model Workspace {
   socialAccounts   SocialAccount[]
   hashtagLibraries HashtagLibrary[]
   media            Media[]
+  posts            Post[]
+  campaigns        Campaign[]
+  designs          Design[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -200,6 +204,90 @@ model Media {
   createdAt   DateTime  @default(now())
 
   @@index([workspaceId, createdAt])
+}
+
+enum ContentKind {
+  SOCIAL
+  BLOG
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  FAILED
+}
+
+// A social post or a blog article. `scheduledAt` is the planned date shown in
+// the Planner; it becomes a real publish time once channels are connected.
+model Post {
+  id          String      @id @default(cuid())
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaignId  String?
+  campaign    Campaign?   @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  kind        ContentKind @default(SOCIAL)
+  status      PostStatus  @default(DRAFT)
+  title       String?
+  // Blog campaign items start as an outline until the article is written.
+  outline     String?
+  content     String      @default("")
+  hashtags    String[]
+  mediaIds    String[]
+  // Networks the post is meant for (FACEBOOK, INSTAGRAM, …).
+  channels    String[]
+  scheduledAt DateTime?
+  aiGenerated Boolean     @default(false)
+  createdById String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([workspaceId, scheduledAt])
+  @@index([campaignId])
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+}
+
+// A run of social posts or blog articles planned around one goal.
+model Campaign {
+  id           String         @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kind         ContentKind    @default(SOCIAL)
+  name         String
+  brief        String
+  startsOn     DateTime
+  endsOn       DateTime
+  postsPerWeek Int
+  tone         String
+  language     String
+  status       CampaignStatus @default(DRAFT)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  posts Post[]
+
+  @@index([workspaceId, startsOn])
+}
+
+// A Studio canvas: size plus a JSON list of layers (text, image, shape).
+model Design {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name           String
+  width          Int
+  height         Int
+  data           Json
+  previewMediaId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([workspaceId, updatedAt])
 }
 
 enum SocialNetwork {

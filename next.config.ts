@@ -3,8 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
-      // Reference images attached in the composer (downscaled client-side).
-      bodySizeLimit: "8mb",
+      // Composer reference images and Studio PNG exports (base64).
+      bodySizeLimit: "20mb",
     },
   },
 };
