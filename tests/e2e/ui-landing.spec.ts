@@ -40,18 +40,27 @@ test('landing: all sections render, no console/page/network errors', async ({ pa
   expect(problems).toEqual([])
 })
 
-test('landing: header nav anchors scroll to their sections', async ({ page }) => {
+test('landing: header mega menu opens panels and links to real pages', async ({ page }) => {
   await page.goto('/')
-  for (const [label, id] of [
-    ['Features', 'features'],
-    ['Ads & analytics', 'ads'],
-    ['For partners', 'partners'],
-    ['Pricing', 'pricing'],
-  ] as const) {
-    await page.locator('header nav').getByRole('link', { name: label }).click()
-    await expect(page).toHaveURL(new RegExp(`#${id}$`))
-    await expect(page.locator(`section#${id}`)).toBeInViewport()
+  const nav = page.locator('header nav[aria-label="Main"]')
+  await nav.getByRole('button', { name: 'Features', exact: true }).hover()
+  const features = page.locator('#menu-features a')
+  await expect(features).toHaveCount(8)
+  const hrefs = await features.evaluateAll((as) => as.map((a) => a.getAttribute('href')!))
+  for (const h of hrefs) {
+    expect(h).toMatch(/^\/features\/[a-z]+$/)
+    expect((await page.request.get(h)).status()).toBe(200)
   }
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#menu-features')).toHaveCount(0)
+  await nav.getByRole('button', { name: 'Integrations', exact: true }).click()
+  await expect(page.locator('#menu-integrations')).toContainText('Instagram')
+  await nav.getByRole('button', { name: 'Resources', exact: true }).click()
+  await expect(page.locator('#menu-resources')).toContainText('Partner API')
+  await page.keyboard.press('Escape')
+  await nav.getByRole('link', { name: 'Pricing' }).click()
+  await expect(page).toHaveURL(/#pricing$/)
+  await expect(page.locator('section#pricing')).toBeInViewport()
 })
 
 test('landing: every in-page anchor points at an existing element', async ({ page }) => {
@@ -97,7 +106,7 @@ test('landing: CTAs go to /signup and /login', async ({ page }) => {
   for (const h of await trial.evaluateAll((as) => as.map((a) => a.getAttribute('href')))) expect(h).toBe('/signup')
   const external = await page.$$eval('a[href]', (as) =>
     // mailto: is the intended contact channel for demo / partnership / support.
-    as.map((a) => a.getAttribute('href')!).filter((h) => !h.startsWith('#') && !h.startsWith('mailto:') && !['/signup', '/login'].includes(h)),
+    as.map((a) => a.getAttribute('href')!).filter((h) => !h.startsWith('#') && !h.startsWith('/#') && !h.startsWith('/features/') && !h.startsWith('mailto:') && !['/', '/signup', '/login'].includes(h)),
   )
   expect(external).toEqual([])
   await page.locator('header').getByRole('link', { name: 'Try free' }).click()

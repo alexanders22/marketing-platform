@@ -35,13 +35,12 @@ import {
   SiYoutube,
 } from "react-icons/si";
 import { Header } from "@/components/landing/Header";
-import { Logo } from "@/components/landing/Logo";
 import { Pricing } from "@/components/landing/Pricing";
+import { Footer } from "@/components/landing/Footer";
+import { CONTACT, featureHref } from "@/components/landing/site";
 
 type Icon = ComponentType<{ size?: number; className?: string }>;
 
-// Sales / partnership enquiries.
-const CONTACT = "mailto:info@brandrepublic.ge?subject=Khma%20demo";
 
 const NETWORKS: { icon: Icon; name: string; color: string }[] = [
   { icon: SiFacebook, name: "Facebook", color: "#1877F2" },
@@ -565,7 +564,10 @@ Authorization: Bearer khma_…
           </Card>
           <Card className="p-7">
             <IconTile icon={Bot} tint="bg-violet-400/15 text-violet-300" />
-            <h3 className="mt-5 text-xl font-semibold">Let your AI assistant drive</h3>
+            <h3 className="mt-5 flex items-center gap-2 text-xl font-semibold">
+              Let your AI assistant drive
+              <span className="rounded-full bg-zinc-700/60 px-2 py-0.5 text-[11px] font-semibold text-zinc-300 uppercase">Soon</span>
+            </h3>
             <p className="mt-2 text-sm text-zinc-400">
               Connect Claude, ChatGPT or Gemini over MCP and ask in plain words: &ldquo;Plan next month&apos;s posts and
               a lead campaign for the new collection.&rdquo;
@@ -579,8 +581,8 @@ Authorization: Bearer khma_…
                 move the image budget to video?
               </p>
             </div>
-            <a href={CONTACT} className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-white hover:underline">
-              Explore the API & MCP <ArrowRight size={14} />
+            <a href={featureHref("api")} className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-white hover:underline">
+              Explore the Partner API <ArrowRight size={14} />
             </a>
           </Card>
         </div>
@@ -774,65 +776,5 @@ function FinalCta() {
         </div>
       </div>
     </section>
-  );
-}
-
-/* ─── Footer ───────────────────────────────────────────────────────────── */
-
-function Footer() {
-  // Only links that lead somewhere. Legal pages (terms, privacy) are not
-  // published yet, so they are not linked.
-  const cols: { title: string; links: { label: string; href: string }[] }[] = [
-    {
-      title: "Product",
-      links: [
-        { label: "Features", href: "#features" },
-        { label: "Ads & analytics", href: "#ads" },
-        { label: "How it works", href: "#how" },
-        { label: "Pricing", href: "#pricing" },
-      ],
-    },
-    {
-      title: "Platform",
-      links: [
-        { label: "Partner API", href: "#partners" },
-        { label: "AI assistants (MCP)", href: "#partners" },
-      ],
-    },
-    {
-      title: "Company",
-      links: [
-        { label: "Contact", href: CONTACT },
-        { label: "Log in", href: "/login" },
-        { label: "Start free", href: "/signup" },
-      ],
-    },
-  ];
-  return (
-    <footer className="border-t border-white/5 bg-zinc-900/30">
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 md:grid-cols-[1.4fr_repeat(3,1fr)]">
-        <div>
-          <Logo />
-          <p className="mt-3 max-w-xs text-sm text-zinc-400">AI marketing: content, ads and analytics in one place.</p>
-        </div>
-        {cols.map((c) => (
-          <div key={c.title}>
-            <h4 className="text-sm font-semibold">{c.title}</h4>
-            <ul className="mt-4 space-y-2.5 text-sm text-zinc-400">
-              {c.links.map((l) => (
-                <li key={l.label}>
-                  <a href={l.href} className="transition hover:text-white">
-                    {l.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-      <div className="mx-auto flex max-w-6xl flex-col justify-between gap-2 border-t border-white/5 px-4 py-6 text-xs text-zinc-500 sm:flex-row sm:px-6">
-        <span>© {new Date().getFullYear()} Khma. All rights reserved.</span>
-      </div>
-    </footer>
   );
 }
