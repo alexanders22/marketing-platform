@@ -1,16 +1,19 @@
 import Link from 'next/link'
-import { Logo } from '@/components/landing/Logo'
+import { ArtBackground } from '@/components/ArtBackground'
 
 export default function AuthLayout({ children }: LayoutProps<'/'>) {
   return (
-    <div className="relative flex min-h-screen flex-col items-center px-4 py-10">
-      <div className="glow pointer-events-none absolute inset-0" />
-      <Link href="/" className="relative mb-10" aria-label="Khma home">
-        <Logo />
-      </Link>
-      <div className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-900/80 p-6 shadow-2xl shadow-black/40 sm:p-8">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+      <ArtBackground />
+      <div className="relative w-full max-w-[420px] rounded-xl bg-white p-6 text-zinc-900 shadow-2xl sm:p-7">
         {children}
       </div>
+      <Link
+        href="/"
+        className="absolute top-5 left-5 rounded-lg bg-white/90 px-3 py-1.5 text-sm font-semibold text-zinc-900 shadow"
+      >
+        Khma
+      </Link>
     </div>
   )
 }

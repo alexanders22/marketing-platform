@@ -1,48 +1,41 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { z } from 'zod'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
+import { BrandInput, type BrandDraft } from '@/lib/brand-schema'
 
-export type BrandState = { ok?: boolean; error?: string } | undefined
-
-const optional = (max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max)
-    .transform((v) => v || null)
-
-const Brand = z.object({
-  website: optional(300).refine((v) => !v || /^https?:\/\/\S+\.\S+/.test(v), 'Website must start with http:// or https://'),
-  description: optional(2000),
-  voice: optional(500),
-  audience: optional(1000),
-  colors: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Colours must be hex like #FF6000')).max(6),
-  fonts: z.array(z.string().trim().min(1).max(60)).max(4),
-})
-
-export async function saveBrand(_: BrandState, form: FormData): Promise<BrandState> {
+export async function saveBrand(draft: BrandDraft): Promise<{ error?: string }> {
   const { workspace } = await requireContext()
-  const parsed = Brand.safeParse({
-    website: form.get('website') ?? '',
-    description: form.get('description') ?? '',
-    voice: form.get('voice') ?? '',
-    audience: form.get('audience') ?? '',
-    colors: form.getAll('colors').map(String).filter(Boolean),
-    fonts: String(form.get('fonts') ?? '')
+  const parsed = BrandInput.safeParse({
+    ...draft,
+    socialLinks: draft.socialLinks.map((l) => l.trim()).filter((l) => l && l !== 'https://'),
+    fonts: (draft.fonts ?? '')
       .split(',')
       .map((f) => f.trim())
       .filter(Boolean),
   })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
+  const { name, ...b } = parsed.data
+  const data = {
+    website: b.website,
+    description: b.description,
+    logoUrl: b.logoUrl,
+    colors: b.colors,
+    socialLinks: b.socialLinks,
+    voice: b.voice ?? null,
+    audience: b.audience ?? null,
+    fonts: b.fonts ?? [],
+  }
 
-  await prisma.brandKit.upsert({
-    where: { workspaceId: workspace.id },
-    create: { workspaceId: workspace.id, ...parsed.data },
-    update: parsed.data,
-  })
+  await prisma.$transaction([
+    prisma.workspace.update({ where: { id: workspace.id }, data: { name } }),
+    prisma.brandKit.upsert({
+      where: { workspaceId: workspace.id },
+      create: { workspaceId: workspace.id, ...data },
+      update: data,
+    }),
+  ])
   revalidatePath('/app', 'layout')
-  return { ok: true }
+  return {}
 }
