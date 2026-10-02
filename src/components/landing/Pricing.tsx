@@ -90,7 +90,7 @@ export function Pricing() {
                 {yearly ? `Billed yearly — $${p.monthly * 10}` : "Billed monthly"}
               </p>
               <a
-                href="#"
+                href="/signup"
                 className={`mt-6 rounded-lg py-2.5 text-center text-sm font-medium transition ${
                   p.popular
                     ? "bg-white text-zinc-950 hover:bg-zinc-200"

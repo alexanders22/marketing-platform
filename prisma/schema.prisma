@@ -138,6 +138,7 @@ model BrandKit {
   id          String    @id @default(cuid())
   workspaceId String    @unique
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website     String?
   description String?
   voice       String?
   audience    String?
@@ -201,6 +202,20 @@ model User {
   createdAt    DateTime @default(now())
 
   memberships AccountMember[]
+  sessions    Session[]
+}
+
+// Browser login session. The cookie holds a random token; only its sha256 is
+// stored, so a database leak does not leak live sessions.
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 enum MemberRole {

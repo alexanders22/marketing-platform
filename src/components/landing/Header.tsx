@@ -30,11 +30,11 @@ export function Header() {
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <a href="#" className="text-sm text-zinc-300 transition hover:text-white">
+          <a href="/login" className="text-sm text-zinc-300 transition hover:text-white">
             Log in
           </a>
           <a
-            href="#pricing"
+            href="/signup"
             className="rounded-full bg-white px-4 py-1.5 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200"
           >
             Try free
@@ -58,8 +58,11 @@ export function Header() {
               {n.label}
             </a>
           ))}
+          <a href="/login" className="block py-3 text-zinc-300">
+            Log in
+          </a>
           <a
-            href="#pricing"
+            href="/signup"
             onClick={() => setOpen(false)}
             className="mt-2 block rounded-full bg-white py-2.5 text-center text-sm font-medium text-zinc-950"
           >

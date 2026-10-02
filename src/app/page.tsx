@@ -122,7 +122,7 @@ function Card({ children, className = "", solid = false }: { children: ReactNode
   );
 }
 
-function PrimaryCta({ children, href = "#pricing" }: { children: ReactNode; href?: string }) {
+function PrimaryCta({ children, href = "/signup" }: { children: ReactNode; href?: string }) {
   return (
     <a
       href={href}
@@ -661,7 +661,7 @@ function ReplaceAgency() {
               Agencies charge thousands a month for posts, ads and reports. Khma does the same work every day, from $29.
             </p>
             <div className="mt-8 flex justify-center">
-              <PrimaryCta>See plans & pricing</PrimaryCta>
+              <PrimaryCta href="#pricing">See plans & pricing</PrimaryCta>
             </div>
           </div>
         </div>
