@@ -150,6 +150,7 @@ model Workspace {
   posts            Post[]
   campaigns        Campaign[]
   designs          Design[]
+  bioPages         BioPage[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -288,6 +289,38 @@ model Design {
   updatedAt      DateTime  @updatedAt
 
   @@index([workspaceId, updatedAt])
+}
+
+// Public link-in-bio page at /b/{slug}. `blocks` is a JSON list of links,
+// headings, text and social rows; `theme` holds colours and button style.
+model BioPage {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  slug          String    @unique
+  title         String
+  bio           String    @default("")
+  avatarMediaId String?
+  theme         Json
+  blocks        Json
+  published     Boolean   @default(false)
+  views         Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  clicks BioClick[]
+
+  @@index([workspaceId])
+}
+
+model BioClick {
+  id        String   @id @default(cuid())
+  pageId    String
+  page      BioPage  @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  blockId   String
+  createdAt DateTime @default(now())
+
+  @@index([pageId, blockId])
 }
 
 enum SocialNetwork {
