@@ -142,8 +142,10 @@ model Workspace {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  brandKit       BrandKit?
-  socialAccounts SocialAccount[]
+  brandKit         BrandKit?
+  socialAccounts   SocialAccount[]
+  hashtagLibraries HashtagLibrary[]
+  media            Media[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -163,6 +165,41 @@ model BrandKit {
   // Public profile URLs found on the website or added by hand.
   socialLinks String[]
   updatedAt   DateTime  @updatedAt
+}
+
+// Named, reusable hashtag sets ("Spring sale", "Brand basics") the composer
+// can append to a post.
+model HashtagLibrary {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  tags        String[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+}
+
+// A generated or uploaded file. Bytes live on disk under STORAGE_DIR; the
+// row is what access checks go through.
+model Media {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kind        MediaKind @default(IMAGE)
+  mime        String
+  path        String
+  bytes       Int
+  prompt      String?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
 }
 
 enum SocialNetwork {
