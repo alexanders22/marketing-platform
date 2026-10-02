@@ -215,6 +215,8 @@ enum ContentKind {
 enum PostStatus {
   DRAFT
   SCHEDULED
+  // Claimed by the publisher; becomes PUBLISHED or FAILED.
+  PUBLISHING
   PUBLISHED
   FAILED
 }
@@ -240,11 +242,41 @@ model Post {
   scheduledAt DateTime?
   aiGenerated Boolean     @default(false)
   createdById String?
+  publishedAt DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
+  deliveries PostDelivery[]
+
   @@index([workspaceId, scheduledAt])
+  @@index([status, scheduledAt])
   @@index([campaignId])
+}
+
+enum DeliveryStatus {
+  PUBLISHED
+  FAILED
+}
+
+// One post on one connected account: the network's post id, link, error
+// and the latest insights we read back.
+model PostDelivery {
+  id              String         @id @default(cuid())
+  postId          String
+  post            Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  socialAccountId String
+  socialAccount   SocialAccount  @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  status          DeliveryStatus
+  externalId      String?
+  permalink       String?
+  error           String?
+  // { reach, views, likes, comments, shares, saves, interactions }
+  metrics         Json?
+  metricsAt       DateTime?
+  createdAt       DateTime       @default(now())
+
+  @@unique([postId, socialAccountId])
+  @@index([socialAccountId, createdAt])
 }
 
 enum CampaignStatus {
@@ -326,6 +358,7 @@ model BioClick {
 enum SocialNetwork {
   FACEBOOK
   INSTAGRAM
+  META_ADS
   TIKTOK
   LINKEDIN
   YOUTUBE
@@ -344,19 +377,41 @@ model SocialAccount {
   workspaceId     String
   workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   network         SocialNetwork
-  // Page / profile / channel id on the network.
+  // Page / profile / channel / ad account id on the network.
   externalId      String
   name            String
+  handle          String?
+  avatarUrl       String?
+  // Meta: the app-scoped id of the person who connected it (deauthorize and
+  // data-deletion callbacks name this id). Instagram: its Facebook Page id.
+  connectedBy     String?
+  parentId        String?
+  // Network specifics, e.g. ad account currency and time zone.
+  meta            Json?
   // AES-256-GCM encrypted (see src/lib/crypto.ts).
   accessTokenEnc  String?
   refreshTokenEnc String?
   expiresAt       DateTime?
   scopes          String[]
   status          ConnectionStatus @default(ACTIVE)
+  lastError       String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
+  deliveries PostDelivery[]
+
   @@unique([workspaceId, network, externalId])
+  @@index([connectedBy])
+}
+
+// Meta "delete my data" requests: the confirmation code Meta shows the
+// person, so they can check the status on /data-deletion.
+model MetaDeletion {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  metaUserId  String
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
 }
 
 // ─── Platform users (direct UI login) ────────────────────────────────────────

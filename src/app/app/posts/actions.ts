@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
+import { deliver, targetsFor } from '@/lib/publisher'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 
 const NETWORKS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST'] as const
@@ -20,6 +21,9 @@ const PostInput = z.object({
   channels: z.array(z.enum(NETWORKS)).max(NETWORKS.length),
   scheduledAt: z.string().datetime({ offset: true }).nullable(),
   aiGenerated: z.boolean().optional(),
+  // true = publish automatically at scheduledAt; otherwise the post is a
+  // draft that only sits in the Planner.
+  schedule: z.boolean().optional(),
 })
 
 export type PostInput = z.input<typeof PostInput>
@@ -39,8 +43,25 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
   const owned = await prisma.media.count({ where: { id: { in: p.mediaIds }, workspaceId: workspace.id } })
   if (owned !== p.mediaIds.length) return { error: 'Some images are not available' }
 
+  const existing = p.id
+    ? await prisma.post.findFirst({ where: { id: p.id, workspaceId: workspace.id }, select: { status: true } })
+    : null
+  if (p.id && !existing) return { error: 'Post not found' }
+  if (existing?.status === 'PUBLISHING') return { error: 'This post is being published right now' }
+  const published = existing?.status === 'PUBLISHED'
+  if (p.schedule) {
+    if (p.kind !== 'SOCIAL') return { error: 'Only social posts can be scheduled' }
+    if (published) return { error: 'This post is already published' }
+    if (!p.scheduledAt) return { error: 'Pick a date and time to schedule' }
+    if (new Date(p.scheduledAt).getTime() < Date.now() - 60_000) return { error: 'Pick a time in the future — or publish now' }
+    const targets = await targetsFor({ workspaceId: workspace.id, channels: p.channels })
+    if (targets.length === 0) return { error: 'Connect a Facebook Page or Instagram account in Channels to schedule' }
+  }
+
   const data = {
     kind: p.kind,
+    // A published post stays published; otherwise the button decides.
+    ...(published ? {} : { status: p.schedule ? ('SCHEDULED' as const) : ('DRAFT' as const) }),
     // Social posts edited in the post editor don't send a title — keep the
     // stored one (a campaign post's angle) instead of wiping it.
     ...(p.title !== undefined ? { title: p.title || null } : {}),
@@ -53,7 +74,7 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
 
   let id = p.id
   if (id) {
-    const res = await prisma.post.updateMany({ where: { id, workspaceId: workspace.id }, data })
+    const res = await prisma.post.updateMany({ where: { id, workspaceId: workspace.id, status: { not: 'PUBLISHING' } }, data })
     if (res.count === 0) return { error: 'Post not found' }
     await syncCampaignRange(id)
   } else {
@@ -83,6 +104,34 @@ export async function deletePost(id: string) {
   if (post?.campaignId) await syncCampaignRange(id, post.campaignId)
   revalidatePath('/app', 'layout')
   return {}
+}
+
+// Send a saved post to its connected accounts now. Accounts that already
+// have it are skipped, so this also retries the ones that failed.
+export async function publishNow(id: string): Promise<{ error?: string; published?: number; failed?: number }> {
+  const { workspace } = await requireContext()
+  const post = await prisma.post.findFirst({ where: { id, workspaceId: workspace.id } })
+  if (!post || post.kind !== 'SOCIAL') return { error: 'Post not found' }
+  const targets = await targetsFor(post)
+  if (targets.length === 0) return { error: 'Connect a Facebook Page or Instagram account in Channels first' }
+  const claimed = await prisma.post.updateMany({
+    where: { id, status: { in: ['DRAFT', 'SCHEDULED', 'FAILED', 'PUBLISHED'] } },
+    data: { status: 'PUBLISHING' },
+  })
+  if (claimed.count !== 1) return { error: 'This post is being published right now' }
+  let deliveries
+  try {
+    deliveries = await deliver(id, targets)
+  } catch (e) {
+    console.error('publishNow', id, e)
+    await prisma.post.update({ where: { id }, data: { status: 'FAILED' } })
+    return { error: 'Publishing failed — try again' }
+  }
+  revalidatePath('/app', 'layout')
+  return {
+    published: deliveries.filter((d) => d.status === 'PUBLISHED').length,
+    failed: deliveries.filter((d) => d.status === 'FAILED').length,
+  }
 }
 
 // ─── Media ─────────────────────────────────────────────────────────────────

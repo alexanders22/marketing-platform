@@ -43,6 +43,7 @@ export default async function PlannerPage({ searchParams }: PageProps<'/app/plan
     scheduledAt: p.scheduledAt?.toISOString() ?? null,
     campaignId: p.campaignId,
     hasBody: p.content.trim().length > 0,
+    status: p.status,
   }))
 
   return <Planner view={view} month={month} posts={posts} now={now.getTime()} />

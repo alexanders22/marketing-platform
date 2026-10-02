@@ -16,6 +16,20 @@ export type PlannerPost = {
   scheduledAt: string | null
   campaignId: string | null
   hasBody: boolean
+  status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED'
+}
+
+// Drafts carry no dot: they only sit in the Planner.
+const DOT: Partial<Record<PlannerPost['status'], { cls: string; label: string }>> = {
+  SCHEDULED: { cls: 'bg-indigo-500', label: 'Scheduled' },
+  PUBLISHING: { cls: 'bg-amber-500', label: 'Publishing' },
+  PUBLISHED: { cls: 'bg-emerald-500', label: 'Published' },
+  FAILED: { cls: 'bg-red-500', label: 'Failed' },
+}
+
+function StatusDot({ status }: { status: PlannerPost['status'] }) {
+  const d = DOT[status]
+  return d ? <span title={d.label} aria-label={d.label} className={`h-1.5 w-1.5 shrink-0 rounded-full ${d.cls}`} /> : null
 }
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -175,6 +189,7 @@ function Month({ y, m, posts }: { y: number; m: number; posts: PlannerPost[] }) 
                     ) : p.kind === 'BLOG' ? (
                       <FileText size={12} className="shrink-0" />
                     ) : null}
+                    <StatusDot status={p.status} />
                     <span className="shrink-0 font-semibold">
                       {new Date(p.scheduledAt!).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                     </span>
@@ -241,6 +256,11 @@ function Group({ title, posts }: { title: string; posts: PlannerPost[] }) {
               </div>
               {p.campaignId && <Target size={15} className="shrink-0 text-indigo-500" aria-label="Part of a campaign" />}
               <ChannelIcons value={p.channels} />
+              {DOT[p.status] ? (
+                <span className="inline-flex shrink-0 items-center gap-1 text-xs text-zinc-500">
+                  <StatusDot status={p.status} /> {DOT[p.status]!.label}
+                </span>
+              ) : null}
               <span className="w-32 shrink-0 text-right text-xs text-zinc-500">
                 {p.scheduledAt ? <LocalTime iso={p.scheduledAt} options={{ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }} /> : 'Draft'}
               </span>

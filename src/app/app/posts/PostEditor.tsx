@@ -3,11 +3,11 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { ArrowLeft, CalendarClock, Heart, ImagePlus, MessageCircle, Send, Sparkles, Trash2, X } from 'lucide-react'
+import { ArrowLeft, CalendarClock, ExternalLink, Heart, ImagePlus, MessageCircle, Send, Sparkles, Trash2, X } from 'lucide-react'
 import { ChannelPicker, NETWORKS, type Network } from '@/components/channels'
 import { useIsClient } from '@/components/LocalTime'
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker'
-import { deletePost, savePost } from './actions'
+import { deletePost, publishNow, savePost } from './actions'
 
 export type PostDraft = {
   id?: string
@@ -18,7 +18,35 @@ export type PostDraft = {
   scheduledAt: string | null // ISO
   aiGenerated?: boolean
   campaign?: { id: string; name: string } | null
+  status?: 'DRAFT' | 'SCHEDULED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED'
 }
+
+export type Delivery = {
+  id: string
+  network: Network
+  account: string
+  status: 'PUBLISHED' | 'FAILED'
+  permalink: string | null
+  error: string | null
+  metrics: Record<string, number> | null
+}
+
+const STATUS: Record<NonNullable<PostDraft['status']>, { label: string; cls: string }> = {
+  DRAFT: { label: 'Draft', cls: 'bg-zinc-100 text-zinc-600' },
+  SCHEDULED: { label: 'Scheduled', cls: 'bg-indigo-50 text-indigo-700' },
+  PUBLISHING: { label: 'Publishing…', cls: 'bg-amber-50 text-amber-700' },
+  PUBLISHED: { label: 'Published', cls: 'bg-emerald-50 text-emerald-700' },
+  FAILED: { label: 'Failed', cls: 'bg-red-50 text-red-700' },
+}
+
+const METRICS: [string, string][] = [
+  ['reach', 'Reach'],
+  ['views', 'Views'],
+  ['likes', 'Likes'],
+  ['comments', 'Comments'],
+  ['shares', 'Shares'],
+  ['saves', 'Saves'],
+]
 
 const toLocalInput = (iso: string | null) => {
   if (!iso) return ''
@@ -31,9 +59,14 @@ export function PostEditor({
   initial,
   brand,
   defaultWhen,
+  connected = [],
+  deliveries = [],
 }: {
   initial: PostDraft
   brand: { name: string; logoUrl: string | null }
+  // Networks with at least one active connected account.
+  connected?: Network[]
+  deliveries?: Delivery[]
   // Local "YYYY-MM-DDTHH:mm" for a new post opened from a Planner day.
   defaultWhen?: string
 }) {
@@ -60,10 +93,12 @@ export function PostEditor({
   const fullText = [content.trim(), hashtags.map((h) => `#${h}`).join(' ')].filter(Boolean).join('\n\n')
   const over = NETWORKS.filter((n) => channels.includes(n.id) && fullText.length > n.limit)
 
-  const save = () =>
-    start(async () => {
-      setError(undefined)
-      const res = await savePost({
+  const status = initial.status ?? 'DRAFT'
+  const reachable = channels.filter((c) => connected.includes(c))
+  const [notice, setNotice] = useState<string>()
+
+  const persist = (schedule: boolean) =>
+    savePost({
         id: initial.id,
         kind: 'SOCIAL',
         content,
@@ -72,9 +107,31 @@ export function PostEditor({
         channels,
         scheduledAt: when ? new Date(when).toISOString() : null,
         aiGenerated: initial.aiGenerated,
+        schedule,
       })
+
+  const save = (schedule = false) =>
+    start(async () => {
+      setError(undefined)
+      setNotice(undefined)
+      const res = await persist(schedule)
       if (res.error) return setError(res.error)
       setSaved(true)
+      if (!initial.id && res.id) router.replace(`/app/posts/${res.id}`)
+      router.refresh()
+    })
+
+  const publish = () =>
+    start(async () => {
+      setError(undefined)
+      setNotice(undefined)
+      if (!confirm(`Publish now to ${reachable.map((r) => NETWORKS.find((n) => n.id === r)?.name).join(' and ')}?`)) return
+      const res = status === 'PUBLISHED' ? { id: initial.id } : await persist(false)
+      if ('error' in res && res.error) return setError(res.error)
+      const out = await publishNow(res.id!)
+      if (out.error) setError(out.error)
+      else if (out.failed) setError(`Published to ${out.published}, failed on ${out.failed} — see below.`)
+      else setNotice(`Published to ${out.published} account${out.published === 1 ? '' : 's'}.`)
       if (!initial.id && res.id) router.replace(`/app/posts/${res.id}`)
       router.refresh()
     })
@@ -93,7 +150,12 @@ export function PostEditor({
           <ArrowLeft size={18} />
         </Link>
         <div>
-          <h1 className="text-xl font-semibold">{initial.id ? 'Edit post' : 'New post'}</h1>
+          <h1 className="flex items-center gap-2 text-xl font-semibold">
+            {initial.id ? 'Edit post' : 'New post'}
+            {initial.id && (
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS[status].cls}`}>{STATUS[status].label}</span>
+            )}
+          </h1>
           {initial.campaign && (
             <Link href={`/app/campaigns/${initial.campaign.id}`} className="text-sm text-indigo-600 hover:underline">
               Part of {initial.campaign.name}
@@ -112,7 +174,13 @@ export function PostEditor({
           <section>
             <p className="mb-2 text-sm font-semibold">Channels</p>
             <ChannelPicker value={channels} onChange={(v) => (setChannels(v), setSaved(false))} />
-            <p className="mt-2 text-xs text-zinc-500">Publishing starts once channels are connected — until then posts are planned drafts.</p>
+            <p className="mt-2 text-xs text-zinc-500">
+              {reachable.length > 0
+                ? `Publishes to your connected ${reachable.map((r) => NETWORKS.find((n) => n.id === r)?.name).join(' and ')} accounts.${
+                    channels.length > reachable.length ? ' Other networks stay in the Planner until they are connected.' : ''
+                  }`
+                : 'Publishing starts once channels are connected — until then posts are planned drafts.'}
+            </p>
           </section>
 
           <section>
@@ -191,15 +259,55 @@ export function PostEditor({
             </div>
           </section>
 
+          {reachable.length === 0 && (
+            <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600">
+              Planner only.{' '}
+              <Link href="/app/channels" className="font-medium text-zinc-900 underline">
+                Connect Facebook or Instagram
+              </Link>{' '}
+              to schedule and publish automatically.
+            </p>
+          )}
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-          <div className="flex items-center gap-3 border-t border-zinc-100 pt-5">
+          {notice && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p>}
+          <div className="flex flex-wrap items-center gap-3 border-t border-zinc-100 pt-5">
+            {reachable.length > 0 && when && status !== 'PUBLISHED' && (
+              <button
+                onClick={() => save(true)}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
+              >
+                <CalendarClock size={15} /> {status === 'SCHEDULED' ? 'Update schedule' : 'Schedule'}
+              </button>
+            )}
             <button
-              onClick={save}
+              onClick={() => save(false)}
               disabled={pending}
-              className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
+              className={`rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-60 ${
+                reachable.length > 0 && when && status !== 'PUBLISHED'
+                  ? 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
+                  : 'bg-zinc-900 text-white hover:bg-zinc-800'
+              }`}
             >
-              {pending ? 'Saving…' : when ? 'Save to planner' : 'Save draft'}
+              {pending
+                ? 'Saving…'
+                : status === 'PUBLISHED'
+                  ? 'Save'
+                  : status === 'SCHEDULED'
+                    ? 'Unschedule — keep as draft'
+                    : when
+                      ? 'Save to planner'
+                      : 'Save draft'}
             </button>
+            {reachable.length > 0 && (status !== 'PUBLISHED' || deliveries.some((d) => d.status === 'FAILED')) && (
+              <button
+                onClick={publish}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-4 py-2.5 text-sm font-semibold hover:bg-zinc-50 disabled:opacity-60"
+              >
+                <Send size={15} /> {status === 'PUBLISHED' ? 'Retry failed' : 'Publish now'}
+              </button>
+            )}
             {saved && <span className="text-sm text-emerald-600">Saved</span>}
             {initial.id && (
               <button onClick={remove} className="ml-auto inline-flex items-center gap-1.5 text-sm text-red-600 hover:underline">
@@ -209,8 +317,48 @@ export function PostEditor({
           </div>
         </div>
 
+        {deliveries.length > 0 && (
+          <section className="lg:col-start-1">
+            <p className="mb-2 text-sm font-semibold">Published to</p>
+            <ul className="divide-y divide-zinc-100 rounded-xl border border-zinc-200">
+              {deliveries.map((d) => {
+                const n = NETWORKS.find((x) => x.id === d.network)
+                return (
+                  <li key={d.id} className="p-3 text-sm">
+                    <div className="flex items-center gap-2">
+                      {n && <n.icon size={15} color={n.color} />}
+                      <span className="min-w-0 flex-1 truncate font-medium">{d.account}</span>
+                      {d.status === 'PUBLISHED' ? (
+                        d.permalink ? (
+                          <a href={d.permalink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:underline">
+                            View <ExternalLink size={13} />
+                          </a>
+                        ) : (
+                          <span className="text-emerald-600">Published</span>
+                        )
+                      ) : (
+                        <span className="text-red-600">Failed</span>
+                      )}
+                    </div>
+                    {d.error && <p className="mt-1 text-xs text-red-600">{d.error}</p>}
+                    {d.metrics && (
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+                        {METRICS.filter(([k]) => d.metrics![k] !== undefined).map(([k, label]) => (
+                          <span key={k}>
+                            {label} <b className="text-zinc-800">{d.metrics![k].toLocaleString('en-US')}</b>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )}
+
         {/* Preview */}
-        <aside className="lg:sticky lg:top-6 lg:self-start">
+        <aside className="lg:sticky lg:top-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
           <p className="mb-2 text-sm font-semibold">Preview</p>
           <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
             <div className="flex items-center gap-2.5 p-3">

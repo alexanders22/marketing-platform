@@ -2,16 +2,32 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage } from "@/components/landing/LegalPage";
 import { LEGAL } from "@/lib/legal";
+import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
   title: "Data deletion — Khma",
   description: "How to delete your Khma data, including data received from Facebook and Instagram.",
 };
 
-export default function DataDeletionPage() {
+export default async function DataDeletionPage({ searchParams }: PageProps<"/data-deletion">) {
+  const raw = (await searchParams).code;
+  const code = typeof raw === "string" ? raw.slice(0, 64) : null;
+  const request = code ? await prisma.metaDeletion.findUnique({ where: { code } }) : null;
   const mail = <a href={`mailto:${LEGAL.email}?subject=Delete%20my%20Khma%20data`}>{LEGAL.email}</a>;
   return (
     <LegalPage title="Data deletion" updated={LEGAL.updated}>
+      {code && (
+        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-5">
+          <p className="text-sm text-zinc-400">Request {code}</p>
+          <p className="mt-1 font-semibold text-white">
+            {!request
+              ? "We could not find this request. Check the code or write to us."
+              : request.completedAt
+                ? `Completed on ${request.completedAt.toISOString().slice(0, 10)} — all data received from Facebook and Instagram for this person has been deleted.`
+                : "Received — deletion is in progress and finishes within 30 days."}
+          </p>
+        </div>
+      )}
       <p>You can remove the data Khma holds about you at any time. There are three ways.</p>
 
       <h2>1. Disconnect a social account</h2>
