@@ -1,9 +1,11 @@
 import { timingSafeEqual } from 'node:crypto'
 import { cronSecret } from '@/lib/cron-secret'
+import { syncAdsDue } from '@/lib/meta-ads'
 import { publishDue, refreshInsights } from '@/lib/publisher'
 
 // Background work, called every minute by src/instrumentation.ts (or any
-// external cron with the header). Insights run every 30 minutes.
+// external cron with the header). Post insights run every 30 minutes; each
+// ad account is re-read hourly.
 let lastInsights = 0
 
 export async function POST(req: Request) {
@@ -18,5 +20,6 @@ export async function POST(req: Request) {
     lastInsights = Date.now()
     insights = await refreshInsights()
   }
-  return Response.json({ published, insights })
+  const ads = await syncAdsDue()
+  return Response.json({ published, insights, ads })
 }

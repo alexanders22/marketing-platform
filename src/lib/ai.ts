@@ -227,3 +227,32 @@ export async function generateBlogArticle(
   if (!out?.title || !out?.body) throw new Error('Empty article')
   return { title: String(out.title).slice(0, 200), body: String(out.body).trim() }
 }
+
+// ─── Analytics ─────────────────────────────────────────────────────────────
+
+export type PerformanceSummary = { headline: string; wins: string[]; concerns: string[]; actions: string[] }
+
+// Reads the dashboard numbers and explains them. Uses only the given facts;
+// with no data it says so instead of guessing.
+export async function summarizePerformance(
+  brandName: string,
+  brand: BrandKit | null,
+  facts: unknown,
+  language: PostOptions['language'] = 'English',
+): Promise<PerformanceSummary> {
+  const system = [
+    'You are a senior performance marketer reviewing a brand’s results for its owner. Be concrete and brief: name campaigns and numbers, compare with the previous period, and explain likely causes in plain words.',
+    'Use ONLY the numbers given. Do not invent benchmarks, numbers or campaigns. If paid or organic data is empty, say that it is not connected or has no activity instead of analysing it.',
+    'Recommendations must be specific actions the owner can take this week (e.g. move budget from A to B, refresh the creative of C, post more of the format that worked).',
+    brandContext(brandName, brand),
+    `Write in ${language}. Money in the given currency. Return JSON {"headline": one sentence, "wins": string[0-3], "concerns": string[0-3], "actions": string[1-4]}.`,
+  ].join('\n\n')
+  const out = await json<PerformanceSummary>(system, `Results:\n${JSON.stringify(facts)}`, 2000)
+  const list = (v: unknown, n: number) => (Array.isArray(v) ? v.map((x) => String(x).slice(0, 400)).filter(Boolean).slice(0, n) : [])
+  return {
+    headline: String(out?.headline ?? '').slice(0, 300),
+    wins: list(out?.wins, 3),
+    concerns: list(out?.concerns, 3),
+    actions: list(out?.actions, 4),
+  }
+}

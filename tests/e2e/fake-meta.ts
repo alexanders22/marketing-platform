@@ -80,6 +80,33 @@ export function startFakeMeta() {
     if (path === '/me/adaccounts')
       return json(200, { data: [{ id: 'act_1', name: 'Bloom Ads', account_status: 1, currency: 'GEL', timezone_name: 'Asia/Tbilisi' }] })
 
+    // Ad account act_1: a lead campaign (₾20/day: 4 leads a day in the last
+    // 30 days, 2 before) and a paused awareness campaign (₾10/day).
+    if (path === '/act_1/campaigns')
+      return json(200, {
+        data: [
+          { id: 'cmp-leads', name: 'Lead Gen — Tbilisi', objective: 'OUTCOME_LEADS', effective_status: 'ACTIVE', daily_budget: '2000', start_time: '2026-06-01T00:00:00+0400' },
+          { id: 'cmp-aware', name: 'Spring Awareness', objective: 'OUTCOME_AWARENESS', effective_status: 'PAUSED', lifetime_budget: '90000' },
+        ],
+      })
+    if (path === '/act_1/insights') {
+      const { since, until } = JSON.parse(params.time_range)
+      const rows = []
+      for (let d = since; d <= until; d = new Date(Date.parse(`${d}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)) {
+        const age = Math.round((Date.parse(`${until}T00:00:00Z`) - Date.parse(`${d}T00:00:00Z`)) / 86_400_000)
+        const leads = age < 30 ? 4 : 2
+        rows.push({
+          campaign_id: 'cmp-leads', date_start: d, spend: '20.00', impressions: '3000', reach: '2500', clicks: '60',
+          actions: [{ action_type: 'lead', value: String(leads) }, { action_type: 'link_click', value: '50' }],
+        })
+        rows.push({ campaign_id: 'cmp-aware', date_start: d, spend: '10.00', impressions: '8000', reach: '5000', clicks: '20', actions: [] })
+      }
+      // Two pages, like the real API.
+      const half = Math.ceil(rows.length / 2)
+      if (params.after === 'p2') return json(200, { data: rows.slice(half) })
+      return json(200, { data: rows.slice(0, half), paging: { cursors: { after: 'p2' }, next: 'more' } })
+    }
+
     if (req.method === 'POST' && path === '/page-1/feed') return json(200, { id: `page-1_${++n}` })
     if (req.method === 'POST' && path === '/page-1/photos')
       return json(200, params.published === 'false' ? { id: `photo-${++n}` } : { id: `photo-${++n}`, post_id: `page-1_${n}` })

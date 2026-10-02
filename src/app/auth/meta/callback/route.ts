@@ -1,7 +1,8 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse, after, type NextRequest } from 'next/server'
 import { requireContext } from '@/lib/context'
 import { encrypt } from '@/lib/crypto'
 import { exchangeMetaCode, listAdAccounts, listPages, metaEnabled } from '@/lib/meta'
+import { syncAdAccount } from '@/lib/meta-ads'
 import { prisma } from '@/lib/prisma'
 
 // Meta sends the person back here. Every Page they picked becomes a FACEBOOK
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
     })),
   ]
 
-  await prisma.$transaction(
+  const saved = await prisma.$transaction(
     rows.map(({ token, ...r }) =>
       prisma.socialAccount.upsert({
         where: { workspaceId_network_externalId: { workspaceId: workspace.id, network: r.network, externalId: r.externalId } },
@@ -86,5 +87,11 @@ export async function GET(req: NextRequest) {
       }),
     ),
   )
+  // Read ad campaigns right away instead of waiting for the hourly ticker.
+  after(async () => {
+    for (const a of saved.filter((s) => s.network === 'META_ADS')) {
+      await syncAdAccount(a.id).catch((e) => console.error('ads sync failed', a.id, e instanceof Error ? e.message : e))
+    }
+  })
   return back(`connected=${rows.length}`)
 }

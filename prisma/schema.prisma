@@ -151,6 +151,8 @@ model Workspace {
   campaigns        Campaign[]
   designs          Design[]
   bioPages         BioPage[]
+  adCampaigns      AdCampaign[]
+  aiSummaries      AiSummary[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -398,7 +400,10 @@ model SocialAccount {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  deliveries PostDelivery[]
+  deliveries  PostDelivery[]
+  adCampaigns AdCampaign[]
+  // Ad accounts: when campaigns and insights were last read.
+  syncedAt    DateTime?
 
   @@unique([workspaceId, network, externalId])
   @@index([connectedBy])
@@ -484,4 +489,68 @@ model AccountMember {
   role      MemberRole @default(EDITOR)
 
   @@unique([accountId, userId])
+}
+
+// ─── Ads & analytics ─────────────────────────────────────────────────────────
+
+// A campaign in a connected ad account, as last read from the network.
+model AdCampaign {
+  id              String        @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  socialAccountId String
+  socialAccount   SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  externalId      String
+  name            String
+  // Network objective, e.g. OUTCOME_LEADS.
+  objective       String?
+  // Network delivery status, e.g. ACTIVE, PAUSED, CAMPAIGN_PAUSED.
+  status          String
+  // Account currency, in major units (₾12.50 → 12.5).
+  dailyBudget     Float?
+  lifetimeBudget  Float?
+  currency        String?
+  startsAt        DateTime?
+  endsAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  days AdInsightDay[]
+
+  @@unique([socialAccountId, externalId])
+  @@index([workspaceId])
+}
+
+// One day of results for one ad campaign (in the ad account's time zone).
+model AdInsightDay {
+  id          String     @id @default(cuid())
+  campaignId  String
+  campaign    AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  // YYYY-MM-DD in the ad account's time zone.
+  date        String
+  spend       Float      @default(0)
+  impressions Int        @default(0)
+  reach       Int        @default(0)
+  clicks      Int        @default(0)
+  // The objective's result (leads, purchases, link clicks …) and its value.
+  results     Int        @default(0)
+  resultType  String?
+  revenue     Float      @default(0)
+  // Raw action counts for later breakdowns.
+  actions     Json?
+
+  @@unique([campaignId, date])
+  @@index([date])
+}
+
+// AI-written summary of a dashboard period.
+model AiSummary {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  periodDays  Int
+  text        String
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
 }
