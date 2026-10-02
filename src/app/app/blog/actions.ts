@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { aiEnabled, generateBlogArticle, LANGUAGES, LENGTHS, TONES } from '@/lib/ai'
 import { requireContext } from '@/lib/context'
-import { charge, COST, notEnough } from '@/lib/credits'
+import { balanceOf, charge, COST, notEnough } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 
 const AiBlog = z.object({
@@ -35,7 +35,7 @@ export async function createAiBlog(raw: z.input<typeof AiBlog>): Promise<{ id?: 
     return { error: 'The AI could not write this article. Please try again.' }
   }
   if (!(await charge(account.id, workspace.id, [{ amount: COST.blogArticle, reason: 'AI_BLOG', note: 'Blog article' }]))) {
-    return { error: notEnough(COST.blogArticle, 0) }
+    return { error: notEnough(COST.blogArticle, await balanceOf(account.id)) }
   }
   const post = await prisma.post.create({
     data: {
@@ -43,7 +43,7 @@ export async function createAiBlog(raw: z.input<typeof AiBlog>): Promise<{ id?: 
       kind: 'BLOG',
       title: article.title,
       content: article.body,
-      hashtags: keywords.map((k) => k.replace(/[^\p{L}\p{N}_]/gu, '')).filter(Boolean),
+      hashtags: keywords.map((k) => k.slice(0, 80)).filter(Boolean),
       aiGenerated: true,
       createdById: user.id,
     },
@@ -60,6 +60,7 @@ export async function writeArticle(postId: string): Promise<{ error?: string }> 
     include: { campaign: true },
   })
   if (!post) return { error: 'Article not found' }
+  if (post.content.trim()) return { error: 'This article is already written' }
   if (!aiEnabled()) return { error: 'AI generation is not connected yet.' }
   if (account.creditBalance < COST.blogArticle) return { error: notEnough(COST.blogArticle, account.creditBalance) }
 
@@ -77,10 +78,21 @@ export async function writeArticle(postId: string): Promise<{ error?: string }> 
     console.error('article generation failed', e)
     return { error: 'The AI could not write this article. Please try again.' }
   }
-  if (!(await charge(account.id, workspace.id, [{ amount: COST.blogArticle, reason: 'AI_BLOG', note: `Article: ${post.title}` }]))) {
-    return { error: notEnough(COST.blogArticle, 0) }
-  }
-  await prisma.post.update({ where: { id: post.id }, data: { content: article.body, aiGenerated: true } })
+  // Fill the article and charge in one transaction, and only if it is still
+  // empty — a second tab or a replay can't pay twice or overwrite it.
+  let alreadyWritten = false
+  const ok = await charge(
+    account.id,
+    workspace.id,
+    [{ amount: COST.blogArticle, reason: 'AI_BLOG', note: `Article: ${post.title}` }],
+    async (tx) => {
+      const res = await tx.post.updateMany({ where: { id: post.id, content: '' }, data: { content: article.body, aiGenerated: true } })
+      alreadyWritten = res.count === 0
+      return !alreadyWritten
+    },
+  )
+  if (alreadyWritten) return { error: 'This article is already written' }
+  if (!ok) return { error: notEnough(COST.blogArticle, await balanceOf(account.id)) }
   revalidatePath('/app', 'layout')
   return {}
 }

@@ -28,11 +28,11 @@ export function ResetForm({ token }: { token: string }) {
       <div className="mt-5 space-y-3">
         <div className="relative">
           <Lock size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-zinc-400" />
-          <input name="password" type="password" required minLength={8} autoComplete="new-password" placeholder="New password (8+ characters)" className={input} />
+          <input name="password" type="password" aria-label="New password" required minLength={8} autoComplete="new-password" placeholder="New password (8+ characters)" className={input} />
         </div>
         <div className="relative">
           <Lock size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-zinc-400" />
-          <input name="confirm" type="password" required minLength={8} autoComplete="new-password" placeholder="Repeat new password" className={input} />
+          <input name="confirm" type="password" aria-label="Repeat new password" required minLength={8} autoComplete="new-password" placeholder="Repeat new password" className={input} />
         </div>
       </div>
       <button

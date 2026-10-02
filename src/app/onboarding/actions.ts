@@ -24,10 +24,10 @@ export async function completeOnboarding(draft: BrandDraft): Promise<{ error?: s
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const b = parsed.data
 
-  const already = await prisma.accountMember.findFirst({ where: { userId: user.id }, select: { id: true } })
-  if (already) redirect('/app')
-
-  await prisma.$transaction(async (tx) => {
+  // Per-user advisory lock: a double submit or retry can't create two accounts.
+  const created = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'onboarding:' + user.id}))`
+    if (await tx.accountMember.findFirst({ where: { userId: user.id }, select: { id: true } })) return false
     const account = await tx.account.create({
       data: { name: b.name, email: user.email, termsAcceptedAt: new Date() },
     })
@@ -43,6 +43,8 @@ export async function completeOnboarding(draft: BrandDraft): Promise<{ error?: s
         socialLinks: b.socialLinks,
       },
     })
+    return true
   })
+  if (!created) redirect('/app')
   return {}
 }

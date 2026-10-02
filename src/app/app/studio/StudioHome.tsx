@@ -85,7 +85,7 @@ export function StudioHome({ brandName, colors, designs }: { brandName: string; 
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search"
+            placeholder="Search" aria-label="Search designs"
             className="w-full rounded-lg border border-zinc-200 py-2 pr-3 pl-9 text-sm outline-none focus:border-zinc-400"
           />
         </div>
@@ -112,7 +112,7 @@ export function StudioHome({ brandName, colors, designs }: { brandName: string; 
                   {d.width}×{d.height} · {new Date(d.updatedAt).toLocaleDateString('en-GB')}
                 </p>
               </Link>
-              <div className="absolute top-2 right-2 hidden gap-1 group-hover:flex">
+              <div className="absolute top-2 right-2 flex gap-1 md:hidden md:group-hover:flex">
                 <button
                   onClick={() => start(async () => { const r = await duplicateDesign(d.id); if (r.id) router.refresh() })}
                   className="grid h-7 w-7 place-items-center rounded-lg bg-white shadow"

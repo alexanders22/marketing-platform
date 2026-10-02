@@ -106,12 +106,12 @@ function SidebarBody({ workspace, logoUrl, user, credits, planLabel, path }: Sid
       </nav>
 
       <div className="mt-auto space-y-0.5 pt-6">
-        <Link
-          href="/#contact"
+        <a
+          href="mailto:info@brandrepublic.ge?subject=Khma%20support"
           className="flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] text-zinc-700 hover:bg-zinc-200/50"
         >
           <Headphones size={18} /> Support
-        </Link>
+        </a>
         <Link
           href="/app/channels"
           className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] hover:bg-zinc-200/50 ${
@@ -122,14 +122,15 @@ function SidebarBody({ workspace, logoUrl, user, credits, planLabel, path }: Sid
         </Link>
         <div className="flex gap-2 px-3 py-2">
           {[
-            { i: SiFacebook, c: '#1877F2' },
-            { i: SiInstagram, c: '#E4405F' },
-            { i: SiX, c: '#000' },
-            { i: FaLinkedinIn, c: '#0A66C2' },
-          ].map(({ i: I, c }, k) => (
+            { i: SiFacebook, c: '#1877F2', n: 'Facebook' },
+            { i: SiInstagram, c: '#E4405F', n: 'Instagram' },
+            { i: SiX, c: '#000', n: 'X' },
+            { i: FaLinkedinIn, c: '#0A66C2', n: 'LinkedIn' },
+          ].map(({ i: I, c, n }) => (
             <Link
-              key={k}
+              key={n}
               href="/app/channels"
+              aria-label={`Connect ${n}`}
               className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-200 bg-white"
             >
               <I size={16} color={c} />

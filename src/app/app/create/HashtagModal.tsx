@@ -53,11 +53,11 @@ export function HashtagModal({
     })
 
   if (editing) {
-    // Same rule as the server: letters, digits and underscore only.
+    // Same rule as the server: letters, digits and _, de-duplicated ignoring case.
     const count = new Set(
       tags
         .split(/[\s,]+/)
-        .map((t) => t.replace(/^#+/, ''))
+        .map((t) => t.replace(/^#+/, '').toLowerCase())
         .filter((t) => /^[\p{L}\p{N}_]{1,60}$/u.test(t)),
     ).size
     return (
@@ -77,7 +77,9 @@ export function HashtagModal({
           value={tags}
           onChange={(e) => setTags(e.target.value)}
         />
-        <p className="mt-1 text-xs text-zinc-500">Separate with spaces or commas. {count}/30 hashtags.</p>
+        <p className={`mt-1 text-xs ${count > 30 ? 'font-medium text-red-600' : 'text-zinc-500'}`}>
+          Separate with spaces or commas. {count}/30 hashtags{count > 30 ? ' — remove some to save.' : '.'}
+        </p>
         {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <button

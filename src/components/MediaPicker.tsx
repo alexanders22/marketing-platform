@@ -35,7 +35,8 @@ export function MediaPicker({
     setError(undefined)
     const added: PickedMedia[] = []
     for (const f of Array.from(files).filter((f) => f.type.startsWith('image/')).slice(0, 10)) {
-      const { data } = await fileToJpeg(f, 2048, 0.9)
+      // PNGs keep transparency (logos, cut-outs); everything else becomes JPEG.
+      const { data } = await fileToJpeg(f, 2048, 0.9, f.type === 'image/png')
       const res = await uploadMedia({ data })
       if (res.error) setError(res.error)
       else if (res.id && res.url) added.push({ id: res.id, url: res.url })
@@ -90,6 +91,8 @@ export function MediaPicker({
               <button
                 key={m.id}
                 onClick={() => toggle(m.id)}
+                aria-label={on ? 'Deselect image' : 'Select image'}
+                aria-pressed={on}
                 className={`relative aspect-square overflow-hidden rounded-lg ring-2 ${on ? 'ring-zinc-900' : 'ring-transparent'}`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}

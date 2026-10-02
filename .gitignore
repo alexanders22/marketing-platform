@@ -44,3 +44,7 @@ next-env.d.ts
 
 # generated media
 /storage
+
+# playwright
+/test-results
+/playwright-report

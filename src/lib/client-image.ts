@@ -1,7 +1,7 @@
 // Browser-only helpers for images the user picks.
 
 // Downscale to `max` px on the long side and re-encode as JPEG.
-export async function fileToJpeg(file: File, max = 1280, quality = 0.85): Promise<{ data: string; preview: string }> {
+export async function fileToJpeg(file: File, max = 1280, quality = 0.85, keepPng = false): Promise<{ data: string; preview: string }> {
   const url = URL.createObjectURL(file)
   try {
     const img = await new Promise<HTMLImageElement>((res, rej) => {
@@ -15,10 +15,12 @@ export async function fileToJpeg(file: File, max = 1280, quality = 0.85): Promis
     canvas.width = Math.round(img.width * scale)
     canvas.height = Math.round(img.height * scale)
     const ctx = canvas.getContext('2d')!
-    ctx.fillStyle = '#fff'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    if (!keepPng) {
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+    }
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-    const preview = canvas.toDataURL('image/jpeg', quality)
+    const preview = keepPng ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', quality)
     return { data: preview.split(',')[1], preview }
   } finally {
     URL.revokeObjectURL(url)

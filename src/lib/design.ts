@@ -199,16 +199,27 @@ export const TEMPLATES: Template[] = [
 
 // ─── Rendering to a <canvas> (export) ─────────────────────────────────────
 
+// Word wrap matching the editor's CSS (`overflow-wrap: break-word`): words
+// longer than the line are broken by character.
 function wrap(ctx: CanvasRenderingContext2D, text: string, width: number) {
   const lines: string[] = []
   for (const para of text.split('\n')) {
     let line = ''
     for (const word of para.split(/\s+/)) {
       const test = line ? `${line} ${word}` : word
-      if (ctx.measureText(test).width > width && line) {
+      if (ctx.measureText(test).width <= width || !line) {
+        line = test
+      } else {
         lines.push(line)
         line = word
-      } else line = test
+      }
+      // A single word wider than the box: split it across lines.
+      while (ctx.measureText(line).width > width && line.length > 1) {
+        let cut = line.length - 1
+        while (cut > 1 && ctx.measureText(line.slice(0, cut)).width > width) cut--
+        lines.push(line.slice(0, cut))
+        line = line.slice(cut)
+      }
     }
     lines.push(line)
   }
@@ -216,7 +227,7 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, width: number) {
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const rr = Math.min(r, w / 2, h / 2)
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2))
   ctx.beginPath()
   ctx.roundRect(x, y, w, h, rr)
 }
@@ -232,7 +243,9 @@ export async function renderToCanvas(doc: DesignDoc, w: number, h: number, inter
   ctx.fillStyle = doc.background
   ctx.fillRect(0, 0, w, h)
 
-  for (const l of doc.layers) {
+  for (const raw of doc.layers) {
+    // Defensive: never let a bad size break the whole export.
+    const l = { ...raw, w: Math.max(1, Math.abs(raw.w)), h: Math.max(1, Math.abs(raw.h)) } as Layer
     ctx.save()
     ctx.translate(l.x + l.w / 2, l.y + l.h / 2)
     ctx.rotate((l.rotation * Math.PI) / 180)
@@ -265,11 +278,18 @@ export async function renderToCanvas(doc: DesignDoc, w: number, h: number, inter
     } else {
       ctx.fillStyle = l.color
       ctx.font = `${l.fontWeight} ${l.fontSize}px ${l.fontFamily === 'Inter' ? interFamily : l.fontFamily}`
-      ctx.textBaseline = 'top'
       ctx.textAlign = l.align
+      // Place each line like CSS: line box = fontSize × lineHeight, glyphs
+      // centred in it by the font's ascent/descent (half-leading).
+      ctx.textBaseline = 'alphabetic'
+      const m = ctx.measureText('Hg')
+      const ascent = m.fontBoundingBoxAscent || l.fontSize * 0.97
+      const descent = m.fontBoundingBoxDescent || l.fontSize * 0.24
+      const lineBox = l.fontSize * l.lineHeight
+      const baseline = (lineBox - (ascent + descent)) / 2 + ascent
       const lines = wrap(ctx, l.text, l.w)
       const x = l.align === 'center' ? l.w / 2 : l.align === 'right' ? l.w : 0
-      lines.forEach((line, i) => ctx.fillText(line, x, i * l.fontSize * l.lineHeight))
+      lines.forEach((line, i) => ctx.fillText(line, x, i * lineBox + baseline))
     }
     ctx.restore()
   }

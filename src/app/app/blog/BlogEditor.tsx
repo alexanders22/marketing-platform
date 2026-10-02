@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { ArrowLeft, CalendarClock, Check, Copy, ImagePlus, Loader2, Sparkles, Trash2, X } from 'lucide-react'
+import { useIsClient } from '@/components/LocalTime'
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker'
 import { deletePost, savePost } from '../posts/actions'
 import { writeArticle } from './actions'
@@ -34,7 +35,10 @@ export function BlogEditor({ initial }: { initial: BlogDraft }) {
   const [body, setBody] = useState(initial.content)
   const [keywords, setKeywords] = useState(initial.keywords.join(', '))
   const [cover, setCover] = useState(initial.cover)
-  const [when, setWhen] = useState(toLocalInput(initial.scheduledAt))
+  // Planned time in the browser's zone — only known after hydration.
+  const isClient = useIsClient()
+  const [edited, setWhen] = useState<string | null>(null)
+  const when = edited ?? (isClient ? toLocalInput(initial.scheduledAt) : '')
   const [tab, setTab] = useState<'write' | 'preview'>(initial.content ? 'preview' : 'write')
   const [picker, setPicker] = useState(false)
   const [error, setError] = useState<string>()
@@ -55,7 +59,7 @@ export function BlogEditor({ initial }: { initial: BlogDraft }) {
         content: body,
         hashtags: keywords
           .split(',')
-          .map((k) => k.trim().replace(/[^\p{L}\p{N}_]/gu, ''))
+          .map((k) => k.trim().slice(0, 80))
           .filter(Boolean),
         mediaIds: cover ? [cover.id] : [],
         channels: [],
@@ -109,7 +113,7 @@ export function BlogEditor({ initial }: { initial: BlogDraft }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={cover.url} alt="" className="aspect-[2/1] w-full rounded-2xl object-cover" />
           <button
-            onClick={() => setCover(null)}
+            onClick={() => (setCover(null), setSaved(false))}
             className="absolute top-3 right-3 grid h-8 w-8 place-items-center rounded-full bg-white/90 shadow"
             aria-label="Remove cover"
           >
@@ -222,7 +226,7 @@ export function BlogEditor({ initial }: { initial: BlogDraft }) {
         )}
       </div>
 
-      {picker && <MediaPicker max={1} onClose={() => setPicker(false)} onPick={(items) => setCover(items[0] ?? null)} />}
+      {picker && <MediaPicker max={1} onClose={() => setPicker(false)} onPick={(items) => (setCover(items[0] ?? null), setSaved(false))} />}
     </div>
   )
 }

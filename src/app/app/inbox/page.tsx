@@ -8,11 +8,13 @@ export const metadata: Metadata = { title: 'Inbox — Khma' }
 export default function InboxPage() {
   return (
     <div className="-m-5 grid min-h-[calc(100vh-1.5rem)] sm:-m-8 lg:grid-cols-[280px_340px_1fr]">
+      <h1 className="sr-only">Inbox</h1>
       <section className="border-b border-zinc-200 p-4 lg:border-r lg:border-b-0">
         <div className="relative">
           <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-zinc-400" />
           <input
             placeholder="Search profiles"
+            aria-label="Search profiles"
             className="w-full rounded-lg border border-zinc-200 py-2 pr-3 pl-9 text-sm outline-none focus:border-zinc-400"
           />
         </div>

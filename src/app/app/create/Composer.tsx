@@ -267,6 +267,7 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
               }}
+              aria-label="Describe the post"
               placeholder={listening ? 'Listening… speak now' : 'Describe the post you want Khma to create…'}
               className="min-h-36 w-full resize-none rounded-t-2xl px-5 py-4 text-[15px] outline-none placeholder:text-zinc-400"
             />

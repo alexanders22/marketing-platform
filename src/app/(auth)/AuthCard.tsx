@@ -91,6 +91,7 @@ export function AuthCard({ mode, googleEnabled, mailEnabled, error }: Props) {
             <input
               name="password"
               type="password"
+              aria-label="Password"
               required
               minLength={mode === 'signup' ? 8 : undefined}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
@@ -141,6 +142,7 @@ function EmailInput({ defaultValue }: { defaultValue?: string }) {
       <input
         name="email"
         type="email"
+        aria-label="Email"
         required
         autoComplete="email"
         placeholder="name@company.com"

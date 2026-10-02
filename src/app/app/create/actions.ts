@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { aiEnabled, generateImage, generatePost, LANGUAGES, LENGTHS, TONES } from '@/lib/ai'
 import { requireContext } from '@/lib/context'
+import { notEnough } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 
@@ -46,7 +47,7 @@ export async function createPost(raw: z.input<typeof Input>): Promise<{ post?: C
   if (!aiEnabled()) return { error: 'AI generation is not connected yet.' }
   const maxCost = TEXT_COST + input.images * IMAGE_COST
   if (account.creditBalance < maxCost) {
-    return { error: `This needs ${maxCost} credits and you have ${account.creditBalance}. Choose a plan to get more.` }
+    return { error: notEnough(maxCost, account.creditBalance) }
   }
 
   let text
@@ -120,14 +121,15 @@ export async function createPost(raw: z.input<typeof Input>): Promise<{ post?: C
 
 // ─── Hashtag libraries ─────────────────────────────────────────────────────
 
-const normTags = (raw: string) => [
-  ...new Set(
-    raw
-      .split(/[\s,]+/)
-      .map((t) => t.replace(/^#+/, '').trim())
-      .filter((t) => /^[\p{L}\p{N}_]{1,60}$/u.test(t)),
-  ),
-]
+// Valid tags, de-duplicated without regard to case (first spelling wins).
+const normTags = (raw: string) => {
+  const seen = new Set<string>()
+  return raw
+    .split(/[\s,]+/)
+    .map((t) => t.replace(/^#+/, '').trim())
+    .filter((t) => /^[\p{L}\p{N}_]{1,60}$/u.test(t))
+    .filter((t) => !seen.has(t.toLowerCase()) && (seen.add(t.toLowerCase()), true))
+}
 
 const Library = z.object({
   name: z.string().trim().min(1, 'Give the library a name').max(60),
@@ -138,8 +140,9 @@ export async function saveHashtagLibrary(input: { id?: string; name: string; tag
   const { workspace } = await requireContext()
   const parsed = Library.safeParse(input)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
-  const tags = normTags(parsed.data.tags).slice(0, 30)
+  const tags = normTags(parsed.data.tags)
   if (tags.length === 0) return { error: 'Add at least one hashtag' }
+  if (tags.length > 30) return { error: `A library can hold up to 30 hashtags — this one has ${tags.length}` }
 
   if (input.id) {
     const res = await prisma.hashtagLibrary.updateMany({

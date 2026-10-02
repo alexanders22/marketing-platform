@@ -10,11 +10,12 @@ import { createBlogCampaign, createSocialCampaign } from '../actions'
 const TONES = ['Professional', 'Friendly', 'Educational', 'Bold', 'Founder-led'] as const
 const LANGS = ['English', 'Georgian', 'Russian'] as const
 
-const tomorrow = () => {
-  const d = new Date(Date.now() + 86_400_000)
+const localDay = (offsetDays: number) => {
+  const d = new Date(Date.now() + offsetDays * 86_400_000)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
+const tomorrow = () => localDay(1)
 
 const input = 'w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100'
 
@@ -23,6 +24,7 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
   const [name, setName] = useState('')
   const [brief, setBrief] = useState('')
   const [startsOn, setStartsOn] = useState(tomorrow)
+  const [today] = useState(() => localDay(0))
   const [time, setTime] = useState('10:00')
   const [weeks, setWeeks] = useState(2)
   const [perWeek, setPerWeek] = useState(kind === 'blog' ? 1 : 3)
@@ -39,7 +41,7 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
   const submit = () =>
     start(async () => {
       setError(undefined)
-      const base = { name, brief, startsOn, time, tzOffset: new Date().getTimezoneOffset(), tone, language }
+      const base = { name, brief, startsOn, time, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, tone, language }
       const res =
         kind === 'blog'
           ? await createBlogCampaign({ ...base, count, perWeek })
@@ -84,7 +86,7 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
 
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Start date">
-            <input type="date" className={input} value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
+            <input type="date" className={input} value={startsOn} min={today} onChange={(e) => setStartsOn(e.target.value)} />
           </Field>
           <Field label="Posting time">
             <input type="time" className={input} value={time} onChange={(e) => setTime(e.target.value)} />
@@ -104,15 +106,15 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
         )}
 
         {kind === 'social' && (
-          <Field label="Channels">
+          <Field label="Channels" group>
             <ChannelPicker value={channels} onChange={setChannels} />
           </Field>
         )}
 
-        <Field label="Tone">
+        <Field label="Tone" group>
           <Pills options={TONES} value={tone} onChange={setTone} />
         </Field>
-        <Field label="Language">
+        <Field label="Language" group>
           <Pills options={LANGS} value={language} onChange={setLanguage} />
         </Field>
       </div>
@@ -136,13 +138,22 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
   )
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
+// `group` = a set of buttons: a <label> around them would make a click on
+// the heading press the first button, so groups use role="group" instead.
+function Field({ label, hint, group, children }: { label: string; hint?: string; group?: boolean; children: React.ReactNode }) {
+  const body = (
+    <>
       <span className="text-sm font-semibold">{label}</span>
       {hint && <span className="mt-0.5 block text-xs text-zinc-500">{hint}</span>}
       <div className="mt-1.5">{children}</div>
-    </label>
+    </>
+  )
+  return group ? (
+    <div role="group" aria-label={label} className="block">
+      {body}
+    </div>
+  ) : (
+    <label className="block">{body}</label>
   )
 }
 

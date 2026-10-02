@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { ArrowLeft, CalendarClock, Heart, ImagePlus, MessageCircle, Send, Sparkles, Trash2, X } from 'lucide-react'
 import { ChannelPicker, NETWORKS, type Network } from '@/components/channels'
+import { useIsClient } from '@/components/LocalTime'
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker'
 import { deletePost, savePost } from './actions'
 
@@ -40,8 +41,13 @@ export function PostEditor({
   const [content, setContent] = useState(initial.content)
   const [tags, setTags] = useState(initial.hashtags.map((t) => `#${t}`).join(' '))
   const [media, setMedia] = useState(initial.media)
-  const [channels, setChannels] = useState<Network[]>(initial.channels.length ? initial.channels : ['FACEBOOK', 'INSTAGRAM'])
-  const [when, setWhen] = useState(initial.scheduledAt ? toLocalInput(initial.scheduledAt) : (defaultWhen ?? ''))
+  // Defaults only for a brand-new post; a saved post keeps exactly its channels (even none).
+  const [channels, setChannels] = useState<Network[]>(initial.id ? initial.channels : ['FACEBOOK', 'INSTAGRAM'])
+  // The planned time is shown in the browser's zone, which the server can't
+  // know — until hydration `edited` is null and nothing time-based renders.
+  const isClient = useIsClient()
+  const [edited, setWhen] = useState<string | null>(null)
+  const when = edited ?? (isClient ? (initial.scheduledAt ? toLocalInput(initial.scheduledAt) : (defaultWhen ?? '')) : '')
   const [picker, setPicker] = useState(false)
   const [error, setError] = useState<string>()
   const [saved, setSaved] = useState(false)
@@ -105,7 +111,7 @@ export function PostEditor({
         <div className="space-y-6">
           <section>
             <p className="mb-2 text-sm font-semibold">Channels</p>
-            <ChannelPicker value={channels} onChange={setChannels} />
+            <ChannelPicker value={channels} onChange={(v) => (setChannels(v), setSaved(false))} />
             <p className="mt-2 text-xs text-zinc-500">Publishing starts once channels are connected — until then posts are planned drafts.</p>
           </section>
 
@@ -145,7 +151,7 @@ export function PostEditor({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={m.url} alt="" className="h-24 w-24 rounded-xl object-cover ring-1 ring-zinc-200" />
                   <button
-                    onClick={() => setMedia(media.filter((x) => x.id !== m.id))}
+                    onClick={() => (setMedia(media.filter((x) => x.id !== m.id)), setSaved(false))}
                     className="absolute -top-1.5 -right-1.5 grid h-5 w-5 place-items-center rounded-full bg-zinc-900 text-white"
                     aria-label="Remove image"
                   >
@@ -178,7 +184,7 @@ export function PostEditor({
                 />
               </div>
               {when && (
-                <button onClick={() => setWhen('')} className="text-sm text-zinc-500 hover:underline">
+                <button onClick={() => (setWhen(''), setSaved(false))} className="text-sm text-zinc-500 hover:underline">
                   Clear — keep as draft
                 </button>
               )}
@@ -240,7 +246,7 @@ export function PostEditor({
         <MediaPicker
           max={10 - media.length}
           onClose={() => setPicker(false)}
-          onPick={(items) => setMedia((m) => [...m, ...items.filter((i) => !m.some((x) => x.id === i.id))])}
+          onPick={(items) => (setMedia((m) => [...m, ...items.filter((i) => !m.some((x) => x.id === i.id))]), setSaved(false))}
         />
       )}
     </div>

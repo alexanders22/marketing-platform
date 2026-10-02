@@ -12,6 +12,7 @@ export function BioView({
   theme,
   blocks,
   linkHref,
+  preview = false,
 }: {
   title: string
   bio: string
@@ -19,7 +20,10 @@ export function BioView({
   theme: BioTheme
   blocks: BioBlock[]
   linkHref: (b: Extract<BioBlock, { type: 'link' }>) => string
+  // Inside the editor the page already has its own <h1>.
+  preview?: boolean
 }) {
+  const Title = preview ? 'p' : 'h1'
   const radius = theme.rounded === 'full' ? 999 : theme.rounded === 'md' ? 12 : 0
   const btn: CSSProperties =
     theme.buttonStyle === 'filled'
@@ -29,7 +33,7 @@ export function BioView({
         : { background: `${theme.button}26`, color: theme.text, borderRadius: radius }
 
   return (
-    <div className="min-h-full px-5 py-10" style={{ background: theme.background, color: theme.text }}>
+    <div className="min-h-full px-5 py-10 [overflow-wrap:anywhere]" style={{ background: theme.background, color: theme.text }}>
       <div className="mx-auto flex max-w-md flex-col items-center text-center">
         {avatar ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -37,7 +41,7 @@ export function BioView({
         ) : (
           <span className="grid h-24 w-24 place-items-center rounded-full bg-white/20 text-3xl font-bold">{title.slice(0, 1)}</span>
         )}
-        <h1 className="mt-4 text-xl font-bold">{title}</h1>
+        <Title className="mt-4 text-xl font-bold">{title}</Title>
         {bio && <p className="mt-2 text-sm whitespace-pre-wrap opacity-85">{bio}</p>}
 
         <div className="mt-8 w-full space-y-3">

@@ -225,8 +225,8 @@ export function BioEditor({
                   </div>
                   {b.type === 'link' && (
                     <div className="grid gap-2 sm:grid-cols-2">
-                      <input className={input} value={b.title} onChange={(e) => update(b.id, { title: e.target.value })} placeholder="Button text" />
-                      <input className={input} value={b.url} onChange={(e) => update(b.id, { url: e.target.value })} placeholder="https://" />
+                      <input className={input} aria-label="Link text" value={b.title} onChange={(e) => update(b.id, { title: e.target.value })} placeholder="Button text" maxLength={80} />
+                      <input className={input} aria-label="Link URL" value={b.url} onChange={(e) => update(b.id, { url: e.target.value })} placeholder="https://" />
                     </div>
                   )}
                   {(b.type === 'heading' || b.type === 'text') && (
@@ -243,6 +243,7 @@ export function BioEditor({
                         <div key={j} className="flex gap-2">
                           <input
                             className={input}
+                            aria-label="Social profile URL"
                             value={l}
                             onChange={(e) => update(b.id, { links: b.links.map((x, k) => (k === j ? e.target.value : x)) })}
                             placeholder="https://instagram.com/yourbrand"
@@ -336,7 +337,7 @@ export function BioEditor({
           <p className="mb-2 text-sm font-semibold">Preview</p>
           <div className="mx-auto h-[640px] w-[320px] overflow-hidden rounded-[2.5rem] border-[10px] border-zinc-900 bg-white shadow-xl">
             <div className="h-full overflow-y-auto [color-scheme:light]">
-              <BioView title={title || 'Your title'} bio={bio} avatar={avatar?.url ?? null} theme={theme} blocks={blocks} linkHref={(b) => b.url} />
+              <BioView preview title={title || 'Your title'} bio={bio} avatar={avatar?.url ?? null} theme={theme} blocks={blocks} linkHref={(b) => b.url} />
             </div>
           </div>
         </aside>

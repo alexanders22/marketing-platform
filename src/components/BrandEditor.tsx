@@ -27,13 +27,14 @@ export function BrandEditor({
   return (
     <div className="space-y-7">
       <Block title="Name" required hint="The name customers know your business by.">
-        <input className={inputCls} value={value.name} onChange={(e) => set('name', e.target.value)} />
+        <input aria-label="Brand name" className={inputCls} value={value.name} onChange={(e) => set('name', e.target.value)} />
       </Block>
 
       <Block title="Website" hint="Your primary brand website.">
         <div className="relative max-w-sm">
           <Link2 size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-zinc-400" />
           <input
+            aria-label="Website"
             className={`${inputCls} pl-9`}
             placeholder="https://example.com"
             value={value.website}
@@ -44,6 +45,7 @@ export function BrandEditor({
 
       <Block title="Description" hint="Give Khma useful context about what your brand does and who it serves.">
         <textarea
+          aria-label="Description"
           className={`${inputCls} min-h-28 resize-y`}
           value={value.description}
           onChange={(e) => set('description', e.target.value)}
@@ -61,6 +63,7 @@ export function BrandEditor({
             )}
           </div>
           <input
+            aria-label="Logo URL"
             className={inputCls}
             placeholder="https://example.com/logo.png"
             value={value.logoUrl}
@@ -121,6 +124,7 @@ export function BrandEditor({
                   <SocialIcon url={l} />
                 </span>
                 <input
+                  aria-label="Social profile URL"
                   className="w-full px-3 py-2.5 text-sm outline-none"
                   value={l}
                   onChange={(e) => set('socialLinks', value.socialLinks.map((x, j) => (j === i ? e.target.value : x)))}
@@ -170,10 +174,11 @@ export function BrandEditor({
                 )
               })}
             </div>
-            <input className={inputCls} value={value.voice ?? ''} onChange={(e) => set('voice', e.target.value)} />
+            <input aria-label="Tone of voice" className={inputCls} value={value.voice ?? ''} onChange={(e) => set('voice', e.target.value)} />
           </Block>
           <Block title="Target audience">
             <textarea
+              aria-label="Target audience"
               className={`${inputCls} min-h-20 resize-y`}
               placeholder="Who buys from you? Age, city, interests, what they care about."
               value={value.audience ?? ''}
@@ -181,7 +186,7 @@ export function BrandEditor({
             />
           </Block>
           <Block title="Fonts" hint="Comma-separated, e.g. Inter, Playfair Display">
-            <input className={inputCls} value={value.fonts ?? ''} onChange={(e) => set('fonts', e.target.value)} />
+            <input aria-label="Fonts" className={inputCls} value={value.fonts ?? ''} onChange={(e) => set('fonts', e.target.value)} />
           </Block>
         </>
       )}

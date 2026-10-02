@@ -13,7 +13,9 @@ const PostInput = z.object({
   kind: z.enum(['SOCIAL', 'BLOG']),
   title: z.string().trim().max(200).optional(),
   content: z.string().max(60_000),
-  hashtags: z.array(z.string().trim().regex(/^[\p{L}\p{N}_]{1,60}$/u, 'Hashtags: letters, digits and _ only')).max(30),
+  // Hashtags for social posts, SEO keywords (may contain spaces) for articles —
+  // validated per kind below.
+  hashtags: z.array(z.string().trim().min(1).max(80)).max(30, 'Up to 30 hashtags or keywords'),
   mediaIds: z.array(z.string()).max(10),
   channels: z.array(z.enum(NETWORKS)).max(NETWORKS.length),
   scheduledAt: z.string().datetime({ offset: true }).nullable(),
@@ -29,6 +31,9 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
   const p = parsed.data
   if (p.kind === 'SOCIAL' && !p.content.trim() && p.mediaIds.length === 0) return { error: 'Write something or add an image' }
   if (p.kind === 'BLOG' && !p.title) return { error: 'Give the article a title' }
+  if (p.kind === 'SOCIAL' && p.hashtags.some((h) => !/^[\p{L}\p{N}_]{1,60}$/u.test(h))) {
+    return { error: 'Hashtags can only contain letters, digits and _' }
+  }
 
   // Only this workspace's media can be attached.
   const owned = await prisma.media.count({ where: { id: { in: p.mediaIds }, workspaceId: workspace.id } })
@@ -36,7 +41,9 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
 
   const data = {
     kind: p.kind,
-    title: p.title || null,
+    // Social posts edited in the post editor don't send a title — keep the
+    // stored one (a campaign post's angle) instead of wiping it.
+    ...(p.title !== undefined ? { title: p.title || null } : {}),
     content: p.content,
     hashtags: [...new Set(p.hashtags)],
     mediaIds: p.mediaIds,
@@ -48,6 +55,7 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
   if (id) {
     const res = await prisma.post.updateMany({ where: { id, workspaceId: workspace.id }, data })
     if (res.count === 0) return { error: 'Post not found' }
+    await syncCampaignRange(id)
   } else {
     const created = await prisma.post.create({
       data: { ...data, workspaceId: workspace.id, createdById: user.id, aiGenerated: p.aiGenerated ?? false },
@@ -58,9 +66,21 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
   return { id }
 }
 
+// A campaign's date range follows its posts.
+async function syncCampaignRange(postId: string, campaignId?: string | null) {
+  const cid = campaignId ?? (await prisma.post.findUnique({ where: { id: postId }, select: { campaignId: true } }))?.campaignId
+  if (!cid) return
+  const range = await prisma.post.aggregate({ where: { campaignId: cid, scheduledAt: { not: null } }, _min: { scheduledAt: true }, _max: { scheduledAt: true } })
+  if (range._min.scheduledAt && range._max.scheduledAt) {
+    await prisma.campaign.update({ where: { id: cid }, data: { startsOn: range._min.scheduledAt, endsOn: range._max.scheduledAt } })
+  }
+}
+
 export async function deletePost(id: string) {
   const { workspace } = await requireContext()
+  const post = await prisma.post.findFirst({ where: { id, workspaceId: workspace.id }, select: { campaignId: true } })
   await prisma.post.deleteMany({ where: { id, workspaceId: workspace.id } })
+  if (post?.campaignId) await syncCampaignRange(id, post.campaignId)
   revalidatePath('/app', 'layout')
   return {}
 }

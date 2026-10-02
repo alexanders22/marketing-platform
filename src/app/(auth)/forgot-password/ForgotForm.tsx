@@ -43,6 +43,7 @@ export function ForgotForm() {
         <input
           name="email"
           type="email"
+          aria-label="Email"
           required
           autoComplete="email"
           placeholder="name@company.com"

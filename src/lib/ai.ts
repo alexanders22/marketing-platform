@@ -83,7 +83,8 @@ export async function generatePost(brandName: string, brand: BrandKit | null, o:
   if (!parsed.caption) throw new Error('Empty AI response')
   return {
     caption: String(parsed.caption).trim(),
-    hashtags: (parsed.hashtags ?? []).map((h) => String(h).replace(/^#/, '').trim()).filter(Boolean).slice(0, 8),
+    // Same rule as saved posts: letters, digits and _ only ("coffee-tips" → "coffeetips").
+    hashtags: (parsed.hashtags ?? []).map((h) => String(h).replace(/[^\p{L}\p{N}_]/gu, '')).filter((h) => h.length > 0 && h.length <= 60).slice(0, 8),
   }
 }
 
@@ -168,12 +169,12 @@ export async function generateCampaignPosts(
     `Return JSON: an array of exactly ${o.dates.length} objects {"angle": short label, "caption": string, "hashtags": string[3-6 without #]}, in date order. Every post must have a different angle and build on the previous ones.`,
   ].join('\n\n')
   const prompt = `Campaign brief: ${o.brief}\n\nPublishing dates: ${o.dates.join(', ')}`
-  const out = await json<PlannedPost[]>(system, prompt, Math.min(8000, 700 * o.dates.length + 500), 90_000)
+  const out = await json<PlannedPost[]>(system, prompt, Math.min(16000, 1200 * o.dates.length + 1000), 120_000)
   if (!Array.isArray(out) || out.length === 0) throw new Error('Empty campaign plan')
   return out.slice(0, o.dates.length).map((p) => ({
     angle: String(p.angle ?? '').slice(0, 120),
     caption: String(p.caption ?? '').trim(),
-    hashtags: (p.hashtags ?? []).map((h) => String(h).replace(/^#/, '').trim()).filter(Boolean).slice(0, 8),
+    hashtags: (p.hashtags ?? []).map((h) => String(h).replace(/[^\p{L}\p{N}_]/gu, '')).filter((h) => h.length > 0 && h.length <= 60).slice(0, 8),
   }))
 }
 

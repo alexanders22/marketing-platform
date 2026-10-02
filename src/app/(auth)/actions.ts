@@ -1,12 +1,14 @@
 'use server'
 
 import { randomBytes } from 'node:crypto'
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { sha256 } from '@/lib/crypto'
 import { actionEmail, appUrl, mailEnabled, sendMail } from '@/lib/mail'
 import { hashPassword, verifyPassword } from '@/lib/password'
+import { clearFailures, isLimited, recordFailure } from '@/lib/rate-limit'
 import { createSession, destroySession } from '@/lib/session'
 
 export type FormState = { error?: string; sent?: string; fields?: Record<string, string> } | undefined
@@ -75,16 +77,34 @@ export async function consumeMagicLink(form: FormData) {
   const link = await claimLink(String(form.get('token') ?? ''), 'LOGIN')
   if (!link) redirect('/login?error=link')
 
-  const user = await prisma.user.upsert({
-    where: { email: link.email },
-    create: { email: link.email, name: link.email.split('@')[0], emailVerifiedAt: new Date() },
-    update: { emailVerifiedAt: new Date() },
-  })
+  const existing = await prisma.user.findUnique({ where: { email: link.email } })
+  const user = existing
+    ? await verifyEmailOwner(existing.id, existing.emailVerifiedAt)
+    : await prisma.user.create({ data: { email: link.email, name: link.email.split('@')[0], emailVerifiedAt: new Date() } })
   await createSession(user.id)
   redirect('/app')
 }
 
+// First proof of email ownership for an account that was created without it
+// (password signup while mail was off): whoever set that password may not be
+// the owner, so drop the password and any sessions it opened.
+async function verifyEmailOwner(userId: string, verifiedAt: Date | null) {
+  if (verifiedAt) return prisma.user.findUniqueOrThrow({ where: { id: userId } })
+  const [user] = await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date(), passwordHash: null } }),
+    prisma.session.deleteMany({ where: { userId } }),
+  ])
+  return user
+}
+
 const PasswordLogin = z.object({ email: Email, password: z.string().min(1) })
+
+// Brute-force guard: 10 failures per email or 50 per IP in 15 minutes.
+const LOGIN_WINDOW = 15 * 60 * 1000
+async function clientIp() {
+  const h = await headers()
+  return h.get('x-forwarded-for')?.split(',')[0].trim() || h.get('x-real-ip') || 'unknown'
+}
 
 export async function passwordLogin(_: FormState, form: FormData): Promise<FormState> {
   const raw = Object.fromEntries(form) as Record<string, string>
@@ -92,11 +112,22 @@ export async function passwordLogin(_: FormState, form: FormData): Promise<FormS
   const invalid = { error: 'Wrong email or password', fields: { email: raw.email ?? '' } }
   if (!parsed.success) return invalid
 
+  const emailKey = `login:${parsed.data.email}`
+  const ipKey = `login-ip:${await clientIp()}`
+  if (isLimited(emailKey, 10) || isLimited(ipKey, 50)) {
+    return { error: 'Too many attempts. Wait 15 minutes or reset your password.', fields: { email: raw.email ?? '' } }
+  }
+
   const user = await prisma.user.findUnique({ where: { email: parsed.data.email } })
   // Verify even when the user is missing so timing does not reveal which emails exist.
   const ok = await verifyPassword(parsed.data.password, user?.passwordHash ?? 'scrypt$AAAA$AAAA')
-  if (!user || !ok) return invalid
+  if (!user || !ok) {
+    recordFailure(emailKey, LOGIN_WINDOW)
+    recordFailure(ipKey, LOGIN_WINDOW)
+    return invalid
+  }
 
+  clearFailures(emailKey)
   await createSession(user.id)
   redirect('/app')
 }
@@ -136,17 +167,14 @@ export async function requestPasswordReset(_: FormState, form: FormData): Promis
   if (user && !(await recentlySent(email, 'PASSWORD_RESET'))) {
     const link = `${appUrl()}/reset-password?token=${await issueLink(email, 'PASSWORD_RESET', RESET_TTL_MS)}`
     const footer = 'The link works once and expires in 30 minutes. If you did not ask to reset your password, ignore this email — your password stays the same.'
-    try {
-      await sendMail(
-        email,
-        'Reset your Khma password',
-        `Set a new Khma password: ${link}\n\n${footer}`,
-        actionEmail('Click the button below to choose a new password for your Khma account.', 'Set new password', link, footer),
-      )
-    } catch (e) {
-      console.error('reset mail failed', e)
-      return { error: "We couldn't send the email right now. Please try again in a minute.", fields: { email } }
-    }
+    // Not awaited: answering at the same speed for known and unknown emails
+    // keeps response time from revealing who has an account.
+    sendMail(
+      email,
+      'Reset your Khma password',
+      `Set a new Khma password: ${link}\n\n${footer}`,
+      actionEmail('Click the button below to choose a new password for your Khma account.', 'Set new password', link, footer),
+    ).catch((e) => console.error('reset mail failed', e))
   }
   return { sent: email }
 }
@@ -167,14 +195,17 @@ export async function resetPassword(_: FormState, form: FormData): Promise<FormS
   const user = await prisma.user.findUnique({ where: { email: link.email } })
   if (!user) return { error: 'This reset link is invalid or has expired. Request a new one.' }
 
-  // New password signs out every other device.
+  // New password signs out every other device and voids any other pending
+  // sign-in or reset links for this email.
   await prisma.$transaction([
     prisma.user.update({
       where: { id: user.id },
       data: { passwordHash: await hashPassword(parsed.data.password), emailVerifiedAt: user.emailVerifiedAt ?? new Date() },
     }),
     prisma.session.deleteMany({ where: { userId: user.id } }),
+    prisma.magicLink.updateMany({ where: { email: link.email, usedAt: null }, data: { usedAt: new Date() } }),
   ])
+  clearFailures(`login:${link.email}`)
   await createSession(user.id)
   redirect('/app')
 }

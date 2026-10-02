@@ -24,10 +24,18 @@ export async function GET(req: NextRequest) {
   const existing =
     (await prisma.user.findUnique({ where: { googleId: profile.sub } })) ??
     (await prisma.user.findUnique({ where: { email: profile.email } }))
+  // First verified sign-in for an account created without email proof: drop
+  // the unverified password and its sessions (account pre-hijacking).
+  const firstProof = existing && !existing.emailVerifiedAt
+  if (firstProof) await prisma.session.deleteMany({ where: { userId: existing.id } })
   const user = existing
     ? await prisma.user.update({
         where: { id: existing.id },
-        data: { googleId: profile.sub, emailVerifiedAt: existing.emailVerifiedAt ?? new Date() },
+        data: {
+          googleId: profile.sub,
+          emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
+          ...(firstProof ? { passwordHash: null } : {}),
+        },
       })
     : await prisma.user.create({
         data: {

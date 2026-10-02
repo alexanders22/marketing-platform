@@ -15,6 +15,7 @@ const REASON: Record<string, string> = {
   AI_TEXT: 'AI text',
   AI_IMAGE: 'AI image',
   AI_VIDEO: 'AI video',
+  AI_BLOG: 'AI blog',
   ADJUSTMENT: 'Adjustment',
 }
 

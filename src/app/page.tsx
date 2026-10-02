@@ -40,6 +40,9 @@ import { Pricing } from "@/components/landing/Pricing";
 
 type Icon = ComponentType<{ size?: number; className?: string }>;
 
+// Sales / partnership enquiries.
+const CONTACT = "mailto:info@brandrepublic.ge?subject=Khma%20demo";
+
 const NETWORKS: { icon: Icon; name: string; color: string }[] = [
   { icon: SiFacebook, name: "Facebook", color: "#1877F2" },
   { icon: SiInstagram, name: "Instagram", color: "#E4405F" },
@@ -576,7 +579,7 @@ Authorization: Bearer khma_…
                 move the image budget to video?
               </p>
             </div>
-            <a href="#contact" className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-white hover:underline">
+            <a href={CONTACT} className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-white hover:underline">
               Explore the API & MCP <ArrowRight size={14} />
             </a>
           </Card>
@@ -760,7 +763,7 @@ function FinalCta() {
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <PrimaryCta>Start free</PrimaryCta>
               <a
-                href="#contact"
+                href={CONTACT}
                 className="inline-flex items-center rounded-full border border-white/10 px-5 py-2.5 text-sm font-medium transition hover:bg-white/5"
               >
                 Book a demo
@@ -777,18 +780,37 @@ function FinalCta() {
 /* ─── Footer ───────────────────────────────────────────────────────────── */
 
 function Footer() {
-  const cols: { title: string; links: string[] }[] = [
+  // Only links that lead somewhere. Legal pages (terms, privacy) are not
+  // published yet, so they are not linked.
+  const cols: { title: string; links: { label: string; href: string }[] }[] = [
     {
       title: "Product",
-      links: ["Publishing", "AI content", "Paid ads", "Analytics", "Brand kit", "Leads"],
+      links: [
+        { label: "Features", href: "#features" },
+        { label: "Ads & analytics", href: "#ads" },
+        { label: "How it works", href: "#how" },
+        { label: "Pricing", href: "#pricing" },
+      ],
     },
-    { title: "Platform", links: ["Partner API", "MCP", "Webhooks", "White-label"] },
-    { title: "Company", links: ["Pricing", "Contact", "Blog", "Status"] },
-    { title: "Legal", links: ["Terms of service", "Privacy policy", "Cookie policy"] },
+    {
+      title: "Platform",
+      links: [
+        { label: "Partner API", href: "#partners" },
+        { label: "AI assistants (MCP)", href: "#partners" },
+      ],
+    },
+    {
+      title: "Company",
+      links: [
+        { label: "Contact", href: CONTACT },
+        { label: "Log in", href: "/login" },
+        { label: "Start free", href: "/signup" },
+      ],
+    },
   ];
   return (
     <footer className="border-t border-white/5 bg-zinc-900/30">
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 md:grid-cols-[1.4fr_repeat(4,1fr)]">
+      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 md:grid-cols-[1.4fr_repeat(3,1fr)]">
         <div>
           <Logo />
           <p className="mt-3 max-w-xs text-sm text-zinc-400">AI marketing: content, ads and analytics in one place.</p>
@@ -798,9 +820,9 @@ function Footer() {
             <h4 className="text-sm font-semibold">{c.title}</h4>
             <ul className="mt-4 space-y-2.5 text-sm text-zinc-400">
               {c.links.map((l) => (
-                <li key={l}>
-                  <a href="#" className="transition hover:text-white">
-                    {l}
+                <li key={l.label}>
+                  <a href={l.href} className="transition hover:text-white">
+                    {l.label}
                   </a>
                 </li>
               ))}

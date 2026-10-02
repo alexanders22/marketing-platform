@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { ArrowLeft, CalendarRange, FileText, Loader2, Pencil, RefreshCw, Sparkles, Target, Trash2 } from 'lucide-react'
 import { ChannelIcons } from '@/components/channels'
+import { LocalTime } from '@/components/LocalTime'
 import { writeArticle } from '../../blog/actions'
 import { deleteCampaign, regenerateCampaignPost } from '../actions'
 
@@ -20,8 +21,9 @@ type Item = {
   scheduledAt: string | null
 }
 
-const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
-const time = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+// Rendered in the viewer's time zone after hydration (see LocalTime).
+const day = (iso: string) => <LocalTime iso={iso} options={{ weekday: 'short', day: 'numeric', month: 'short' }} />
+const time = (iso: string) => <LocalTime iso={iso} options={{ hour: '2-digit', minute: '2-digit' }} />
 
 export function CampaignView({ campaign: c, posts }: { campaign: Campaign; posts: Item[] }) {
   const router = useRouter()

@@ -87,7 +87,7 @@ export function Pricing() {
                 <span className="text-sm text-zinc-400">/ month</span>
               </div>
               <p className="mt-1 text-xs text-zinc-500">
-                {yearly ? `Billed yearly — $${p.monthly * 10}` : "Billed monthly"}
+                {yearly ? `Billed yearly — $${(p.monthly * 10).toLocaleString("en-US")}` : "Billed monthly"}
               </p>
               <a
                 href="/signup"
@@ -129,7 +129,7 @@ export function Pricing() {
           </p>
         </div>
         <a
-          href="#contact"
+          href="mailto:info@brandrepublic.ge?subject=Khma%20partnership"
           className="shrink-0 rounded-lg border border-white/10 px-4 py-2 text-sm font-medium transition hover:bg-white/5"
         >
           Let&apos;s talk

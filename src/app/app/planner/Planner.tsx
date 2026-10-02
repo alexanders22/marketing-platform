@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight, FileText, List, Plus, Sparkles, Target } from 'lucide-react'
 import { ChannelIcons } from '@/components/channels'
+import { LocalTime, useIsClient } from '@/components/LocalTime'
 
 export type PlannerPost = {
   id: string
@@ -97,8 +98,11 @@ export function Planner({ view, month, posts, now }: { view: 'calendar' | 'list'
   )
 }
 
+// Days and times depend on the viewer's time zone, so posts and "today" are
+// placed only after hydration; the server renders the empty grid.
 function Month({ y, m, posts }: { y: number; m: number; posts: PlannerPost[] }) {
-  const today = localDay(new Date())
+  const isClient = useIsClient()
+  const today = isClient ? localDay(new Date()) : ''
   const cells = useMemo(() => {
     const first = new Date(y, m - 1, 1)
     const start = new Date(first)
@@ -112,13 +116,14 @@ function Month({ y, m, posts }: { y: number; m: number; posts: PlannerPost[] }) 
 
   const byDay = useMemo(() => {
     const map = new Map<string, PlannerPost[]>()
+    if (!isClient) return map
     for (const p of posts) {
       if (!p.scheduledAt) continue
       const k = localDay(new Date(p.scheduledAt))
       map.set(k, [...(map.get(k) ?? []), p])
     }
     return map
-  }, [posts])
+  }, [posts, isClient])
 
   return (
     <div className="overflow-x-auto">
@@ -237,9 +242,7 @@ function Group({ title, posts }: { title: string; posts: PlannerPost[] }) {
               {p.campaignId && <Target size={15} className="shrink-0 text-indigo-500" aria-label="Part of a campaign" />}
               <ChannelIcons value={p.channels} />
               <span className="w-32 shrink-0 text-right text-xs text-zinc-500">
-                {p.scheduledAt
-                  ? new Date(p.scheduledAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-                  : 'Draft'}
+                {p.scheduledAt ? <LocalTime iso={p.scheduledAt} options={{ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }} /> : 'Draft'}
               </span>
             </Link>
           </li>

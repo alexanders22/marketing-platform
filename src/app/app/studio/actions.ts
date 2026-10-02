@@ -10,7 +10,8 @@ import { mediaUrl, saveMedia } from '@/lib/storage'
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/)
 const num = z.number().finite().min(-20000).max(20000)
-const common = { id: z.string().max(40), name: z.string().max(80), x: num, y: num, w: num, h: num, rotation: z.number().min(-360).max(360) }
+const size = z.number().finite().min(1).max(20000)
+const common = { id: z.string().max(40), name: z.string().max(80), x: num, y: num, w: size, h: size, rotation: z.number().min(-360).max(360) }
 
 const Layer = z.discriminatedUnion('type', [
   z.object({
@@ -87,7 +88,8 @@ export async function saveDesign(raw: z.input<typeof SaveInput>): Promise<{ erro
 
   const res = await prisma.design.updateMany({
     where: { id: d.id, workspaceId: workspace.id },
-    data: { name: d.name, width: d.width, height: d.height, data: d.data as unknown as Prisma.InputJsonValue },
+    // The exported thumbnail no longer matches after an edit — fall back to the live preview.
+    data: { name: d.name, width: d.width, height: d.height, data: d.data as unknown as Prisma.InputJsonValue, previewMediaId: null },
   })
   if (res.count === 0) return { error: 'Design not found' }
   revalidatePath('/app/studio')
@@ -133,7 +135,7 @@ export async function duplicateDesign(id: string) {
   const d = await prisma.design.findFirst({ where: { id, workspaceId: workspace.id } })
   if (!d) return { error: 'Design not found' }
   const copy = await prisma.design.create({
-    data: { workspaceId: workspace.id, name: `${d.name} (copy)`, width: d.width, height: d.height, data: d.data as Prisma.InputJsonValue },
+    data: { workspaceId: workspace.id, name: `${d.name.slice(0, 113)} (copy)`, width: d.width, height: d.height, data: d.data as Prisma.InputJsonValue },
   })
   revalidatePath('/app/studio')
   return { id: copy.id }

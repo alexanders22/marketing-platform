@@ -3,21 +3,22 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
-import { BioBlock, BioTheme, bioUid, Slug, themePresets } from '@/lib/bio'
+import { BioBlock, BioTheme, bioUid, RESERVED_SLUGS, Slug, themePresets } from '@/lib/bio'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 
 export async function createBioPage(): Promise<{ id: string }> {
   const { workspace, brand } = await requireContext()
   // A readable, unique starting address from the brand name.
-  const base =
-    workspace.name
-      .toLowerCase()
-      .normalize('NFKD')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 30) || 'page'
-  let slug = base.length >= 3 ? base : `${base}-page`
+  // Cut first, then trim dashes, so the slug never ends with "-".
+  const cleaned = workspace.name
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, 30)
+    .replace(/^-+|-+$/g, '')
+  const base = !cleaned ? 'page' : cleaned.length < 3 || RESERVED_SLUGS.includes(cleaned) ? `${cleaned}-page` : cleaned
+  let slug = base
   for (let i = 2; await prisma.bioPage.findUnique({ where: { slug }, select: { id: true } }); i++) slug = `${base}-${i}`
 
   const blocks: BioBlock[] = [
@@ -28,7 +29,7 @@ export async function createBioPage(): Promise<{ id: string }> {
     data: {
       workspaceId: workspace.id,
       slug,
-      title: workspace.name,
+      title: workspace.name.slice(0, 80),
       bio: brand?.description?.slice(0, 160) ?? '',
       theme: themePresets(brand?.colors ?? [])[0].theme as Prisma.InputJsonValue,
       blocks: blocks as unknown as Prisma.InputJsonValue,
@@ -52,7 +53,7 @@ const Save = z.object({
 export async function saveBioPage(raw: z.input<typeof Save>): Promise<{ error?: string }> {
   const { workspace } = await requireContext()
   const parsed = Save.safeParse(raw)
-  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  if (!parsed.success) return { error: describe(parsed.error.issues[0]) }
   const p = parsed.data
 
   if (p.avatarMediaId && !(await prisma.media.findFirst({ where: { id: p.avatarMediaId, workspaceId: workspace.id }, select: { id: true } }))) {
@@ -77,6 +78,16 @@ export async function saveBioPage(raw: z.input<typeof Save>): Promise<{ error?: 
   revalidatePath('/app/bio')
   revalidatePath(`/b/${p.slug}`)
   return {}
+}
+
+// Readable error that names the field ("Title: …" rather than a bare zod message).
+const FIELD: Record<string, string> = { slug: 'Page address', title: 'Title', bio: 'Bio', theme: 'Appearance' }
+function describe(issue: z.core.$ZodIssue) {
+  const [head, index, field] = issue.path
+  if (head === 'blocks') return `Block ${Number(index) + 1}${field ? ` (${String(field)})` : ''}: ${issue.message}`
+  const label = FIELD[String(head)]
+  const msg = issue.code === 'too_big' && 'maximum' in issue ? `must be at most ${issue.maximum} characters` : issue.message
+  return label ? `${label}: ${msg}` : msg
 }
 
 export async function deleteBioPage(id: string) {

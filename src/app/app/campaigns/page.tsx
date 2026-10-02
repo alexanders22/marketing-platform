@@ -2,12 +2,14 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { CalendarRange, FileText, Plus, Target } from 'lucide-react'
 import { EmptyState, PageHeader } from '@/components/EmptyState'
+import { LocalTime } from '@/components/LocalTime'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 
 export const metadata: Metadata = { title: 'Campaigns — Khma' }
 
-const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+// Shown in the viewer's time zone, like the campaign page and the Planner.
+const fmt = (d: Date) => <LocalTime iso={d.toISOString()} options={{ day: 'numeric', month: 'short' }} />
 
 export default async function CampaignsPage() {
   const { workspace } = await requireContext()

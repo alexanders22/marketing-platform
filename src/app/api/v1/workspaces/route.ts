@@ -15,19 +15,23 @@ export const POST = handler(async (req) => {
   const partner = await requirePartner(req)
   const input = await body(req, UpsertWorkspace)
 
-  if (partner.mode === 'SINGLE') {
-    const other = await prisma.workspace.findFirst({
-      where: { partnerId: partner.id, NOT: { externalId: input.externalId } },
-      select: { id: true },
+  // One transaction with a per-partner advisory lock, so concurrent calls
+  // can't both pass the SINGLE-mode check.
+  const ws = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'partner-ws:' + partner.id}))`
+    if (partner.mode === 'SINGLE') {
+      const other = await tx.workspace.findFirst({
+        where: { partnerId: partner.id, NOT: { externalId: input.externalId } },
+        select: { id: true },
+      })
+      if (other) throw new ApiError(409, 'single_workspace', 'This partner can have only one workspace')
+    }
+    return tx.workspace.upsert({
+      where: { partnerId_externalId: { partnerId: partner.id, externalId: input.externalId } },
+      create: { partnerId: partner.id, externalId: input.externalId, name: input.name, locale: input.locale },
+      update: { name: input.name, ...(input.locale && { locale: input.locale }) },
+      include: { account: true },
     })
-    if (other) throw new ApiError(409, 'single_workspace', 'This partner can have only one workspace')
-  }
-
-  const ws = await prisma.workspace.upsert({
-    where: { partnerId_externalId: { partnerId: partner.id, externalId: input.externalId } },
-    create: { partnerId: partner.id, externalId: input.externalId, name: input.name, locale: input.locale },
-    update: { name: input.name, ...(input.locale && { locale: input.locale }) },
-    include: { account: true },
   })
   return json({ workspace: serializeWorkspace(ws) })
 })

@@ -26,9 +26,9 @@ export default function ChannelsPage() {
         title="Channels"
         sub="Connect the pages and ad accounts Khma publishes to and reads results from."
       />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {CHANNELS.map((c) => (
-          <div key={c.name} className="flex items-center gap-3 rounded-xl border border-zinc-200 p-4">
+          <div key={c.name} className="flex min-w-0 items-center gap-3 rounded-xl border border-zinc-200 p-4">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-zinc-50 ring-1 ring-zinc-200">
               <c.icon size={20} color={c.color} />
             </span>

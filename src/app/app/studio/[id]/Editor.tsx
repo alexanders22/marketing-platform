@@ -44,7 +44,10 @@ import {
 import { exportDesign, saveDesign } from '../actions'
 
 type Brand = { name: string; colors: string[]; logoUrl: string | null }
-type Drag = { id: string; mode: 'move' | 'nw' | 'ne' | 'sw' | 'se'; px: number; py: number; orig: Layer }
+type Drag = { id: string; mode: 'move' | 'nw' | 'ne' | 'sw' | 'se'; px: number; py: number; orig: Layer; moved: boolean }
+
+const MAX_LAYERS = 200
+const MAX_TEXT = 2000
 
 export function Editor({
   design,
@@ -65,14 +68,37 @@ export function Editor({
   const [status, setStatus] = useState<'saved' | 'dirty' | 'saving' | 'error'>('saved')
   const [busy, setBusy] = useState<'download' | 'post' | null>(null)
   const [error, setError] = useState<string>()
-  const history = useRef<{ past: DesignDoc[]; future: DesignDoc[] }>({ past: [], future: [] })
-  // Latest doc for event handlers; history is kept outside state updaters
-  // (React may run updaters twice in development).
+  // Undo history covers the canvas size too, so undoing a format change
+  // restores both the layers and the format.
+  type Snap = { doc: DesignDoc; size: { w: number; h: number } }
+  const history = useRef<{ past: Snap[]; future: Snap[] }>({ past: [], future: [] })
+  // Latest values for event handlers and the unmount flush; history is kept
+  // outside state updaters (React may run updaters twice in development).
   const docRef = useRef(doc)
+  const sizeRef = useRef(size)
+  const nameRef = useRef(name)
+  const statusRef = useRef(status)
+  // Bumped on every change; a save only marks "saved" if nothing changed meanwhile.
+  const version = useRef(0)
+  const editDraft = useRef('')
   const setDocNow = useCallback((d: DesignDoc) => {
     docRef.current = d
+    version.current++
     setDoc(d)
   }, [])
+  const setSizeNow = (sz: { w: number; h: number }) => {
+    sizeRef.current = sz
+    setSize(sz)
+  }
+  const markDirty = useCallback(() => {
+    statusRef.current = 'dirty'
+    setStatus('dirty')
+  }, [])
+  const snap = (): Snap => ({ doc: docRef.current, size: sizeRef.current })
+  const pushHistory = () => {
+    history.current.past = [...history.current.past.slice(-49), snap()]
+    history.current.future = []
+  }
   const drag = useRef<Drag | null>(null)
   const stage = useRef<HTMLDivElement>(null)
   const pal = palette(brand.colors)
@@ -84,31 +110,38 @@ export function Editor({
   const commit = useCallback(
     (next: DesignDoc | ((d: DesignDoc) => DesignDoc)) => {
       const cur = docRef.current
-      history.current.past = [...history.current.past.slice(-49), cur]
+      history.current.past = [...history.current.past.slice(-49), { doc: cur, size: sizeRef.current }]
       history.current.future = []
       setDocNow(typeof next === 'function' ? next(cur) : next)
-      setStatus('dirty')
+      markDirty()
     },
-    [setDocNow],
+    [setDocNow, markDirty],
   )
 
   const patch = (id: string, p: Partial<Layer>) =>
     commit((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? ({ ...l, ...p } as Layer) : l)) }))
 
+  const restore = useCallback(
+    (sn: Snap) => {
+      setDocNow(sn.doc)
+      sizeRef.current = sn.size
+      setSize(sn.size)
+      markDirty()
+    },
+    [setDocNow, markDirty],
+  )
   const undo = useCallback(() => {
     const h = history.current
     if (!h.past.length) return
-    h.future = [docRef.current, ...h.future]
-    setDocNow(h.past.pop()!)
-    setStatus('dirty')
-  }, [setDocNow])
+    h.future = [{ doc: docRef.current, size: sizeRef.current }, ...h.future]
+    restore(h.past.pop()!)
+  }, [restore])
   const redo = useCallback(() => {
     const h = history.current
     if (!h.future.length) return
-    h.past = [...h.past, docRef.current]
-    setDocNow(h.future.shift()!)
-    setStatus('dirty')
-  }, [setDocNow])
+    h.past = [...h.past, { doc: docRef.current, size: sizeRef.current }]
+    restore(h.future.shift()!)
+  }, [restore])
 
   const remove = useCallback((id: string) => {
     commit((d) => ({ ...d, layers: d.layers.filter((l) => l.id !== id) }))
@@ -118,7 +151,9 @@ export function Editor({
     const nid = uid()
     commit((d) => {
       const l = d.layers.find((x) => x.id === id)
-      return l ? { ...d, layers: [...d.layers, { ...l, id: nid, name: `${l.name} copy`, x: l.x + 30, y: l.y + 30 } as Layer] } : d
+      if (!l || d.layers.length >= MAX_LAYERS) return d
+      const name = l.name.endsWith(' copy') ? l.name : `${l.name} copy`.slice(0, 80)
+      return { ...d, layers: [...d.layers, { ...l, id: nid, name, x: l.x + 30, y: l.y + 30 } as Layer] }
     })
     setSel(nid)
   }, [commit])
@@ -133,27 +168,73 @@ export function Editor({
     })
 
   const add = (l: Layer) => {
+    if (docRef.current.layers.length >= MAX_LAYERS) return setError(`A design can have up to ${MAX_LAYERS} layers`)
     commit((d) => ({ ...d, layers: [...d.layers, l] }))
     setSel(l.id)
   }
 
+  // Ends inline text editing, keeping what was typed.
+  const finishEditing = () => {
+    if (!editing) return
+    patch(editing, { text: editDraft.current.slice(0, MAX_TEXT) })
+    setEditing(null)
+  }
+
   // ─── Autosave ──────────────────────────────────────────────────────────
+  const persist = useCallback(
+    () =>
+      saveDesign({
+        id: design.id,
+        name: nameRef.current.trim().slice(0, 120) || 'Untitled',
+        width: sizeRef.current.w,
+        height: sizeRef.current.h,
+        data: docRef.current,
+      }),
+    [design.id],
+  )
+
   useEffect(() => {
     if (status !== 'dirty') return
     const t = setTimeout(async () => {
+      const v = version.current
+      statusRef.current = 'saving'
       setStatus('saving')
-      const res = await saveDesign({ id: design.id, name: name.trim() || 'Untitled', width: size.w, height: size.h, data: doc })
-      setStatus(res.error ? 'error' : 'saved')
-      if (res.error) setError(res.error)
+      const res = await persist()
+      if (res.error) {
+        statusRef.current = 'error'
+        setStatus('error')
+        setError(res.error)
+      } else if (version.current !== v) {
+        // Edited while saving: status goes saving → dirty, which re-arms the timer.
+        markDirty()
+      } else {
+        statusRef.current = 'saved'
+        setStatus('saved')
+      }
     }, 1200)
     return () => clearTimeout(t)
-  }, [status, doc, name, size, design.id])
+  }, [status, doc, name, size, persist, markDirty])
+
+  // Leaving the page with unsaved edits: save right away, and warn on reload/close.
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (statusRef.current === 'dirty' || statusRef.current === 'saving') {
+        persist()
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => {
+      window.removeEventListener('beforeunload', warn)
+      if (statusRef.current === 'dirty') persist()
+    }
+  }, [persist])
 
   // ─── Fit canvas to the stage ──────────────────────────────────────────
   useEffect(() => {
     const el = stage.current
     if (!el) return
-    const fit = () => setScale(Math.min((el.clientWidth - 48) / size.w, (el.clientHeight - 48) / size.h, 1))
+    const fit = () => setScale(Math.max(0.05, Math.min((el.clientWidth - 32) / size.w, (el.clientHeight - 32) / size.h, 1)))
     fit()
     const ro = new ResizeObserver(fit)
     ro.observe(el)
@@ -194,12 +275,12 @@ export function Editor({
   // ─── Drag & resize ────────────────────────────────────────────────────
   const startDrag = (e: RPointerEvent, l: Layer, mode: Drag['mode']) => {
     e.stopPropagation()
-    if (editing) return
+    if (editing === l.id) return
+    if (editing) finishEditing()
     setSel(l.id)
-    drag.current = { id: l.id, mode, px: e.clientX, py: e.clientY, orig: l }
-    // One undo step per gesture: snapshot now, then update without history.
-    history.current.past = [...history.current.past.slice(-49), docRef.current]
-    history.current.future = []
+    // The undo snapshot is taken on the first real movement, so a plain
+    // click (select) adds no empty undo step.
+    drag.current = { id: l.id, mode, px: e.clientX, py: e.clientY, orig: l, moved: false }
   }
 
   useEffect(() => {
@@ -208,6 +289,11 @@ export function Editor({
       if (!d) return
       const dx = (e.clientX - d.px) / scale
       const dy = (e.clientY - d.py) / scale
+      if (!d.moved) {
+        if (Math.abs(e.clientX - d.px) < 2 && Math.abs(e.clientY - d.py) < 2) return
+        d.moved = true
+        pushHistory()
+      }
       const o = d.orig
       let n: Partial<Layer>
       if (d.mode === 'move') n = { x: Math.round(o.x + dx), y: Math.round(o.y + dy) }
@@ -220,7 +306,7 @@ export function Editor({
       }
       const cur = docRef.current
       setDocNow({ ...cur, layers: cur.layers.map((l) => (l.id === d.id ? ({ ...l, ...n } as Layer) : l)) })
-      setStatus('dirty')
+      markDirty()
     }
     const up = () => {
       drag.current = null
@@ -231,7 +317,8 @@ export function Editor({
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
-  }, [scale, setDocNow])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scale, setDocNow, markDirty])
 
   // ─── Export ───────────────────────────────────────────────────────────
   const render = async () => {
@@ -242,12 +329,16 @@ export function Editor({
 
   const download = async () => {
     setBusy('download')
+    setError(undefined)
     try {
       const url = await render()
       const a = document.createElement('a')
       a.href = url
-      a.download = `${(name || 'design').replace(/[^\w-]+/g, '-')}.png`
+      a.download = `${(name || 'design').replace(/[^\p{L}\p{N}_-]+/gu, '-')}.png`
       a.click()
+    } catch (e) {
+      console.error(e)
+      setError('Could not export this design. Check images and layer sizes and try again.')
     } finally {
       setBusy(null)
     }
@@ -261,6 +352,9 @@ export function Editor({
       const res = await exportDesign(design.id, url.split(',')[1], true)
       if (res.error) setError(res.error)
       else if (res.postId) router.push(`/app/posts/${res.postId}`)
+    } catch (e) {
+      console.error(e)
+      setError('Could not export this design. Check images and layer sizes and try again.')
     } finally {
       setBusy(null)
     }
@@ -309,7 +403,7 @@ export function Editor({
   }
 
   return (
-    <div className="-m-5 flex h-[calc(100vh-1.5rem)] flex-col sm:-m-8">
+    <div className="-m-5 flex flex-col sm:-m-8 lg:h-[calc(100vh-1.5rem)]">
       {/* Top bar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-4 py-2.5">
         <Link href="/app/studio" className="grid h-9 w-9 place-items-center rounded-lg hover:bg-zinc-100" aria-label="Back to Studio">
@@ -317,7 +411,13 @@ export function Editor({
         </Link>
         <input
           value={name}
-          onChange={(e) => (setName(e.target.value), setStatus('dirty'))}
+          maxLength={120}
+          onChange={(e) => {
+            nameRef.current = e.target.value
+            version.current++
+            setName(e.target.value)
+            markDirty()
+          }}
           className="w-56 rounded-lg px-2 py-1.5 text-sm font-semibold outline-none hover:bg-zinc-50 focus:ring-2 focus:ring-zinc-200"
           aria-label="Design name"
         />
@@ -326,8 +426,10 @@ export function Editor({
           onChange={(e) => {
             const s = SIZES.find((x) => x.id === e.target.value)
             if (!s) return
-            commit(resizeDoc(doc, size, s))
-            setSize({ w: s.w, h: s.h })
+            pushHistory()
+            setDocNow(resizeDoc(docRef.current, sizeRef.current, s))
+            setSizeNow({ w: s.w, h: s.h })
+            markDirty()
           }}
           className="rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
           aria-label="Resize design"
@@ -367,9 +469,9 @@ export function Editor({
       </div>
       {error && <p className="bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Left panel */}
-        <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-200">
+        <aside className="order-3 flex w-full shrink-0 flex-col border-t border-zinc-200 lg:order-none lg:w-64 lg:border-t-0 lg:border-r">
           <div className="grid grid-cols-4 border-b border-zinc-200 text-[11px]">
             {(
               [
@@ -478,7 +580,10 @@ export function Editor({
         </aside>
 
         {/* Stage */}
-        <div ref={stage} className="relative grid min-w-0 flex-1 place-items-center overflow-hidden bg-zinc-100" onPointerDown={() => (setSel(null), setEditing(null))}>
+        <div ref={stage} className="relative order-1 grid h-[60vh] min-w-0 flex-none place-items-center lg:flex-1 overflow-hidden bg-zinc-100 lg:order-none lg:h-auto" onPointerDown={() => {
+            finishEditing()
+            setSel(null)
+          }}>
           <div className="relative shadow-xl" style={{ width: size.w * scale, height: size.h * scale, background: doc.background }}>
             <div className="absolute inset-0 overflow-hidden">
               {doc.layers.map((l) => (
@@ -486,17 +591,21 @@ export function Editor({
                   key={l.id}
                   style={{ ...layerStyle(l, scale), cursor: editing === l.id ? 'text' : 'move' }}
                   onPointerDown={(e) => startDrag(e, l, 'move')}
-                  onDoubleClick={() => l.type === 'text' && setEditing(l.id)}
+                  onDoubleClick={() => {
+                    if (l.type !== 'text') return
+                    editDraft.current = l.text
+                    setEditing(l.id)
+                  }}
                 >
                   {editing === l.id && l.type === 'text' ? (
                     <textarea
                       autoFocus
                       defaultValue={l.text}
+                      maxLength={MAX_TEXT}
+                      onChange={(e) => (editDraft.current = e.target.value)}
+                      onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), finishEditing())}
                       onPointerDown={(e) => e.stopPropagation()}
-                      onBlur={(e) => {
-                        patch(l.id, { text: e.target.value })
-                        setEditing(null)
-                      }}
+                      onBlur={() => finishEditing()}
                       className="h-full w-full resize-none bg-transparent outline-none"
                       style={{
                         color: l.color,
@@ -539,7 +648,7 @@ export function Editor({
         </div>
 
         {/* Right panel */}
-        <aside className="hidden w-64 shrink-0 overflow-y-auto border-l border-zinc-200 p-4 md:block">
+        <aside className="order-2 w-full shrink-0 overflow-y-auto border-t border-zinc-200 p-4 lg:order-none lg:w-64 lg:border-t-0 lg:border-l">
           {!selected ? (
             <>
               <p className="text-sm font-semibold">Canvas</p>
@@ -566,6 +675,7 @@ export function Editor({
                   <Prop label="Text">
                     <textarea
                       value={selected.text}
+                      maxLength={MAX_TEXT}
                       onChange={(e) => patch(selected.id, { text: e.target.value })}
                       className="min-h-20 w-full rounded-lg border border-zinc-200 p-2 text-sm outline-none focus:border-zinc-400"
                     />
@@ -676,7 +786,12 @@ export function Editor({
                   {(['x', 'y', 'w', 'h'] as const).map((k) => (
                     <label key={k} className="flex items-center gap-1.5 text-xs text-zinc-500">
                       {k.toUpperCase()}
-                      <NumInput value={Math.round(selected[k])} min={-5000} max={8000} onChange={(v) => patch(selected.id, { [k]: v } as Partial<Layer>)} />
+                      <NumInput
+                        value={Math.round(selected[k])}
+                        min={k === 'w' || k === 'h' ? 1 : -5000}
+                        max={8000}
+                        onChange={(v) => patch(selected.id, { [k]: v } as Partial<Layer>)}
+                      />
                     </label>
                   ))}
                 </div>
@@ -709,17 +824,30 @@ function Prop({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
+// Applies a typed value as soon as it is in range; out-of-range input stays
+// as typed and is clamped on blur/Enter (clamping each keystroke turned
+// "120" into "420").
 function NumInput({ value, min, max, onChange }: { value: number; min: number; max: number; onChange: (v: number) => void }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const apply = () => {
+    if (draft === null) return
+    const v = Number(draft)
+    if (draft.trim() !== '' && Number.isFinite(v)) onChange(Math.min(max, Math.max(min, Math.round(v))))
+    setDraft(null)
+  }
   return (
     <input
       type="number"
-      value={value}
+      value={draft ?? value}
       min={min}
       max={max}
       onChange={(e) => {
+        setDraft(e.target.value)
         const v = Number(e.target.value)
-        if (Number.isFinite(v)) onChange(Math.min(max, Math.max(min, v)))
+        if (e.target.value.trim() !== '' && Number.isFinite(v) && v >= min && v <= max) onChange(Math.round(v))
       }}
+      onBlur={apply}
+      onKeyDown={(e) => e.key === 'Enter' && apply()}
       className="w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-sm outline-none focus:border-zinc-400"
     />
   )
