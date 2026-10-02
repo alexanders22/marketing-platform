@@ -128,8 +128,15 @@ export function AuthCard({ mode, googleEnabled, mailEnabled, error }: Props) {
       )}
 
       <p className="mt-5 text-xs leading-relaxed text-zinc-500">
-        By continuing, you agree to the <span className="underline">Terms of Service</span>,{' '}
-        <span className="underline">Privacy Policy</span>, and <span className="underline">Cookie Policy</span>.
+        By continuing, you agree to the{' '}
+        <a href="/terms" target="_blank" className="underline hover:text-zinc-800">
+          Terms of Service
+        </a>{' '}
+        and{' '}
+        <a href="/privacy" target="_blank" className="underline hover:text-zinc-800">
+          Privacy Policy
+        </a>
+        .
       </p>
     </div>
   )

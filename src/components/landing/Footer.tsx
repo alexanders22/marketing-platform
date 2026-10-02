@@ -3,8 +3,7 @@ import { Logo } from "./Logo";
 import { CONTACT, FEATURES, SUPPORT, featureHref } from "./site";
 
 export function Footer() {
-  // Only links that lead somewhere. Legal pages (terms, privacy) are not
-  // published yet, so they are not linked.
+  // Only links that lead somewhere.
   const cols: { title: string; links: { label: string; href: string }[] }[] = [
     {
       title: "Features",
@@ -27,10 +26,18 @@ export function Footer() {
         { label: "Start free", href: "/signup" },
       ],
     },
+    {
+      title: "Legal",
+      links: [
+        { label: "Terms of Service", href: "/terms" },
+        { label: "Privacy Policy", href: "/privacy" },
+        { label: "Data deletion", href: "/data-deletion" },
+      ],
+    },
   ];
   return (
     <footer className="border-t border-white/5 bg-zinc-900/30">
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 sm:grid-cols-2 md:grid-cols-[1.4fr_repeat(4,1fr)]">
         <div>
           <Logo />
           <p className="mt-3 max-w-xs text-sm text-zinc-400">AI marketing: content, ads and analytics in one place.</p>
