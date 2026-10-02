@@ -1,0 +1,221 @@
+generator client {
+  provider        = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Partners ────────────────────────────────────────────────────────────────
+// A connected product (Upla, Zavnili, Dotcom…) that uses Khma through the API.
+// SINGLE: the partner itself is one advertiser (one workspace).
+// MULTI:  a reseller whose own customers/profiles each get a workspace
+//         (Upla: every company and every broker profile).
+
+enum PartnerMode {
+  SINGLE
+  MULTI
+}
+
+enum PartnerStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model Partner {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique
+  mode            PartnerMode   @default(SINGLE)
+  status          PartnerStatus @default(ACTIVE)
+  // Share of credit purchases paid out to the partner (0–100).
+  revenueSharePct Float         @default(0)
+  webhookUrl      String?
+  webhookSecret   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  apiKeys    ApiKey[]
+  workspaces Workspace[]
+  accounts   Account[]
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  partnerId  String
+  partner    Partner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  name       String
+  // First characters of the key, shown in UI to tell keys apart.
+  prefix     String
+  // sha256 of the full key; the key itself is never stored.
+  keyHash    String    @unique
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([partnerId])
+}
+
+// ─── Accounts (who pays) ─────────────────────────────────────────────────────
+// The registered customer that owns credits. Created by the short signup a
+// partner profile goes through, or directly on the platform.
+
+model Account {
+  id              String    @id @default(cuid())
+  name            String
+  email           String
+  country         String?
+  currency        String    @default("GEL")
+  // Partner the customer came through — drives revenue share. Null = direct.
+  partnerId       String?
+  partner         Partner?  @relation(fields: [partnerId], references: [id])
+  // Cached sum of CreditEntry.amount, updated in the same transaction.
+  creditBalance   Int       @default(0)
+  termsAcceptedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspaces Workspace[]
+  credits    CreditEntry[]
+  members    AccountMember[]
+
+  @@index([partnerId])
+}
+
+enum CreditReason {
+  PURCHASE
+  REFUND
+  GRANT
+  AI_TEXT
+  AI_IMAGE
+  AI_VIDEO
+  ADJUSTMENT
+}
+
+model CreditEntry {
+  id             String       @id @default(cuid())
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // Positive = top-up, negative = spend.
+  amount         Int
+  reason         CreditReason
+  workspaceId    String?
+  refType        String?
+  refId          String?
+  // Same key twice never books twice (retries, double clicks, webhook replays).
+  idempotencyKey String?      @unique
+  note           String?
+  createdAt      DateTime     @default(now())
+
+  @@index([accountId, createdAt])
+}
+
+// ─── Workspaces (who advertises) ─────────────────────────────────────────────
+
+model Workspace {
+  id         String   @id @default(cuid())
+  name       String
+  // Null for direct customers; set for workspaces created through a partner.
+  partnerId  String?
+  partner    Partner? @relation(fields: [partnerId], references: [id])
+  // The partner's own id for this profile (Upla company / broker profile id).
+  externalId String?
+  // Null until the profile completes signup; spending credits needs it.
+  accountId  String?
+  account    Account? @relation(fields: [accountId], references: [id])
+  locale     String   @default("ka")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  brandKit       BrandKit?
+  socialAccounts SocialAccount[]
+
+  @@unique([partnerId, externalId])
+  @@index([accountId])
+}
+
+model BrandKit {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  description String?
+  voice       String?
+  audience    String?
+  colors      String[]
+  fonts       String[]
+  logoUrl     String?
+  updatedAt   DateTime  @updatedAt
+}
+
+enum SocialNetwork {
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+  LINKEDIN
+  YOUTUBE
+  TELEGRAM
+  X
+}
+
+enum ConnectionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+model SocialAccount {
+  id              String           @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  network         SocialNetwork
+  // Page / profile / channel id on the network.
+  externalId      String
+  name            String
+  // AES-256-GCM encrypted (see src/lib/crypto.ts).
+  accessTokenEnc  String?
+  refreshTokenEnc String?
+  expiresAt       DateTime?
+  scopes          String[]
+  status          ConnectionStatus @default(ACTIVE)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([workspaceId, network, externalId])
+}
+
+// ─── Platform users (direct UI login) ────────────────────────────────────────
+// Partner profiles never log in here — the partner authenticates them and
+// calls the API. These are for direct customers and Khma staff.
+
+enum UserRole {
+  SUPER_ADMIN
+  USER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String?
+  role         UserRole @default(USER)
+  createdAt    DateTime @default(now())
+
+  memberships AccountMember[]
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  EDITOR
+}
+
+model AccountMember {
+  id        String     @id @default(cuid())
+  accountId String
+  account   Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      MemberRole @default(EDITOR)
+
+  @@unique([accountId, userId])
+}
