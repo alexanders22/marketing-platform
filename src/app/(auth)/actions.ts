@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { sha256 } from '@/lib/crypto'
-import { appUrl, mailEnabled, sendMail } from '@/lib/mail'
+import { actionEmail, appUrl, mailEnabled, sendMail } from '@/lib/mail'
 import { hashPassword, verifyPassword } from '@/lib/password'
 import { createSession, destroySession } from '@/lib/session'
 
@@ -13,6 +13,7 @@ export type FormState = { error?: string; sent?: string; fields?: Record<string,
 
 const Email = z.email('Enter a valid email').transform((e) => e.trim().toLowerCase())
 const LINK_TTL_MS = 15 * 60 * 1000
+const RESET_TTL_MS = 30 * 60 * 1000
 
 // Same answer whether or not the email has an account, so the form cannot be
 // used to find out who is registered. Signing in through the link creates the
@@ -22,39 +23,57 @@ export async function requestMagicLink(_: FormState, form: FormData): Promise<Fo
   if (!parsed.success) return { error: parsed.error.issues[0].message, fields: { email: String(form.get('email') ?? '') } }
   const email = parsed.data
 
-  const recent = await prisma.magicLink.findFirst({
-    where: { email, createdAt: { gt: new Date(Date.now() - 60_000) } },
-    select: { id: true },
-  })
-  if (recent) return { sent: email }
+  if (await recentlySent(email, 'LOGIN')) return { sent: email }
 
+  const link = `${appUrl()}/auth/magic?token=${await issueLink(email, 'LOGIN', LINK_TTL_MS)}`
+  const footer = 'The link works once and expires in 15 minutes. If you did not ask for it, ignore this email.'
+  try {
+    await sendMail(
+      email,
+      'Your Khma sign-in link',
+      `Sign in to Khma: ${link}\n\n${footer}`,
+      actionEmail('Click the button below to sign in to Khma.', 'Sign in', link, footer),
+    )
+  } catch (e) {
+    console.error('magic link mail failed', e)
+    return { error: "We couldn't send the email right now. Please try again in a minute.", fields: { email } }
+  }
+  return { sent: email }
+}
+
+// One email per minute per address and purpose.
+async function recentlySent(email: string, purpose: 'LOGIN' | 'PASSWORD_RESET') {
+  return Boolean(
+    await prisma.magicLink.findFirst({
+      where: { email, purpose, createdAt: { gt: new Date(Date.now() - 60_000) } },
+      select: { id: true },
+    }),
+  )
+}
+
+async function issueLink(email: string, purpose: 'LOGIN' | 'PASSWORD_RESET', ttlMs: number) {
   const token = randomBytes(32).toString('base64url')
   await prisma.magicLink.create({
-    data: { email, tokenHash: sha256(token), expiresAt: new Date(Date.now() + LINK_TTL_MS) },
+    data: { email, purpose, tokenHash: sha256(token), expiresAt: new Date(Date.now() + ttlMs) },
   })
-  const link = `${appUrl()}/auth/magic?token=${token}`
-  await sendMail(
-    email,
-    'Your Khma sign-in link',
-    `Sign in to Khma: ${link}\n\nThe link works once and expires in 15 minutes. If you did not ask for it, ignore this email.`,
-    `<p>Click to sign in to Khma:</p><p><a href="${link}" style="display:inline-block;padding:10px 18px;background:#18181b;color:#fff;border-radius:8px;text-decoration:none">Sign in</a></p><p style="color:#71717a;font-size:13px">The link works once and expires in 15 minutes. If you did not ask for it, ignore this email.</p>`,
-  )
-  return { sent: email }
+  return token
+}
+
+// Marks a link used exactly once; null if it is unknown, used, expired or
+// meant for something else.
+async function claimLink(token: string, purpose: 'LOGIN' | 'PASSWORD_RESET') {
+  if (!token) return null
+  const link = await prisma.magicLink.findUnique({ where: { tokenHash: sha256(token) } })
+  if (!link || link.purpose !== purpose || link.usedAt || link.expiresAt < new Date()) return null
+  const claimed = await prisma.magicLink.updateMany({ where: { id: link.id, usedAt: null }, data: { usedAt: new Date() } })
+  return claimed.count === 1 ? link : null
 }
 
 // Called from the confirmation page (a POST, so mail scanners that open
 // links do not burn the token).
 export async function consumeMagicLink(form: FormData) {
-  const token = String(form.get('token') ?? '')
-  if (!token) redirect('/login?error=link')
-  const link = await prisma.magicLink.findUnique({ where: { tokenHash: sha256(token) } })
-  if (!link || link.usedAt || link.expiresAt < new Date()) redirect('/login?error=link')
-
-  const claimed = await prisma.magicLink.updateMany({
-    where: { id: link.id, usedAt: null },
-    data: { usedAt: new Date() },
-  })
-  if (claimed.count === 0) redirect('/login?error=link')
+  const link = await claimLink(String(form.get('token') ?? ''), 'LOGIN')
+  if (!link) redirect('/login?error=link')
 
   const user = await prisma.user.upsert({
     where: { email: link.email },
@@ -101,6 +120,61 @@ export async function passwordSignup(_: FormState, form: FormData): Promise<Form
   const user = await prisma.user.create({
     data: { email, name: email.split('@')[0], passwordHash: await hashPassword(password) },
   })
+  await createSession(user.id)
+  redirect('/app')
+}
+
+// Same answer whether or not the email has an account. Users who signed up
+// with a magic link or Google can use this to set a first password.
+export async function requestPasswordReset(_: FormState, form: FormData): Promise<FormState> {
+  const parsed = Email.safeParse(form.get('email'))
+  if (!parsed.success) return { error: parsed.error.issues[0].message, fields: { email: String(form.get('email') ?? '') } }
+  const email = parsed.data
+  if (!mailEnabled()) return { error: 'Password reset by email is not available yet.' }
+
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } })
+  if (user && !(await recentlySent(email, 'PASSWORD_RESET'))) {
+    const link = `${appUrl()}/reset-password?token=${await issueLink(email, 'PASSWORD_RESET', RESET_TTL_MS)}`
+    const footer = 'The link works once and expires in 30 minutes. If you did not ask to reset your password, ignore this email — your password stays the same.'
+    try {
+      await sendMail(
+        email,
+        'Reset your Khma password',
+        `Set a new Khma password: ${link}\n\n${footer}`,
+        actionEmail('Click the button below to choose a new password for your Khma account.', 'Set new password', link, footer),
+      )
+    } catch (e) {
+      console.error('reset mail failed', e)
+      return { error: "We couldn't send the email right now. Please try again in a minute.", fields: { email } }
+    }
+  }
+  return { sent: email }
+}
+
+const NewPassword = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8, 'Password must be at least 8 characters').max(200),
+  confirm: z.string(),
+})
+
+export async function resetPassword(_: FormState, form: FormData): Promise<FormState> {
+  const parsed = NewPassword.safeParse(Object.fromEntries(form))
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  if (parsed.data.password !== parsed.data.confirm) return { error: "Passwords don't match" }
+
+  const link = await claimLink(parsed.data.token, 'PASSWORD_RESET')
+  if (!link) return { error: 'This reset link is invalid or has expired. Request a new one.' }
+  const user = await prisma.user.findUnique({ where: { email: link.email } })
+  if (!user) return { error: 'This reset link is invalid or has expired. Request a new one.' }
+
+  // New password signs out every other device.
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await hashPassword(parsed.data.password), emailVerifiedAt: user.emailVerifiedAt ?? new Date() },
+    }),
+    prisma.session.deleteMany({ where: { userId: user.id } }),
+  ])
   await createSession(user.id)
   redirect('/app')
 }

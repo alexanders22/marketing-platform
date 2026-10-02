@@ -224,14 +224,21 @@ model User {
   sessions    Session[]
 }
 
-// One-time sign-in link sent by email. Only the token hash is stored.
+enum LinkPurpose {
+  LOGIN
+  PASSWORD_RESET
+}
+
+// One-time link sent by email (sign-in or password reset). Only the token
+// hash is stored.
 model MagicLink {
-  id        String    @id @default(cuid())
+  id        String      @id @default(cuid())
+  purpose   LinkPurpose @default(LOGIN)
   email     String
-  tokenHash String    @unique
+  tokenHash String      @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  createdAt DateTime    @default(now())
 
   @@index([email, createdAt])
 }

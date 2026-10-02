@@ -99,6 +99,13 @@ export function AuthCard({ mode, googleEnabled, mailEnabled, error }: Props) {
             />
           </div>
           <Submit pending={pwPending}>{mode === 'login' ? 'Log in' : 'Create account'}</Submit>
+          {mode === 'login' && mailEnabled && (
+            <p className="text-center text-sm">
+              <Link href="/forgot-password" className="text-zinc-500 hover:text-zinc-900 hover:underline">
+                Forgot password?
+              </Link>
+            </p>
+          )}
         </form>
       )}
 
