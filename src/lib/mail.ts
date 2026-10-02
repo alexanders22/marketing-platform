@@ -20,10 +20,14 @@ const TIMEOUTS = { connectionTimeout: 10000, greetingTimeout: 10000, socketTimeo
 function createTransport(): Transporter {
   const host = process.env.SMTP_HOST
   if (host) {
+    const local = host === 'localhost' || host === '127.0.0.1'
     return nodemailer.createTransport({
       host,
       port: Number(process.env.SMTP_PORT || 587),
       secure: false,
+      // The MTA on the same box (exim, mailpit) presents a certificate for its
+      // public hostname, not "localhost" — skip STARTTLS on loopback.
+      ignoreTLS: local,
       auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
       ...TIMEOUTS,
     })
