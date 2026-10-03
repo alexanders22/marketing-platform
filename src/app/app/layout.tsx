@@ -4,7 +4,7 @@ import { PLANS } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { AppSidebar } from './AppSidebar'
 
-export const metadata: Metadata = { title: 'Khma' }
+export const metadata: Metadata = { title: 'Loudpilot' }
 
 function planLabel(plan: string, trialEndsAt: Date | null) {
   const name = PLANS.find((p) => p.id === plan)?.name

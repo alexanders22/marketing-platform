@@ -155,7 +155,7 @@ function Hero() {
             Content, ads and analytics. Run by AI.
           </h1>
           <p className="mt-6 max-w-xl text-lg text-zinc-400 text-pretty">
-            Khma writes, designs and publishes your posts, launches your ad campaigns — then reads the results and tells
+            Loudpilot writes, designs and publishes your posts, launches your ad campaigns — then reads the results and tells
             you exactly what to change.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
@@ -398,7 +398,7 @@ function Steps() {
       icon: PlugZap,
       tint: "bg-orange-400/15 text-orange-300",
       title: "Connect your brand",
-      body: "Add your website, social pages and ad accounts. Khma learns your voice, colours and audience once.",
+      body: "Add your website, social pages and ad accounts. Loudpilot learns your voice, colours and audience once.",
     },
     {
       icon: BarChart3,
@@ -416,7 +416,7 @@ function Steps() {
       icon: TrendingUp,
       tint: "bg-emerald-400/15 text-emerald-300",
       title: "Launch and improve",
-      body: "Khma publishes, runs the ads, syncs results daily and suggests the next move.",
+      body: "Loudpilot publishes, runs the ads, syncs results daily and suggests the next move.",
     },
   ];
   return (
@@ -534,19 +534,19 @@ function Partners() {
         <SectionHead
           eyebrow="Platform & API"
           title="Use it here — or inside the product you already run"
-          sub="Khma is a platform first. Connect your SaaS, CRM or marketplace and give every one of your customers their own marketing module."
+          sub="Loudpilot is a platform first. Connect your SaaS, CRM or marketplace and give every one of your customers their own marketing module."
         />
         <div className="grid gap-5 lg:grid-cols-2">
-          <Card className="p-7">
+          <Card className="min-w-0 p-7">
             <IconTile icon={Code2} tint="bg-sky-400/15 text-sky-300" />
             <h3 className="mt-5 text-xl font-semibold">Partner API</h3>
             <p className="mt-2 text-sm text-zinc-400">
               Each of your companies, agents or sellers gets an isolated workspace with its own brand, social accounts,
-              campaigns and credits. You keep your UI — Khma does the marketing.
+              campaigns and credits. You keep your UI — Loudpilot does the marketing.
             </p>
             <pre className="mt-6 overflow-x-auto rounded-xl bg-zinc-950 p-4 text-[12px] leading-relaxed text-zinc-300 ring-1 ring-white/5">
               <code>{`POST /api/v1/workspaces
-Authorization: Bearer khma_…
+Authorization: Bearer lp_live_…
 
 { "externalId": "agency_42",
   "name": "Sunrise Realty" }`}</code>
@@ -562,7 +562,7 @@ Authorization: Bearer khma_…
               )}
             </ul>
           </Card>
-          <Card className="p-7">
+          <Card className="min-w-0 p-7">
             <IconTile icon={Bot} tint="bg-violet-400/15 text-violet-300" />
             <h3 className="mt-5 flex items-center gap-2 text-xl font-semibold">
               Let your AI assistant drive
@@ -616,8 +616,8 @@ function Comparison() {
     <section id="ads" className="py-24">
       <div className="mx-auto max-w-4xl px-4 sm:px-6">
         <SectionHead
-          eyebrow="Why Khma"
-          title="Schedulers post. Ad managers spend. Khma does both."
+          eyebrow="Why Loudpilot"
+          title="Schedulers post. Ad managers spend. Loudpilot does both."
           sub="And then reads the results, so every next post and every next ₾ works harder."
         />
         <Card className="overflow-x-auto">
@@ -625,7 +625,7 @@ function Comparison() {
             <thead>
               <tr className="border-b border-white/10 text-zinc-400">
                 <th className="px-5 py-4 text-left font-medium">Capability</th>
-                <th className="px-3 py-4 font-semibold text-white">Khma</th>
+                <th className="px-3 py-4 font-semibold text-white">Loudpilot</th>
                 <th className="px-3 py-4 font-medium">Post schedulers</th>
                 <th className="px-3 py-4 font-medium">Ads managers</th>
               </tr>
@@ -663,7 +663,7 @@ function ReplaceAgency() {
               The output of a marketing agency — for the price of a lunch a week.
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-zinc-400">
-              Agencies charge thousands a month for posts, ads and reports. Khma does the same work every day, from $29.
+              Agencies charge thousands a month for posts, ads and reports. Loudpilot does the same work every day, from $29.
             </p>
             <div className="mt-8 flex justify-center">
               <PrimaryCta href="#pricing">See plans & pricing</PrimaryCta>
@@ -690,14 +690,14 @@ function WhatYouGet() {
       icon: Megaphone,
       tint: "bg-pink-400/15 text-pink-300",
       title: "Ads without an ads specialist",
-      body: "Campaign structure, audiences and budgets are prepared for you. You approve — Khma launches and watches them.",
+      body: "Campaign structure, audiences and budgets are prepared for you. You approve — Loudpilot launches and watches them.",
       tag: "Meta first, TikTok next",
     },
     {
       icon: Lightbulb,
       tint: "bg-violet-400/15 text-violet-300",
       title: "Recommendations, not just charts",
-      body: "Every day Khma compares results and tells you what to pause, what to scale and what to post next.",
+      body: "Every day Loudpilot compares results and tells you what to pause, what to scale and what to post next.",
       tag: "Daily insights",
     },
     {

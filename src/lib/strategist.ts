@@ -9,7 +9,7 @@ import { METRICS } from './goal-metrics'
 import { prisma } from './prisma'
 import { zonedToUtc } from './time'
 
-// Goal → plan: gathers what Khma knows, asks the AI strategist, then checks
+// Goal → plan: gathers what Loudpilot knows, asks the AI strategist, then checks
 // and completes its answer (budgets in money, forecasts from history, only
 // valid dates and goal metrics) before the owner sees it.
 

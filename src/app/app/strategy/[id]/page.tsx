@@ -11,7 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { OBJECTIVES, type PlanData } from '@/lib/strategist'
 import { ApplyButton, ArchiveButton, CopyText, LaunchedToggle } from './PlanActions'
 
-export const metadata: Metadata = { title: 'Plan — Khma' }
+export const metadata: Metadata = { title: 'Plan — Loudpilot' }
 
 function Block({ title, icon, children, action }: { title: string; icon: ReactNode; children: ReactNode; action?: ReactNode }) {
   return (
@@ -117,7 +117,7 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
 
       {d.ads.length > 0 && (
         <Block title="Ad campaigns" icon={<Megaphone size={17} className="text-zinc-500" />}>
-          <p className="mb-4 text-xs text-zinc-500">{d.forecastNote} Launching from Khma comes with Meta’s approval; until then copy the setup into Ads Manager.</p>
+          <p className="mb-4 text-xs text-zinc-500">{d.forecastNote} Launching from Loudpilot comes with Meta’s approval; until then copy the setup into Ads Manager.</p>
           <div className="space-y-4">
             {d.ads.map((c) => {
               const setup = [
@@ -215,7 +215,7 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
 
       {d.goals.length > 0 && (
         <Block
-          title="Goals Khma will watch"
+          title="Goals Loudpilot will watch"
           icon={<Flag size={17} className="text-zinc-500" />}
           action={canEdit && <ApplyButton planId={plan.id} kind="goals" count={d.goals.length} done={d.goals.filter((g) => g.goalId).length} />}
         >

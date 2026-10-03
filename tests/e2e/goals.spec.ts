@@ -149,9 +149,9 @@ test('partner workspaces get alerts by signed webhook', async () => {
   await page.request.post('/api/cron/tick', { headers: { 'x-khma-cron': cron } })
   const hook = meta.hooks.find((h) => h.body.includes(`a${id}`))!
   expect(hook).toBeTruthy()
-  const ts = String(hook.headers['x-khma-timestamp'])
+  const ts = String(hook.headers['x-loudpilot-timestamp'])
   const expected = createHmac('sha256', 'whsec_test').update(`${ts}.${hook.body}`).digest('hex')
-  expect(hook.headers['x-khma-signature']).toBe(`sha256=${expected}`)
+  expect(hook.headers['x-loudpilot-signature']).toBe(`sha256=${expected}`)
   const payload = JSON.parse(hook.body)
   expect(payload).toMatchObject({ type: 'alert.created', workspace: { externalId: 'ext-42' }, alert: { kind: 'goal_off_track', severity: 'critical' } })
   expect(sql(`select "webhookAt" is not null from "Alert" where id='a${id}'`)).toBe('t')

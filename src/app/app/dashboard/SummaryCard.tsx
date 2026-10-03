@@ -66,7 +66,7 @@ export function SummaryCard({
       ) : (
         !error && (
           <p className="mt-3 text-sm text-zinc-600">
-            Khma reads your ads and posts for this period and tells you what worked, what to watch and what to do next.
+            Loudpilot reads your ads and posts for this period and tells you what worked, what to watch and what to do next.
           </p>
         )
       )}

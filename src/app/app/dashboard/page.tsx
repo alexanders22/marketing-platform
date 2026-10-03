@@ -12,7 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { SummaryCard } from './SummaryCard'
 import { SyncButton } from './SyncButton'
 
-export const metadata: Metadata = { title: 'Dashboard — Khma' }
+export const metadata: Metadata = { title: 'Dashboard — Loudpilot' }
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   ACTIVE: { label: 'Active', cls: 'bg-emerald-50 text-emerald-700' },
@@ -323,7 +323,7 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
                 <Link href="/app/channels" className="font-medium text-zinc-900 underline">
                   Connect Facebook or Instagram
                 </Link>{' '}
-                to publish from Khma and measure every post.
+                to publish from Loudpilot and measure every post.
               </p>
             )}
           </section>

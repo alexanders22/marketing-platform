@@ -146,7 +146,7 @@ test('partner API: latest review, apply, dismiss, isolation', async ({ playwrigh
 test('AI: review the last 7 days for real', async () => {
   test.skip(!AI, 'set QA_STRATEGY_AI=1 to run against the real model')
   test.setTimeout(400_000)
-  // Make last week look alive: two Khma posts with insights.
+  // Make last week look alive: two Loudpilot posts with insights.
   sql(`delete from "WeeklyReview" where "workspaceId"='${ws}'`)
   await page.goto('/app/weekly')
   await page.getByRole('button', { name: 'Review the last 7 days' }).click()

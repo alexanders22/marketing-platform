@@ -64,7 +64,7 @@ export function PlanWizard({ offerings, currency, hasAds, hasDossier }: { offeri
         </span>
         <h1 className="mt-4 text-2xl font-semibold tracking-tight">What do you want to achieve?</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Say it like you would to your agency. Khma reads your {hasDossier ? 'dossier' : 'brand'}, past posts and ads, and
+          Say it like you would to your agency. Loudpilot reads your {hasDossier ? 'dossier' : 'brand'}, past posts and ads, and
           comes back with a plan — audiences, budget, ads, posts and goals — for you to approve.
         </p>
       </div>

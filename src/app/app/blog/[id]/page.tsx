@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { mediaUrl } from '@/lib/storage'
 import { BlogEditor } from '../BlogEditor'
 
-export const metadata: Metadata = { title: 'Edit article — Khma' }
+export const metadata: Metadata = { title: 'Edit article — Loudpilot' }
 
 export default async function EditBlogPage({ params }: PageProps<'/app/blog/[id]'>) {
   const { workspace } = await requireContext()

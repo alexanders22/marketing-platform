@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     if (partner) {
       const [k, v] = q.split('=')
       return redirect(
-        join(partner.ret, k === 'connected' ? `khma_status=connected&khma_accounts=${v}` : `khma_status=error&khma_reason=${PARTNER_REASON[v] ?? 'error'}`),
+        join(partner.ret, k === 'connected' ? `loudpilot_status=connected&loudpilot_accounts=${v}` : `loudpilot_status=error&loudpilot_reason=${PARTNER_REASON[v] ?? 'error'}`),
       )
     }
     return redirect(new URL(`/app/channels?${q}`, req.url))

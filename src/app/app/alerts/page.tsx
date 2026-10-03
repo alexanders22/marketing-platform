@@ -6,7 +6,7 @@ import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 import { AlertControls } from './AlertControls'
 
-export const metadata: Metadata = { title: 'Alerts — Khma' }
+export const metadata: Metadata = { title: 'Alerts — Loudpilot' }
 
 const ICON = {
   CRITICAL: <OctagonAlert size={17} className="text-red-600" />,
@@ -39,7 +39,7 @@ export default async function AlertsPage() {
             <Link href="/app/goals" className="font-medium text-zinc-900 underline">
               Set goals
             </Link>{' '}
-            for cost per lead, reach, views or engagement, and Khma will tell you when something needs attention.
+            for cost per lead, reach, views or engagement, and Loudpilot will tell you when something needs attention.
           </p>
         </section>
       ) : (

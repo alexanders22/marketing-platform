@@ -43,7 +43,7 @@ export function NewToken() {
       {error && <p className="text-sm text-red-600">{error}</p>}
       {token && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
-          <p className="font-medium text-amber-900">Copy it now — Khma will not show it again.</p>
+          <p className="font-medium text-amber-900">Copy it now — Loudpilot will not show it again.</p>
           <div className="mt-2 flex items-center gap-2">
             <code className="min-w-0 flex-1 truncate rounded bg-white px-2 py-1.5 font-mono text-xs ring-1 ring-amber-200" data-testid="new-token">
               {token}

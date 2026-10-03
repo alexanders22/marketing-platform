@@ -4,7 +4,7 @@ import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 import { PlanWizard } from './PlanWizard'
 
-export const metadata: Metadata = { title: 'New plan — Khma' }
+export const metadata: Metadata = { title: 'New plan — Loudpilot' }
 
 export default async function NewPlanPage() {
   const { workspace, account } = await requireContext()

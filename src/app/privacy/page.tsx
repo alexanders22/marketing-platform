@@ -4,8 +4,8 @@ import { LegalPage } from "@/components/landing/LegalPage";
 import { LEGAL, operator } from "@/lib/legal";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Khma",
-  description: "What data Khma collects, why, who processes it and how to delete it.",
+  title: "Privacy Policy — Loudpilot",
+  description: "What data Loudpilot collects, why, who processes it and how to delete it.",
 };
 
 export default function PrivacyPage() {
@@ -13,8 +13,8 @@ export default function PrivacyPage() {
   return (
     <LegalPage title="Privacy Policy" updated={LEGAL.updated}>
       <p>
-        This policy explains what personal data {operator()} (&ldquo;Khma&rdquo;, &ldquo;we&rdquo;) collects when you
-        use {LEGAL.site} and the Khma apps and API, why we collect it, who we share it with and what you can do about
+        This policy explains what personal data {operator()} (&ldquo;Loudpilot&rdquo;, &ldquo;we&rdquo;) collects when you
+        use {LEGAL.site} and the Loudpilot apps and API, why we collect it, who we share it with and what you can do about
         it. Questions: {mail}.
       </p>
 
@@ -70,7 +70,7 @@ export default function PrivacyPage() {
         <li>To keep records the law requires, such as payment records (legal obligation).</li>
       </ul>
       <p>
-        Data received from Meta, Google or other platforms is used only to provide Khma features to the account that
+        Data received from Meta, Google or other platforms is used only to provide Loudpilot features to the account that
         connected it. It is not used to build profiles of people, not sold, and not used to target ads outside your
         own campaigns.
       </p>
@@ -86,14 +86,14 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Meta and other social networks</strong> — receive the posts, ads and replies you choose to publish
-          through Khma, under their own terms and privacy policies.
+          through Loudpilot, under their own terms and privacy policies.
         </li>
         <li>
           <strong>Our hosting provider</strong> — runs the servers that store the database and files.
         </li>
       </ul>
       <p>
-        If you use Khma through a partner product (for example a CRM that embeds Khma), that partner gave us your
+        If you use Loudpilot through a partner product (for example a CRM that embeds Loudpilot), that partner gave us your
         workspace name and its own reference id, and may see your credit balance and activity in its product. The
         partner&apos;s own privacy policy covers what it does with your data.
       </p>
@@ -134,7 +134,7 @@ export default function PrivacyPage() {
       </p>
 
       <h2>8. Children</h2>
-      <p>Khma is a business tool and is not meant for anyone under 16.</p>
+      <p>Loudpilot is a business tool and is not meant for anyone under 16.</p>
 
       <h2>9. Changes</h2>
       <p>

@@ -28,7 +28,7 @@ export const BioTheme = z.object({
 })
 export type BioTheme = z.infer<typeof BioTheme>
 
-export const RESERVED_SLUGS = ['app', 'admin', 'api', 'login', 'signup', 'khma', 'b', 'media', 'auth', 'support', 'help']
+export const RESERVED_SLUGS = ['app', 'admin', 'api', 'login', 'signup', 'khma', 'loudpilot', 'b', 'media', 'auth', 'support', 'help']
 export const Slug = z
   .string()
   .trim()

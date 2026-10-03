@@ -10,11 +10,11 @@ import { TOOLS } from '@/lib/mcp/tools'
 import { CodeBlock } from './CodeBlock'
 
 export const metadata: Metadata = {
-  title: 'API documentation — Khma',
+  title: 'API documentation — Loudpilot',
   description: 'Give every customer of your product a marketing module: workspaces, Meta connections, analytics, goals, alerts and webhooks.',
 }
 
-const BASE = 'https://khma.brandrepublic.ge/api/v1'
+const BASE = 'https://loudpilot.app/api/v1'
 
 const NAV: { title: string; items: { id: string; label: string }[] }[] = [
   {
@@ -153,7 +153,7 @@ export default function DocsPage() {
     <div className="min-h-screen bg-white text-zinc-900 [color-scheme:light]">
       <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2 text-zinc-900 [&_rect:first-child]:fill-zinc-900 [&_rect:not(:first-child)]:fill-white">
+          <Link href="/" className="flex items-center gap-2 text-zinc-900">
             <Logo />
           </Link>
           <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600">API v1</span>
@@ -201,11 +201,11 @@ export default function DocsPage() {
           </details>
 
           <section id="introduction" className="scroll-mt-24 pb-12">
-            <p className="text-sm font-semibold text-indigo-600">Khma Partner API</p>
+            <p className="text-sm font-semibold text-indigo-600">Loudpilot Partner API</p>
             <h1 className="mt-2 text-4xl font-semibold tracking-tight text-balance">Give every customer of your product a marketing module</h1>
             <p className="mt-4 text-lg text-zinc-600">
               Your users already work in your product. With a few calls they get AI content, publishing, ad results, goals and
-              alerts — inside your UI, while Khma does the marketing work and the billing.
+              alerts — inside your UI, while Loudpilot does the marketing work and the billing.
             </p>
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
               {[
@@ -239,7 +239,7 @@ export default function DocsPage() {
                 <CodeBlock tabs={[{ label: 'curl', code: curl('POST', '/workspaces', { externalId: 'company_42', name: 'Arca Development' }) }]} />
               </li>
               <li>
-                <b>Register the customer</b> once — they accept Khma&apos;s terms in your UI and get a credit wallet.
+                <b>Register the customer</b> once — they accept Loudpilot&apos;s terms in your UI and get a credit wallet.
                 <CodeBlock
                   tabs={[
                     {
@@ -280,7 +280,7 @@ export default function DocsPage() {
             />
             <ul className="list-disc space-y-2 pl-5">
               <li>
-                <b>Partner</b> — your product. <b>SINGLE</b> partners have one workspace (a company using Khma inside its own
+                <b>Partner</b> — your product. <b>SINGLE</b> partners have one workspace (a company using Loudpilot inside its own
                 tools). <b>MULTI</b> partners resell: every company, agent or seller in your product gets its own workspace.
               </li>
               <li>
@@ -288,11 +288,11 @@ export default function DocsPage() {
                 workspaces you created.
               </li>
               <li>
-                <b>Account</b> — created by <a href="#signup">signup</a>. The customer pays Khma for credits directly; you earn a
+                <b>Account</b> — created by <a href="#signup">signup</a>. The customer pays Loudpilot for credits directly; you earn a
                 share of every purchase.
               </li>
               <li>
-                <b>Channels</b> — connected by the customer through a <a href="#connect">connect link</a>. Khma uses one verified
+                <b>Channels</b> — connected by the customer through a <a href="#connect">connect link</a>. Loudpilot uses one verified
                 Meta app for everyone, so customers never handle API keys.
               </li>
             </ul>
@@ -300,10 +300,10 @@ export default function DocsPage() {
 
           <Section id="authentication" title="Authentication">
             <p>
-              Send your key as a bearer token on every request. Keys start with <code>khma_</code>, are shown once when we issue
+              Send your key as a bearer token on every request. Keys start with <code>lp_live_</code>, are shown once when we issue
               them and are stored by us only as a hash.
             </p>
-            <CodeBlock tabs={[{ label: 'http', code: 'Authorization: Bearer khma_…' }]} />
+            <CodeBlock tabs={[{ label: 'http', code: 'Authorization: Bearer lp_live_…' }]} />
             <p>
               Call the API from your server only — never from a browser or a mobile app. Need a key, a second key or a rotation?{' '}
               <a href={CONTACT}>Write to us</a>.
@@ -332,7 +332,7 @@ export default function DocsPage() {
 
           <Section id="ping" title="Ping">
             <Endpoint method="GET" path="/ping">
-              <p>Checks the key and tells you how Khma sees you.</p>
+              <p>Checks the key and tells you how Loudpilot sees you.</p>
               <Example method="GET" path="/ping" response={{ partner: { name: 'Upla', slug: 'upla', mode: 'MULTI' } }} />
             </Endpoint>
           </Section>
@@ -343,7 +343,7 @@ export default function DocsPage() {
               <Params
                 rows={[
                   ['externalId', 'string, required', 'Your id for this customer profile (max 191 chars).'],
-                  ['name', 'string, required', 'Shown in Khma and in emails.'],
+                  ['name', 'string, required', 'Shown in Loudpilot and in emails.'],
                   ['locale', 'string', 'Default content language, e.g. ka, en, ru.'],
                 ]}
               />
@@ -365,7 +365,7 @@ export default function DocsPage() {
           <Section id="signup" title="Sign up a customer">
             <Endpoint method="POST" path="/workspaces/{externalId}/signup">
               <p>
-                Creates the paying account for the workspace. Show Khma&apos;s <Link href="/terms">Terms</Link> and{' '}
+                Creates the paying account for the workspace. Show Loudpilot&apos;s <Link href="/terms">Terms</Link> and{' '}
                 <Link href="/privacy">Privacy Policy</Link> in your UI and send <code>acceptTerms: true</code> only after the
                 customer agreed.
               </p>
@@ -417,14 +417,14 @@ export default function DocsPage() {
           <Section id="connect" title="Connect Meta">
             <p>
               Customers connect their own Facebook Pages, Instagram professional accounts and Meta ad accounts. They sign in to
-              Facebook, pick what to share and land back in your app — they never see a Khma login.
+              Facebook, pick what to share and land back in your app — they never see a Loudpilot login.
             </p>
             <ol className="list-decimal space-y-1 pl-5">
               <li>Your server creates a connect link (valid for one hour).</li>
               <li>Your app opens it for the customer — a redirect, new tab or popup.</li>
-              <li>Facebook asks the customer what to share with Khma.</li>
+              <li>Facebook asks the customer what to share with Loudpilot.</li>
               <li>
-                Khma sends the customer to your <code>returnUrl</code> with the result in the query string.
+                Loudpilot sends the customer to your <code>returnUrl</code> with the result in the query string.
               </li>
             </ol>
             <Endpoint method="POST" path="/workspaces/{externalId}/connect-links">
@@ -438,15 +438,15 @@ export default function DocsPage() {
                 method="POST"
                 path="/workspaces/company_42/connect-links"
                 body={{ network: 'meta', returnUrl: 'https://app.example.com/marketing' }}
-                response={{ url: 'https://khma.brandrepublic.ge/connect/meta?token=…', expiresAt: '2026-10-03T10:00:00.000Z' }}
+                response={{ url: 'https://loudpilot.app/connect/meta?token=…', expiresAt: '2026-10-03T10:00:00.000Z' }}
               />
               <p>Back on your side:</p>
               <Params
                 title="Query parameter"
                 rows={[
-                  ['khma_status', 'connected | error', 'How it went.'],
-                  ['khma_accounts', 'number', 'With connected: how many pages, Instagram and ad accounts were saved.'],
-                  ['khma_reason', 'string', 'With error: cancelled, expired, nothing_shared, meta_error, not_configured, workspace_not_found.'],
+                  ['loudpilot_status', 'connected | error', 'How it went.'],
+                  ['loudpilot_accounts', 'number', 'With connected: how many pages, Instagram and ad accounts were saved.'],
+                  ['loudpilot_reason', 'string', 'With error: cancelled, expired, nothing_shared, meta_error, not_configured, workspace_not_found.'],
                 ]}
               />
               <p>Ad results are read right after connecting and then every hour; post results every 30 minutes.</p>
@@ -457,7 +457,7 @@ export default function DocsPage() {
             <Endpoint method="GET" path="/workspaces/{externalId}/channels">
               <p>
                 What the customer connected. <code>status</code> is <code>active</code>, <code>expired</code> (ask the customer to
-                connect again with a new link) or <code>revoked</code>. Tokens never leave Khma.
+                connect again with a new link) or <code>revoked</code>. Tokens never leave Loudpilot.
               </p>
               <Example
                 method="GET"
@@ -476,7 +476,7 @@ export default function DocsPage() {
           <Section id="analytics" title="Analytics">
             <Endpoint method="GET" path="/workspaces/{externalId}/analytics?days=30">
               <p>
-                The numbers behind the Khma dashboard for 7, 30 or 90 days, plus the same-length period before it so you can show
+                The numbers behind the Loudpilot dashboard for 7, 30 or 90 days, plus the same-length period before it so you can show
                 change. Days follow the ad account&apos;s time zone.
               </p>
               <ul className="list-disc space-y-1 pl-5">
@@ -486,7 +486,7 @@ export default function DocsPage() {
                 </li>
                 <li>
                   <code>current.posts</code>, <code>organicReach</code>, <code>organicViews</code> and <code>engagements</code> cover
-                  posts published from Khma.
+                  posts published from Loudpilot.
                 </li>
               </ul>
               <Example
@@ -525,7 +525,7 @@ export default function DocsPage() {
 
           <Section id="goals" title="Goals">
             <p>
-              A goal is a target Khma checks every hour, over complete days. Within {Math.round(RISK_BAND * 100)}% on the wrong
+              A goal is a target Loudpilot checks every hour, over complete days. Within {Math.round(RISK_BAND * 100)}% on the wrong
               side it is <code>at_risk</code>, beyond that <code>off_track</code>. Each change raises an <a href="#alerts">alert</a>.
             </p>
             <Endpoint method="POST" path="/workspaces/{externalId}/goals">
@@ -565,7 +565,7 @@ export default function DocsPage() {
                 ['goal_recovered', 'info', 'Back on target.'],
                 ['campaign_rejected', 'critical', 'Meta disapproved a campaign.'],
                 ['campaign_issues', 'critical', 'Some ads stopped delivering.'],
-                ['account_disconnected', 'critical', 'Khma lost access to a page or ad account — send a new connect link.'],
+                ['account_disconnected', 'critical', 'Loudpilot lost access to a page or ad account — send a new connect link.'],
                 ['post_failed', 'warning / critical', 'A post failed on some or all accounts.'],
                 ['weekly_review', 'info', 'The Monday review is ready — fetch it from /reviews/latest.'],
               ]}
@@ -582,7 +582,7 @@ export default function DocsPage() {
                       severity: 'critical',
                       title: 'Cost per result above target — Lead Gen — Tbilisi',
                       body: '₾7.20 for the last 7 days vs target at most ₾5.00 (44% above). Click-through fell 31% — the creative may be tiring. Try a new image or first line.',
-                      url: 'https://khma.brandrepublic.ge/app/dashboard/ads/cm9…',
+                      url: 'https://loudpilot.app/app/dashboard/ads/cm9…',
                       createdAt: '2026-10-03T10:00:00.000Z',
                       read: false,
                       goalId: 'cg1…',
@@ -600,7 +600,7 @@ export default function DocsPage() {
 
           <Section id="weekly" title="Weekly review">
             <p>
-              Every Monday (from 07:00 in the workspace&apos;s time zone) Khma reviews the last Monday–Sunday: ads, posts, goals and
+              Every Monday (from 07:00 in the workspace&apos;s time zone) Loudpilot reviews the last Monday–Sunday: ads, posts, goals and
               alerts against the week before, with the company dossier in mind. You get a <code>weekly_review</code> alert, then fetch
               the review and show its recommendations in your app.
             </p>
@@ -673,28 +673,28 @@ export default function DocsPage() {
 
           <Section id="mcp" title="MCP for AI assistants">
             <p>
-              Khma is an MCP server: Claude, ChatGPT, Cursor, VS Code, Codex and other assistants can read results and work in
-              Khma for a signed-in user. Server URL <code>https://khma.brandrepublic.ge/api/mcp</code> (Streamable HTTP).
+              Loudpilot is an MCP server: Claude, ChatGPT, Cursor, VS Code, Codex and other assistants can read results and work in
+              Loudpilot for a signed-in user. Server URL <code>https://loudpilot.app/api/mcp</code> (Streamable HTTP).
             </p>
             <ul className="list-disc space-y-1 pl-5">
               <li>
-                <b>Sign-in (OAuth 2.1)</b> — apps that support it register themselves, open Khma in the browser, and the user picks
+                <b>Sign-in (OAuth 2.1)</b> — apps that support it register themselves, open Loudpilot in the browser, and the user picks
                 the company and presses Allow. Discovery at <code>/.well-known/oauth-protected-resource</code>; PKCE (S256) and
                 refresh tokens.
               </li>
               <li>
-                <b>Personal token</b> — for apps without sign-in, create one in Khma → AI assistants and send it as{' '}
-                <code>Authorization: Bearer khma_pat_…</code>.
+                <b>Personal token</b> — for apps without sign-in, create one in Loudpilot → AI assistants and send it as{' '}
+                <code>Authorization: Bearer lp_pat_…</code>.
               </li>
               <li>The assistant acts as that user in one workspace, with the same roles as in the app. Up to 120 calls a minute.</li>
             </ul>
             <CodeBlock
               tabs={[
-                { label: 'Claude Code', code: 'claude mcp add --transport http khma https://khma.brandrepublic.ge/api/mcp' },
-                { label: 'Cursor', code: JSON.stringify({ mcpServers: { khma: { url: 'https://khma.brandrepublic.ge/api/mcp' } } }, null, 2) },
+                { label: 'Claude Code', code: 'claude mcp add --transport http khma https://loudpilot.app/api/mcp' },
+                { label: 'Cursor', code: JSON.stringify({ mcpServers: { khma: { url: 'https://loudpilot.app/api/mcp' } } }, null, 2) },
                 {
                   label: 'With a token',
-                  code: JSON.stringify({ mcpServers: { khma: { type: 'http', url: 'https://khma.brandrepublic.ge/api/mcp', headers: { Authorization: 'Bearer khma_pat_…' } } } }, null, 2),
+                  code: JSON.stringify({ mcpServers: { khma: { type: 'http', url: 'https://loudpilot.app/api/mcp', headers: { Authorization: 'Bearer lp_pat_…' } } } }, null, 2),
                 },
               ]}
             />
@@ -704,7 +704,7 @@ export default function DocsPage() {
           <Section id="webhooks" title="Webhooks">
             <p>
               Give us an HTTPS endpoint and we send every new alert of your workspaces as it happens, signed with a secret only you
-              and Khma know. Answer with any 2xx; otherwise we retry every minute for up to two days.
+              and Loudpilot know. Answer with any 2xx; otherwise we retry every minute for up to two days.
             </p>
             <CodeBlock
               title="POST your endpoint"
@@ -712,8 +712,8 @@ export default function DocsPage() {
                 {
                   label: 'http',
                   code: `Content-Type: application/json
-X-Khma-Timestamp: 1791010000
-X-Khma-Signature: sha256=5f1c…
+X-Loudpilot-Timestamp: 1791010000
+X-Loudpilot-Signature: sha256=5f1c…
 
 ${out({
   type: 'alert.created',
@@ -724,7 +724,7 @@ ${out({
     severity: 'critical',
     title: 'Cost per result above target — Lead Gen — Tbilisi',
     body: '₾7.20 for the last 7 days vs target at most ₾5.00 (44% above).',
-    url: 'https://khma.brandrepublic.ge/app/dashboard/ads/cm9…',
+    url: 'https://loudpilot.app/app/dashboard/ads/cm9…',
     createdAt: '2026-10-03T10:00:00.000Z',
   },
 })}`,
@@ -741,9 +741,9 @@ ${out({
                   label: 'Node.js',
                   code: `import { createHmac, timingSafeEqual } from 'node:crypto'
 
-export function verifyKhma(rawBody, headers, secret) {
-  const ts = headers['x-khma-timestamp']
-  const given = (headers['x-khma-signature'] ?? '').replace('sha256=', '')
+export function verifyLoudpilot(rawBody, headers, secret) {
+  const ts = headers['x-loudpilot-timestamp']
+  const given = (headers['x-loudpilot-signature'] ?? '').replace('sha256=', '')
   if (!ts || Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false
   const expected = createHmac('sha256', secret).update(\`\${ts}.\${rawBody}\`).digest('hex')
   return given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected))
@@ -770,14 +770,14 @@ def verify_khma(raw_body: bytes, ts: str, signature: str, secret: str) -> bool:
               ]}
             />
             <p>
-              Alerts are also emailed to the customer&apos;s owners and admins who use Khma directly; for your workspaces the
+              Alerts are also emailed to the customer&apos;s owners and admins who use Loudpilot directly; for your workspaces the
               webhook is the channel, so you decide how to show them.
             </p>
           </Section>
 
           <Section id="billing" title="Credits & revenue share">
             <p>
-              Customers pay Khma for plans and credit packs; AI actions spend credits and are charged only when the result is
+              Customers pay Loudpilot for plans and credit packs; AI actions spend credits and are charged only when the result is
               delivered. You receive your agreed share of every purchase made by customers you brought.
             </p>
             <Params

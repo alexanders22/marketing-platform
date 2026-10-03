@@ -47,7 +47,7 @@ export async function body<T>(req: Request, schema: ZodType<T>): Promise<T> {
   return schema.parse(raw)
 }
 
-// Server-to-server auth: `Authorization: Bearer khma_…`.
+// Server-to-server auth: `Authorization: Bearer lp_live_…`.
 export async function requirePartner(req: Request): Promise<Partner> {
   const header = req.headers.get('authorization') ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''

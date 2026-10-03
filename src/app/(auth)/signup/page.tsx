@@ -5,7 +5,7 @@ import { mailEnabled } from '@/lib/mail'
 import { getSessionUser } from '@/lib/session'
 import { AuthCard } from '../AuthCard'
 
-export const metadata: Metadata = { title: 'Sign up — Khma' }
+export const metadata: Metadata = { title: 'Sign up — Loudpilot' }
 
 export default async function SignupPage() {
   if (await getSessionUser()) redirect('/app')

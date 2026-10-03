@@ -3,7 +3,7 @@ import { PlanPicker } from '@/components/PlanPicker'
 import { requireContext } from '@/lib/context'
 import type { PlanId } from '@/lib/plans'
 
-export const metadata: Metadata = { title: 'Choose your plan — Khma' }
+export const metadata: Metadata = { title: 'Choose your plan — Loudpilot' }
 
 export default async function PlanPage() {
   const { account } = await requireContext()

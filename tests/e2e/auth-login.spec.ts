@@ -116,7 +116,7 @@ test.describe('magic link', () => {
     await page.getByPlaceholder('name@company.com').fill(email)
     await page.getByRole('button', { name: 'Send reset link' }).click()
     await expect(page.getByText('Check your inbox')).toBeVisible()
-    const reset = linkFrom((await latestMail(email, 'Reset your Khma password')).Text, '/reset-password?token=')
+    const reset = linkFrom((await latestMail(email, 'Reset your Loudpilot password')).Text, '/reset-password?token=')
     const token = new URL(reset).searchParams.get('token')!
     await page.goto(`/auth/magic?token=${token}`)
     await page.getByRole('button', { name: 'Continue' }).click()
@@ -147,7 +147,7 @@ test.describe('password', () => {
     await p2.getByPlaceholder('name@company.com').fill(email)
     await p2.getByRole('button', { name: 'Send reset link' }).click()
     await expect(p2.getByText('Check your inbox')).toBeVisible()
-    const link = linkFrom((await latestMail(email, 'Reset your Khma password')).Text, '/reset-password?token=')
+    const link = linkFrom((await latestMail(email, 'Reset your Loudpilot password')).Text, '/reset-password?token=')
 
     await p2.goto(link)
     await p2.getByPlaceholder('New password (8+ characters)').fill('Correct-Horse-1')
@@ -208,7 +208,7 @@ test.describe('password', () => {
     await page.getByPlaceholder('name@company.com').fill(email)
     await page.getByRole('button', { name: 'Send reset link' }).click()
     await expect(page.getByText('Check your inbox')).toBeVisible()
-    await expect(page.getByText(`If ${email} has a Khma account`)).toBeVisible()
+    await expect(page.getByText(`If ${email} has a Loudpilot account`)).toBeVisible()
     await page.waitForTimeout(3000)
     expect(await mailCount(email, 'Reset')).toBe(0)
     expect(sql(`select count(*) from "MagicLink" where email='${email}'`)).toBe('0')
@@ -221,7 +221,7 @@ test.describe('password', () => {
     await page.goto('/forgot-password')
     await page.getByPlaceholder('name@company.com').fill(email)
     await page.getByRole('button', { name: 'Send reset link' }).click()
-    const link = linkFrom((await latestMail(email, 'Reset your Khma password')).Text, '/reset-password?token=')
+    const link = linkFrom((await latestMail(email, 'Reset your Loudpilot password')).Text, '/reset-password?token=')
     await page.goto(link)
     // Bypass the browser's minLength to hit the server check.
     await page.evaluate(() => document.querySelectorAll('input[minlength]').forEach((i) => i.removeAttribute('minlength')))

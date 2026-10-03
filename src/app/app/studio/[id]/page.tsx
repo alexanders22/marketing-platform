@@ -5,7 +5,7 @@ import type { DesignDoc } from '@/lib/design'
 import { prisma } from '@/lib/prisma'
 import { Editor } from './Editor'
 
-export const metadata: Metadata = { title: 'Studio — Khma' }
+export const metadata: Metadata = { title: 'Studio — Loudpilot' }
 
 export default async function DesignPage({ params }: PageProps<'/app/studio/[id]'>) {
   const { workspace, brand } = await requireContext()

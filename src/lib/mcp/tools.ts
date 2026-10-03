@@ -14,7 +14,7 @@ import { OBJECTIVES, applyGoals, applyPosts, buildPlan, type PlanData } from '..
 import { isValidTimeZone } from '../time'
 import { applyRecommendation, dismissRecommendation, type ReviewData } from '../weekly'
 
-// What an AI assistant can do in Khma, as the signed-in user in one
+// What an AI assistant can do in Loudpilot, as the signed-in user in one
 // workspace. Every tool re-checks roles like the app does.
 
 export class ToolError extends Error {}
@@ -25,7 +25,7 @@ type Tool<S extends z.ZodType> = {
   description: string
   input: S
   readOnly?: boolean
-  // Acts outside Khma (publishes to a network) or spends credits.
+  // Acts outside Loudpilot (publishes to a network) or spends credits.
   openWorld?: boolean
   run: (c: NonNullable<Caller>, args: z.infer<S>) => Promise<unknown>
 }
@@ -80,7 +80,7 @@ export const TOOLS = [
   tool({
     name: 'get_dossier',
     title: 'Company dossier',
-    description: 'What Khma knows about the company: profile from its website, and the audit of 12 months of posts and ads (what works, what does not, best times, never-again list).',
+    description: 'What Loudpilot knows about the company: profile from its website, and the audit of 12 months of posts and ads (what works, what does not, best times, never-again list).',
     input: z.object({}),
     readOnly: true,
     run: async (c) => {
@@ -182,8 +182,8 @@ export const TOOLS = [
   }),
   tool({
     name: 'write_post_with_ai',
-    title: 'Write a post with Khma AI',
-    description: `Khma writes an on-brand caption and hashtags using the company dossier (what worked, what to avoid) and saves it as a Planner draft. Costs ${COST.postText} credit.`,
+    title: 'Write a post with Loudpilot AI',
+    description: `Loudpilot writes an on-brand caption and hashtags using the company dossier (what worked, what to avoid) and saves it as a Planner draft. Costs ${COST.postText} credit.`,
     input: z.object({
       brief: z.string().min(3).max(2000).describe('What the post is about'),
       tone: z.enum(TONES).default('Friendly'),
@@ -238,7 +238,7 @@ export const TOOLS = [
   tool({
     name: 'list_goals',
     title: 'List goals',
-    description: 'Goals Khma watches hourly, with the latest actual value and status (on_track, at_risk, off_track, no_data).',
+    description: 'Goals Loudpilot watches hourly, with the latest actual value and status (on_track, at_risk, off_track, no_data).',
     input: z.object({}),
     readOnly: true,
     run: async (c) => ({ goals: (await prisma.goal.findMany({ where: { workspaceId: c.workspace.id }, orderBy: { createdAt: 'desc' } })).map(goalJson) }),
@@ -246,7 +246,7 @@ export const TOOLS = [
   tool({
     name: 'create_goal',
     title: 'Create a goal',
-    description: `A target Khma checks every hour and alerts on. Metrics: ${METRICS.map((m) => `${m.id} (${m.scopes.join('/').toLowerCase()})`).join(', ')}. Percent metrics in percent (2 = 2%).`,
+    description: `A target Loudpilot checks every hour and alerts on. Metrics: ${METRICS.map((m) => `${m.id} (${m.scopes.join('/').toLowerCase()})`).join(', ')}. Percent metrics in percent (2 = 2%).`,
     input: z.object({
       scope: z.enum(['campaign', 'ads', 'posts']),
       campaignId: z.string().optional().describe('With scope campaign: an id from get_analytics campaigns'),
@@ -321,7 +321,7 @@ export const TOOLS = [
   tool({
     name: 'list_plans',
     title: 'List strategy plans',
-    description: 'Strategy plans made by the Khma strategist.',
+    description: 'Strategy plans made by the Loudpilot strategist.',
     input: z.object({}),
     readOnly: true,
     run: async (c) => ({
@@ -347,7 +347,7 @@ export const TOOLS = [
   tool({
     name: 'create_plan',
     title: 'Ask the strategist',
-    description: `The Khma strategist turns a business goal into a plan (audiences, budget, ad campaigns with forecasts from the account's own history, two weeks of posts, goals) using the company dossier. Takes about a minute. Costs ${COST.strategy} credits.`,
+    description: `The Loudpilot strategist turns a business goal into a plan (audiences, budget, ad campaigns with forecasts from the account's own history, two weeks of posts, goals) using the company dossier. Takes about a minute. Costs ${COST.strategy} credits.`,
     input: z.object({
       goal: z.string().min(10).max(1000).describe('The goal in the owner’s words'),
       objective: z.enum(OBJECTIVES.map((o) => o.id) as [string, ...string[]]),

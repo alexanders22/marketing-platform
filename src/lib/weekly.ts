@@ -9,7 +9,7 @@ import { resultLabel } from './meta-ads'
 import { prisma } from './prisma'
 import { dayIn, zonedToUtc } from './time'
 
-// The weekly loop: every Monday Khma looks back at the last seven days
+// The weekly loop: every Monday Loudpilot looks back at the last seven days
 // (Mon–Sun in the workspace's zone), explains what happened and proposes
 // next steps the owner applies or dismisses.
 
@@ -63,7 +63,7 @@ export async function weekFacts(workspaceId: string, start: string, end: string,
     })
     .filter((c) => c.status === 'ACTIVE' || (c.thisWeek.spend ?? 0) > 0 || (c.weekBefore.spend ?? 0) > 0)
 
-  // Posts: imported history plus Khma deliveries not imported yet.
+  // Posts: imported history plus Loudpilot deliveries not imported yet.
   const posts = await prisma.socialPost.findMany({ where: { workspaceId, publishedAt: { gte: from, lte: to } }, orderBy: { publishedAt: 'asc' } })
   const known = new Set(posts.map((p) => p.externalId))
   const deliveries = await prisma.postDelivery.findMany({

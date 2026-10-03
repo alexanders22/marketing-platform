@@ -4,7 +4,7 @@ import { startFakeMeta } from './fake-meta'
 import { sql } from './helpers'
 
 // The partner flow end to end: workspace → signup → connect link (customer
-// connects Meta without a Khma login) → channels, analytics, goals, alerts.
+// connects Meta without a Loudpilot login) → channels, analytics, goals, alerts.
 
 test.describe.configure({ mode: 'serial' })
 
@@ -48,7 +48,7 @@ test('create and register a workspace', async () => {
   expect((await signup.json()).workspace).toMatchObject({ externalId: ext, registered: true })
 })
 
-test('connect link: the customer connects Meta without a Khma login', async ({ browser }) => {
+test('connect link: the customer connects Meta without a Loudpilot login', async ({ browser }) => {
   const bad = await api.post(`/api/v1/workspaces/${ext}/connect-links`, { data: { network: 'meta', returnUrl: 'http://evil.example/back' } })
   expect(bad.status()).toBe(400)
 
@@ -59,12 +59,12 @@ test('connect link: the customer connects Meta without a Khma login', async ({ b
   const { url } = await res.json()
   expect(url).toMatch(/\/connect\/meta\?token=/)
 
-  // A fresh browser: no Khma session at all.
+  // A fresh browser: no Loudpilot session at all.
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   await page.goto(url)
-  await page.waitForURL(/khma_status=/)
-  expect(page.url()).toContain('from=upla&khma_status=connected&khma_accounts=3')
+  await page.waitForURL(/loudpilot_status=/)
+  expect(page.url()).toContain('from=upla&loudpilot_status=connected&loudpilot_accounts=3')
   await ctx.close()
 
   // A tampered link is refused.

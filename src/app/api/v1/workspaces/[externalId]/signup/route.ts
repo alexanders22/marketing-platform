@@ -8,7 +8,7 @@ const Signup = z.object({
   email: z.email(),
   country: z.string().length(2).optional(),
   currency: z.string().length(3).optional(),
-  // The partner must show Khma's terms and pass the customer's consent.
+  // The partner must show Loudpilot's terms and pass the customer's consent.
   acceptTerms: z.literal(true),
 })
 

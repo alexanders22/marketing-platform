@@ -125,11 +125,11 @@ export function Pricing() {
         <div>
           <h3 className="font-semibold">Need more than Agency?</h3>
           <p className="mt-1 text-sm text-zinc-400">
-            Custom limits, white-label and revenue share for platforms that resell Khma to their own customers.
+            Custom limits, white-label and revenue share for platforms that resell Loudpilot to their own customers.
           </p>
         </div>
         <a
-          href="mailto:info@brandrepublic.ge?subject=Khma%20partnership"
+          href="mailto:info@brandrepublic.ge?subject=Loudpilot%20partnership"
           className="shrink-0 rounded-lg border border-white/10 px-4 py-2 text-sm font-medium transition hover:bg-white/5"
         >
           Let&apos;s talk

@@ -12,7 +12,7 @@ export default function AuthLayout({ children }: LayoutProps<'/'>) {
         href="/"
         className="absolute top-5 left-5 rounded-lg bg-white/90 px-3 py-1.5 text-sm font-semibold text-zinc-900 shadow"
       >
-        Khma
+        Loudpilot
       </Link>
     </div>
   )

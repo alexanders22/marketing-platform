@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { PUBLISHABLE } from '@/lib/publisher'
 import { PostEditor } from '../PostEditor'
 
-export const metadata: Metadata = { title: 'New post — Khma' }
+export const metadata: Metadata = { title: 'New post — Loudpilot' }
 
 export default async function NewPostPage({ searchParams }: PageProps<'/app/posts/new'>) {
   const { workspace, brand } = await requireContext()

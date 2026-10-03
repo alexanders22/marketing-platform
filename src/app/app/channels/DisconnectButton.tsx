@@ -12,7 +12,7 @@ export function DisconnectButton({ id, name }: { id: string; name: string }) {
       disabled={pending}
       onClick={() =>
         start(async () => {
-          if (!confirm(`Disconnect ${name}? Its token and the results Khma read from it are deleted.`)) return
+          if (!confirm(`Disconnect ${name}? Its token and the results Loudpilot read from it are deleted.`)) return
           const res = await disconnectAccount(id)
           if (res.error) alert(res.error)
           router.refresh()

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/session'
 import { Onboarding } from './Onboarding'
 
-export const metadata: Metadata = { title: 'Set up your brand — Khma' }
+export const metadata: Metadata = { title: 'Set up your brand — Loudpilot' }
 
 export default async function OnboardingPage() {
   const user = await requireUser()

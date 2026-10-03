@@ -3,7 +3,7 @@ import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 import { Composer } from './Composer'
 
-export const metadata: Metadata = { title: 'Create — Khma' }
+export const metadata: Metadata = { title: 'Create — Loudpilot' }
 
 export default async function CreatePage() {
   const { account, workspace } = await requireContext()

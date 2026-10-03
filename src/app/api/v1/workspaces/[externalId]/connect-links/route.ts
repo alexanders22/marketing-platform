@@ -6,12 +6,12 @@ import { seal } from '@/lib/signed'
 
 const Input = z.object({
   network: z.literal('meta'),
-  // Where the customer is sent afterwards, with ?khma_status=connected|error.
+  // Where the customer is sent afterwards, with ?loudpilot_status=connected|error.
   returnUrl: z.url().refine((u) => u.startsWith('https://') || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(u), 'returnUrl must be https'),
 })
 
 // A one-hour link the partner opens for its customer to connect Facebook,
-// Instagram and Meta ad accounts to this workspace — no Khma login needed.
+// Instagram and Meta ad accounts to this workspace — no Loudpilot login needed.
 export const POST = handler(async (req, ctx: RouteContext<'/api/v1/workspaces/[externalId]/connect-links'>) => {
   const partner = await requirePartner(req)
   const ws = await partnerWorkspace(partner, (await ctx.params).externalId)

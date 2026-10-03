@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/session'
 import { ConsentForm } from './ConsentForm'
 
-export const metadata: Metadata = { title: 'Connect an AI assistant — Khma' }
+export const metadata: Metadata = { title: 'Connect an AI assistant — Loudpilot' }
 
 const CAN = [
   'Read your dossier, results, goals, alerts and weekly reviews',
@@ -30,14 +30,14 @@ export default async function ConsentPage({ searchParams }: PageProps<'/oauth/co
   return (
     <div className="grid min-h-screen place-items-center bg-[#f4f3f1] p-4 text-zinc-900 [color-scheme:light]">
       <div className="w-full max-w-md rounded-2xl bg-white p-7 shadow-sm ring-1 ring-black/5">
-        <div className="[&_rect:first-child]:fill-zinc-900 [&_rect:not(:first-child)]:fill-white">
+        <div className="text-zinc-900">
           <Logo />
         </div>
         {check.error || !check.client ? (
           <p className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{check.error ?? 'Unknown app'}</p>
         ) : workspaces.length === 0 ? (
           <p className="mt-6 text-sm text-zinc-600">
-            Finish setting up your company in Khma first, then connect again.{' '}
+            Finish setting up your company in Loudpilot first, then connect again.{' '}
             <a href="/onboarding" className="font-medium underline">
               Set up
             </a>
@@ -45,7 +45,7 @@ export default async function ConsentPage({ searchParams }: PageProps<'/oauth/co
         ) : (
           <>
             <h1 className="mt-6 text-xl font-semibold">
-              <span className="text-indigo-600">{check.client.name}</span> wants to work in Khma
+              <span className="text-indigo-600">{check.client.name}</span> wants to work in Loudpilot
             </h1>
             <p className="mt-1 text-sm text-zinc-500">Signed in as {user.email}</p>
             <ul className="mt-5 space-y-2 text-sm text-zinc-700">
@@ -56,7 +56,7 @@ export default async function ConsentPage({ searchParams }: PageProps<'/oauth/co
               ))}
             </ul>
             <ConsentForm params={q as AuthorizeParams} workspaces={workspaces} />
-            <p className="mt-4 text-xs text-zinc-400">You can disconnect it any time in Khma → AI assistants.</p>
+            <p className="mt-4 text-xs text-zinc-400">You can disconnect it any time in Loudpilot → AI assistants.</p>
           </>
         )}
       </div>

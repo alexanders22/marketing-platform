@@ -70,7 +70,7 @@ test('landing: every in-page anchor points at an existing element', async ({ pag
   )
   expect(anchors.filter((a) => !a.ok)).toEqual([])
   // Placeholder links that go nowhere (href="#") — reported, not fatal for the anchor check above.
-  const dead = anchors.filter((a) => a.href === '#' && a.text && a.text !== 'Khma').map((a) => a.text)
+  const dead = anchors.filter((a) => a.href === '#' && a.text && a.text !== 'Loudpilot').map((a) => a.text)
   expect.soft(dead, 'footer/other links with href="#" go nowhere').toEqual([])
 })
 

@@ -11,7 +11,7 @@ import { formatMoney, formatNumber, formatPercent } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { RefreshButton } from './RefreshButton'
 
-export const metadata: Metadata = { title: 'Dossier — Khma' }
+export const metadata: Metadata = { title: 'Dossier — Loudpilot' }
 
 function Card({ title, icon, children, className = '' }: { title: string; icon?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -76,8 +76,8 @@ export default async function DossierPage() {
         <div className="mr-auto max-w-2xl">
           <h1 className="text-2xl font-semibold tracking-tight">Dossier</h1>
           <p className="text-sm text-zinc-500">
-            What Khma knows about {workspace.name}: your website, every post and ad of the last 12 months, and what worked.
-            Every post, campaign and plan Khma writes uses it.
+            What Loudpilot knows about {workspace.name}: your website, every post and ad of the last 12 months, and what worked.
+            Every post, campaign and plan Loudpilot writes uses it.
           </p>
           <p className="mt-1 text-xs text-zinc-400">
             {postCount} posts read
@@ -99,7 +99,7 @@ export default async function DossierPage() {
           <Link href="/app/brand" className="font-medium underline">
             Brand
           </Link>{' '}
-          so Khma can read what you sell.
+          so Loudpilot can read what you sell.
         </p>
       )}
       {accounts.filter((a) => a.network !== 'META_ADS').length === 0 && (
@@ -107,7 +107,7 @@ export default async function DossierPage() {
           <Link href="/app/channels" className="font-medium text-zinc-900 underline">
             Connect Facebook and Instagram
           </Link>{' '}
-          — Khma reads your last 12 months of posts and ads to learn what works for you.
+          — Loudpilot reads your last 12 months of posts and ads to learn what works for you.
         </p>
       )}
 
@@ -344,7 +344,7 @@ export default async function DossierPage() {
 
           <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-zinc-900 p-5 text-white">
             <p className="mr-auto">
-              <b>Ready for a plan?</b> Tell Khma what you want to achieve — it builds the strategy from this dossier.
+              <b>Ready for a plan?</b> Tell Loudpilot what you want to achieve — it builds the strategy from this dossier.
             </p>
             <Link href="/app/strategy/new" className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-100">
               Ask the strategist
@@ -354,7 +354,7 @@ export default async function DossierPage() {
       ) : (
         !profile && (
           <section className="rounded-2xl border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500">
-            No dossier yet. {canEdit ? 'Build it — Khma reads your website and connected accounts.' : 'An owner or admin can build it.'}
+            No dossier yet. {canEdit ? 'Build it — Loudpilot reads your website and connected accounts.' : 'An owner or admin can build it.'}
           </section>
         )
       )}

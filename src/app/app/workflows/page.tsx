@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Search, Workflow } from 'lucide-react'
 import { EmptyState, PageHeader, SoonButton } from '@/components/EmptyState'
 
-export const metadata: Metadata = { title: 'Workflows — Khma' }
+export const metadata: Metadata = { title: 'Workflows — Loudpilot' }
 
 export default function WorkflowsPage() {
   return (

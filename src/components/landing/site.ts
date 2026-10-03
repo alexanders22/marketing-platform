@@ -38,8 +38,8 @@ import {
 export type Icon = ComponentType<{ size?: number; className?: string }>;
 
 // Sales / partnership enquiries.
-export const CONTACT = "mailto:info@brandrepublic.ge?subject=Khma%20demo";
-export const SUPPORT = "mailto:info@brandrepublic.ge?subject=Khma%20support";
+export const CONTACT = "mailto:info@brandrepublic.ge?subject=Loudpilot%20demo";
+export const SUPPORT = "mailto:info@brandrepublic.ge?subject=Loudpilot%20support";
 
 export type Feature = {
   slug: string;
@@ -84,7 +84,7 @@ export const FEATURES: Feature[] = [
     short: "A run of social posts or a series of articles from one brief.",
     headline: "A whole campaign from one brief",
     intro:
-      "Describe the goal, pick the dates and how often to post. Khma writes every post in your brand voice and lays it out on the calendar — ready to review, rewrite or schedule.",
+      "Describe the goal, pick the dates and how often to post. Loudpilot writes every post in your brand voice and lays it out on the calendar — ready to review, rewrite or schedule.",
     points: [
       { title: "Social campaigns", body: "Up to 8 weeks, 1–7 posts a week, each with its own caption, hashtags and date." },
       { title: "Blog series", body: "An outline for every article first; write the full article only when you need it." },
@@ -120,7 +120,7 @@ export const FEATURES: Feature[] = [
     short: "One link-in-bio page for every profile.",
     headline: "A link-in-bio page that looks like your brand",
     intro:
-      "Put every link that matters behind a single address. Build the page in minutes, publish it on your own Khma link and see which links people actually click.",
+      "Put every link that matters behind a single address. Build the page in minutes, publish it on your own Loudpilot link and see which links people actually click.",
     points: [
       { title: "Links, headings and socials", body: "Arrange blocks in any order and style them with your colours." },
       { title: "Click tracking", body: "Views and clicks per link, without third-party trackers." },
@@ -170,13 +170,13 @@ export const FEATURES: Feature[] = [
     glow: "from-zinc-400/15",
     title: "Partner API",
     short: "Give every customer of your product a marketing module.",
-    headline: "Khma inside the product you already run",
+    headline: "Loudpilot inside the product you already run",
     intro:
       "Connect your SaaS, CRM or marketplace once. Each of your companies, agents or sellers gets an isolated workspace with its own brand, content and credits — you keep your UI.",
     points: [
       { title: "Workspace per customer", body: "Created by your external id, fully isolated from every other customer." },
       { title: "Single or reseller mode", body: "One company, or many profiles under your platform." },
-      { title: "Credits and revenue share", body: "Customers pay Khma for credits; you earn a share of every purchase." },
+      { title: "Credits and revenue share", body: "Customers pay Loudpilot for credits; you earn a share of every purchase." },
       { title: "Hashed keys", body: "API keys are shown once and stored only as a hash." },
     ],
     status: "live",
@@ -235,7 +235,7 @@ export const RESOURCES: { title: string; links: { icon: Icon; label: string; bod
   {
     title: "Company",
     links: [
-      { icon: Handshake, label: "Become a partner", body: "Bring Khma to your customers", href: CONTACT },
+      { icon: Handshake, label: "Become a partner", body: "Bring Loudpilot to your customers", href: CONTACT },
       { icon: Mail, label: "Contact sales", body: "A demo for your team", href: CONTACT },
       { icon: LifeBuoy, label: "Support", body: "Questions about your account", href: SUPPORT },
     ],

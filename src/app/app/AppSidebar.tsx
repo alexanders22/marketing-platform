@@ -140,7 +140,7 @@ function SidebarBody({ workspace, logoUrl, user, credits, planLabel, alerts, rec
 
       <div className="mt-auto space-y-0.5 pt-6">
         <a
-          href="mailto:info@brandrepublic.ge?subject=Khma%20support"
+          href="mailto:info@brandrepublic.ge?subject=Loudpilot%20support"
           className="flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] text-zinc-700 hover:bg-zinc-200/50"
         >
           <Headphones size={18} /> Support

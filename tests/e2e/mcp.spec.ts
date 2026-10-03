@@ -45,7 +45,7 @@ test('personal token: create, shown once', async () => {
   await page.getByLabel('Token name').fill('Claude Code laptop')
   await page.getByRole('button', { name: 'Create token' }).click()
   token = (await page.getByTestId('new-token').textContent())!.trim()
-  expect(token).toMatch(/^khma_pat_/)
+  expect(token).toMatch(/^lp_pat_/)
   expect(sql(`select count(*) from "AccessToken" where "tokenHash"='${createHash('sha256').update(token).digest('hex')}' and kind='PERSONAL'`)).toBe('1')
   await page.reload()
   await expect(page.getByTestId('new-token')).toHaveCount(0)
@@ -55,7 +55,7 @@ test('personal token: create, shown once', async () => {
 test('protocol: initialize, notifications, ping, tools/list', async () => {
   const init = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } })
   expect(init.status).toBe(200)
-  expect(init.body.result).toMatchObject({ protocolVersion: '2025-06-18', serverInfo: { name: 'khma' }, capabilities: { tools: {} } })
+  expect(init.body.result).toMatchObject({ protocolVersion: '2025-06-18', serverInfo: { name: 'loudpilot' }, capabilities: { tools: {} } })
   expect(init.body.result.instructions).toContain('Arca Development')
   expect((await rpc('notifications/initialized', {}, token, null)).status).toBe(202)
   expect((await rpc('ping')).body.result).toEqual({})
@@ -110,7 +110,7 @@ test('OAuth: register, sign in, consent, PKCE, refresh, revoke', async ({ browse
 
   const verifier = randomBytes(48).toString('base64url')
   const challenge = createHash('sha256').update(verifier).digest('base64url')
-  const authorize = `${BASE}/oauth/authorize?${new URLSearchParams({ response_type: 'code', client_id, redirect_uri: redirect, code_challenge: challenge, code_challenge_method: 'S256', state: 'xyz', scope: 'khma' })}`
+  const authorize = `${BASE}/oauth/authorize?${new URLSearchParams({ response_type: 'code', client_id, redirect_uri: redirect, code_challenge: challenge, code_challenge_method: 'S256', state: 'xyz', scope: 'loudpilot' })}`
 
   // A fresh browser: log in by magic link, land back on the consent page.
   const ctx = await browser.newContext()
@@ -128,7 +128,7 @@ test('OAuth: register, sign in, consent, PKCE, refresh, revoke', async ({ browse
   await p.goto(link)
   await p.getByRole('button', { name: 'Continue' }).click()
   await p.waitForURL(/\/oauth\/consent/)
-  await expect(p.getByRole('heading', { name: /Claude wants to work in Khma/ })).toBeVisible()
+  await expect(p.getByRole('heading', { name: /Claude wants to work in Loudpilot/ })).toBeVisible()
   await p.getByRole('button', { name: 'Allow' }).click()
   await p.waitForURL((u) => u.pathname === '/oauth-test-callback')
   const back = new URL(p.url())
@@ -140,7 +140,7 @@ test('OAuth: register, sign in, consent, PKCE, refresh, revoke', async ({ browse
   const ok = await token({ grant_type: 'authorization_code', code, client_id, redirect_uri: redirect, code_verifier: verifier })
   expect(ok.status).toBe(200)
   const t1 = await ok.json()
-  expect(t1).toMatchObject({ token_type: 'Bearer', scope: 'khma' })
+  expect(t1).toMatchObject({ token_type: 'Bearer', scope: 'loudpilot' })
   expect((await token({ grant_type: 'authorization_code', code, client_id, redirect_uri: redirect, code_verifier: verifier })).status).toBe(400)
 
   expect((await call('get_overview', {}, t1.access_token)).structuredContent.workspace).toBe('Arca Development')

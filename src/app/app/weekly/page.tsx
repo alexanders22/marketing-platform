@@ -11,7 +11,7 @@ import { prisma } from '@/lib/prisma'
 import type { ReviewData, WeekFacts } from '@/lib/weekly'
 import { RecActions, ReviewNowButton } from './RecActions'
 
-export const metadata: Metadata = { title: 'Weekly review — Khma' }
+export const metadata: Metadata = { title: 'Weekly review — Loudpilot' }
 
 const KIND: Record<string, { label: string; icon: ReactNode }> = {
   post: { label: 'Post', icon: <CalendarPlus size={16} className="text-indigo-600" /> },
@@ -119,7 +119,7 @@ export default async function WeeklyPage() {
         <div className="mr-auto max-w-2xl">
           <h1 className="text-2xl font-semibold tracking-tight">Weekly review</h1>
           <p className="text-sm text-zinc-500">
-            Every Monday Khma reviews the last week like your agency would: what worked, what did not, and what to do next. Apply what you
+            Every Monday Loudpilot reviews the last week like your agency would: what worked, what did not, and what to do next. Apply what you
             like — posts land in the Planner, goals start being watched.
           </p>
         </div>

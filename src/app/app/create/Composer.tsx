@@ -268,7 +268,7 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
               }}
               aria-label="Describe the post"
-              placeholder={listening ? 'Listening… speak now' : 'Describe the post you want Khma to create…'}
+              placeholder={listening ? 'Listening… speak now' : 'Describe the post you want Loudpilot to create…'}
               className="min-h-36 w-full resize-none rounded-t-2xl px-5 py-4 text-[15px] outline-none placeholder:text-zinc-400"
             />
 
@@ -311,7 +311,7 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
                       <Sparkles size={16} className="text-emerald-600" />
                       <span className="flex-1">
                         <span className="block text-sm text-zinc-800">AI hashtags</span>
-                        <span className="block text-xs text-zinc-500">Let Khma pick 3–6 relevant tags</span>
+                        <span className="block text-xs text-zinc-500">Let Loudpilot pick 3–6 relevant tags</span>
                       </span>
                       <Switch on={aiHashtags} />
                     </button>

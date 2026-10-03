@@ -8,9 +8,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Khma — AI marketing: content, ads and analytics",
+  title: "Loudpilot — AI marketing: content, ads and analytics",
   description:
-    "Khma writes, designs, schedules and advertises for your brand — then reads the results and tells you what to do next.",
+    "Loudpilot writes, designs, schedules and advertises for your brand — then reads the results and tells you what to do next.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

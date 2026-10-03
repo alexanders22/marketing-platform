@@ -29,8 +29,8 @@ export function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
 }
 
-// Partner API key: "khma_" + 40 url-safe chars. Only the hash is stored.
+// Partner API key: "lp_live_" + 40 url-safe chars. Only the hash is stored.
 export function generateApiKey(): { key: string; prefix: string; keyHash: string } {
-  const key = `khma_${randomBytes(30).toString('base64url')}`
+  const key = `lp_live_${randomBytes(30).toString('base64url')}`
   return { key, prefix: key.slice(0, 12), keyHash: sha256(key) }
 }

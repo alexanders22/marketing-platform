@@ -17,7 +17,7 @@ const find = (slug: string) => FEATURES.find((f) => f.slug === slug);
 export async function generateMetadata({ params }: PageProps<"/features/[slug]">): Promise<Metadata> {
   const f = find((await params).slug);
   if (!f) return { title: "Not found" };
-  return { title: `${f.title} — Khma`, description: f.short };
+  return { title: `${f.title} — Loudpilot`, description: f.short };
 }
 
 export default async function FeaturePage({ params }: PageProps<"/features/[slug]">) {
@@ -93,7 +93,7 @@ export default async function FeaturePage({ params }: PageProps<"/features/[slug
 
         <section className="border-t border-white/5 bg-zinc-900/30 py-20">
           <div className="mx-auto max-w-5xl px-4 sm:px-6">
-            <h2 className="text-2xl font-semibold tracking-tight">More in Khma</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">More in Loudpilot</h2>
             <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {others.map((o) => (
                 <Link

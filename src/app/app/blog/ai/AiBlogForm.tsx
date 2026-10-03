@@ -42,7 +42,7 @@ export function AiBlogForm({ credits }: { credits: number }) {
           <FileText size={22} />
         </span>
         <h1 className="mt-4 text-2xl font-semibold sm:text-3xl">New AI blog article</h1>
-        <p className="mt-2 text-zinc-500">Give a topic — Khma writes a structured, on-brand article you can edit and publish.</p>
+        <p className="mt-2 text-zinc-500">Give a topic — Loudpilot writes a structured, on-brand article you can edit and publish.</p>
       </div>
 
       <div className="mt-8 space-y-5">

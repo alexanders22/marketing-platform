@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { mediaUrl } from '@/lib/storage'
 import { StudioHome } from './StudioHome'
 
-export const metadata: Metadata = { title: 'Studio — Khma' }
+export const metadata: Metadata = { title: 'Studio — Loudpilot' }
 
 export default async function StudioPage() {
   const { workspace, brand } = await requireContext()

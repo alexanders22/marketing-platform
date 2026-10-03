@@ -1,6 +1,6 @@
 import { CORS, mcpPost } from '@/lib/mcp/server'
 
-// Khma MCP server (Streamable HTTP, stateless). See /app/mcp for setup.
+// Loudpilot MCP server (Streamable HTTP, stateless). See /app/mcp for setup.
 export const POST = mcpPost
 
 // No server-initiated stream: every answer comes with its request.

@@ -12,7 +12,7 @@ const OAUTH_TTL_MS = 30 * 86_400_000
 const newSecret = (prefix: string) => `${prefix}${randomBytes(30).toString('base64url')}`
 
 export async function createPersonalToken(userId: string, workspaceId: string, name: string) {
-  const token = newSecret('khma_pat_')
+  const token = newSecret('lp_pat_')
   const row = await prisma.accessToken.create({
     data: { userId, workspaceId, kind: 'PERSONAL', name: name.slice(0, 80) || 'Personal token', prefix: token.slice(0, 13), tokenHash: sha256(token) },
   })
@@ -20,8 +20,8 @@ export async function createPersonalToken(userId: string, workspaceId: string, n
 }
 
 export async function issueOAuthTokens(userId: string, workspaceId: string, clientId: string, clientName: string) {
-  const access = newSecret('khma_oat_')
-  const refresh = newSecret('khma_ort_')
+  const access = newSecret('lp_oat_')
+  const refresh = newSecret('lp_ort_')
   await prisma.accessToken.create({
     data: {
       userId,
@@ -35,7 +35,7 @@ export async function issueOAuthTokens(userId: string, workspaceId: string, clie
       expiresAt: new Date(Date.now() + OAUTH_TTL_MS),
     },
   })
-  return { access_token: access, refresh_token: refresh, token_type: 'Bearer', expires_in: Math.floor(OAUTH_TTL_MS / 1000), scope: 'khma' }
+  return { access_token: access, refresh_token: refresh, token_type: 'Bearer', expires_in: Math.floor(OAUTH_TTL_MS / 1000), scope: 'loudpilot' }
 }
 
 // Refresh rotates: the old pair stops working.
@@ -52,7 +52,8 @@ export type Caller = Awaited<ReturnType<typeof authenticate>>
 export async function authenticate(req: Request) {
   const header = req.headers.get('authorization') ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
-  if (!token.startsWith('khma_pat_') && !token.startsWith('khma_oat_')) return null
+  // khma_ prefixes: tokens issued before the rename to Loudpilot.
+  if (!/^(lp|khma)_(pat|oat)_/.test(token)) return null
   const row = await prisma.accessToken.findUnique({
     where: { tokenHash: sha256(token) },
     include: { user: true, workspace: { include: { account: true, brandKit: true } } },

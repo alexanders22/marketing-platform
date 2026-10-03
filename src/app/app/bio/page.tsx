@@ -6,7 +6,7 @@ import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 import { NewBioButton } from './NewBioButton'
 
-export const metadata: Metadata = { title: 'Bio Pages — Khma' }
+export const metadata: Metadata = { title: 'Bio Pages — Loudpilot' }
 
 export default async function BioPagesPage() {
   const { workspace } = await requireContext()

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { ResetForm } from './ResetForm'
 
-export const metadata: Metadata = { title: 'Set a new password — Khma' }
+export const metadata: Metadata = { title: 'Set a new password — Loudpilot' }
 
 export default async function ResetPasswordPage({ searchParams }: PageProps<'/reset-password'>) {
   const { token } = await searchParams

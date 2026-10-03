@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { mediaUrl } from '@/lib/storage'
 import { BioEditor } from './BioEditor'
 
-export const metadata: Metadata = { title: 'Edit bio page — Khma' }
+export const metadata: Metadata = { title: 'Edit bio page — Loudpilot' }
 
 export default async function EditBioPage({ params }: PageProps<'/app/bio/[id]'>) {
   const { workspace, brand } = await requireContext()

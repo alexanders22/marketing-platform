@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const check = await checkAuthorize(q)
   if (check.error) {
     if (check.redirect && q.redirect_uri) return NextResponse.redirect(withQuery(q.redirect_uri, { error: 'invalid_request', error_description: check.error, state: q.state }))
-    return new Response(`Khma could not start the connection: ${check.error}`, { status: 400 })
+    return new Response(`Loudpilot could not start the connection: ${check.error}`, { status: 400 })
   }
   const consent = `/oauth/consent?${req.nextUrl.searchParams.toString()}`
   if (await getSessionUser()) return NextResponse.redirect(new URL(consent, req.url))

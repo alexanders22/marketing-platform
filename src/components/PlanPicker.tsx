@@ -50,7 +50,7 @@ export function PlanPicker({ current, after = '/app' }: { current?: PlanId | nul
           <Rocket size={20} />
         </span>
         <h2 className="mt-5 text-2xl font-semibold text-zinc-900">Choose your plan</h2>
-        <p className="mt-2 text-zinc-500">Your brand is ready. Choose a plan to continue with Khma.</p>
+        <p className="mt-2 text-zinc-500">Your brand is ready. Choose a plan to continue with Loudpilot.</p>
         <ul className="mt-6 space-y-4 border-t border-zinc-100 pt-6 text-[15px] text-zinc-700">
           {[`Try every feature free for ${TRIAL_DAYS} days`, 'No charge today', 'Cancel or change your plan anytime'].map(
             (t) => (

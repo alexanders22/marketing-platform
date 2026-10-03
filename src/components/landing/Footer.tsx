@@ -65,7 +65,7 @@ export function Footer() {
         ))}
       </div>
       <div className="mx-auto flex max-w-6xl flex-col justify-between gap-2 border-t border-white/5 px-4 py-6 text-xs text-zinc-500 sm:flex-row sm:px-6">
-        <span>© {new Date().getFullYear()} Khma. All rights reserved.</span>
+        <span>© {new Date().getFullYear()} Loudpilot. All rights reserved.</span>
       </div>
     </footer>
   );

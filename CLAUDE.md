@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# Khma
+# Loudpilot (formerly Khma)
 
 AI marketing platform (Ocoya-like + paid ads + analytics). Partners (Upla, Zavnili, Dotcom) integrate via `/api/v1` with a partner API key; see README for the model (Partner → Workspace, Account → credits).
 
@@ -9,3 +9,4 @@ AI marketing platform (Ocoya-like + paid ads + analytics). Partners (Upla, Zavni
 - Third-party tokens: store only via `encrypt()` from `src/lib/crypto.ts`. API keys: store only the sha256 hash.
 - Credits: every change is a `CreditEntry` with an `idempotencyKey`, and `Account.creditBalance` is updated in the same transaction.
 - Dev server: port 3100.
+- Internal names keep the old "khma" (DB, cookies, env vars KHMA_*); everything users and partners see says Loudpilot (loudpilot.app).

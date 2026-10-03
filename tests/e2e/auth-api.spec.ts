@@ -9,7 +9,7 @@ const run = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`
 
 function createPartner(slug: string, name: string, mode: 'SINGLE' | 'MULTI') {
   const out = execSync(`npx tsx scripts/create-partner.ts ${slug} "${name}" ${mode}`, { encoding: 'utf8' })
-  const key = out.match(/khma_[A-Za-z0-9_-]+/)?.[0]
+  const key = out.match(/lp_live_[A-Za-z0-9_-]+/)?.[0]
   if (!key) throw new Error(`no key in output: ${out}`)
   return key
 }

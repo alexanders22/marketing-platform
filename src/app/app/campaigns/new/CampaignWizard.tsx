@@ -62,7 +62,7 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
         <h1 className="mt-4 text-2xl font-semibold sm:text-3xl">{kind === 'blog' ? 'New AI blog campaign' : 'New AI social campaign'}</h1>
         <p className="mt-2 text-zinc-500">
           {kind === 'blog'
-            ? 'Khma plans a series of articles with titles and outlines, then writes each one when you are ready.'
+            ? 'Loudpilot plans a series of articles with titles and outlines, then writes each one when you are ready.'
             : 'One goal in — a full run of on-brand posts, each with its own angle, placed into your Planner.'}
         </p>
       </div>

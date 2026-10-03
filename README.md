@@ -1,4 +1,4 @@
-# Khma
+# Loudpilot
 
 AI marketing platform: social campaigns, AI photo/video content, paid-ads analytics and recommendations.
 Used directly, or embedded into partner products (Upla, Zavnili, Dotcom…) through the API.
@@ -14,8 +14,8 @@ Workspace — one advertiser: brand kit, social/ad accounts, campaigns, content,
 Account   — who pays: created by signup, owns credits (CreditEntry ledger)
 ```
 
-Money: the customer pays Khma for credits directly; the partner gets `revenueSharePct` of purchases.
-Ad budgets are paid by the customer to the ad network (Meta, TikTok…) — never through Khma.
+Money: the customer pays Loudpilot for credits directly; the partner gets `revenueSharePct` of purchases.
+Ad budgets are paid by the customer to the ad network (Meta, TikTok…) — never through Loudpilot.
 
 ## Local setup
 

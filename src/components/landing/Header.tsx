@@ -41,7 +41,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-white/5 bg-zinc-950/80 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link href="/" aria-label="Khma home">
+        <Link href="/" aria-label="Loudpilot home">
           <Logo />
         </Link>
 

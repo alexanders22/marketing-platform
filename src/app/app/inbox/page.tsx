@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { AtSign, Check, Inbox, MessageCircle, MessageSquare, MessagesSquare, Search } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 
-export const metadata: Metadata = { title: 'Inbox — Khma' }
+export const metadata: Metadata = { title: 'Inbox — Loudpilot' }
 
 export default function InboxPage() {
   return (
@@ -62,7 +62,7 @@ export default function InboxPage() {
 
       <section className="hidden bg-zinc-50/60 lg:block">
         <EmptyState icon={Inbox} title="No thread selected">
-          Select a conversation to read and reply. Khma will suggest on-brand answers.
+          Select a conversation to read and reply. Loudpilot will suggest on-brand answers.
         </EmptyState>
       </section>
     </div>

@@ -6,7 +6,7 @@ import { formatMoney } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { OBJECTIVES } from '@/lib/strategist'
 
-export const metadata: Metadata = { title: 'Strategy — Khma' }
+export const metadata: Metadata = { title: 'Strategy — Loudpilot' }
 
 const STATUS = {
   DRAFT: 'bg-zinc-100 text-zinc-600',
@@ -23,7 +23,7 @@ export default async function StrategyPage() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="mr-auto max-w-2xl">
           <h1 className="text-2xl font-semibold tracking-tight">Strategy</h1>
-          <p className="text-sm text-zinc-500">Tell Khma what you want to achieve. Your AI strategist plans the audiences, budget, ads, posts and goals.</p>
+          <p className="text-sm text-zinc-500">Tell Loudpilot what you want to achieve. Your AI strategist plans the audiences, budget, ads, posts and goals.</p>
         </div>
         {canEdit && (
           <Link href="/app/strategy/new" className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800">

@@ -111,7 +111,7 @@ export async function safeFetchText(
         redirect: 'manual',
         signal: ctrl.signal,
         dispatcher: agent,
-        headers: { 'user-agent': 'KhmaBot/1.0 (+https://khma.brandrepublic.ge)', accept },
+        headers: { 'user-agent': 'LoudpilotBot/1.0 (+https://loudpilot.app)', accept },
       })
       if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
         await res.body?.cancel()

@@ -18,15 +18,15 @@ export const metadata = () => ({
   grant_types_supported: ['authorization_code', 'refresh_token'],
   code_challenge_methods_supported: ['S256'],
   token_endpoint_auth_methods_supported: ['none'],
-  scopes_supported: ['khma'],
+  scopes_supported: ['loudpilot'],
 })
 
 export const resourceMetadata = () => ({
   resource: `${appUrl()}/api/mcp`,
   authorization_servers: [appUrl()],
   bearer_methods_supported: ['header'],
-  scopes_supported: ['khma'],
-  resource_name: 'Khma',
+  scopes_supported: ['loudpilot'],
+  resource_name: 'Loudpilot',
 })
 
 // https anywhere, http only on this machine, or an app's own scheme
@@ -55,7 +55,7 @@ export type AuthorizeParams = {
 export async function checkAuthorize(p: Partial<AuthorizeParams>) {
   if (p.response_type !== 'code') return { error: 'unsupported_response_type' }
   const client = p.client_id ? await prisma.oAuthClient.findUnique({ where: { id: p.client_id } }) : null
-  if (!client) return { error: 'This app is not registered with Khma.' }
+  if (!client) return { error: 'This app is not registered with Loudpilot.' }
   if (!p.redirect_uri || !client.redirectUris.includes(p.redirect_uri)) return { error: 'The return address does not match this app.' }
   if (p.code_challenge_method !== 'S256' || !p.code_challenge || !/^[A-Za-z0-9_-]{43,128}$/.test(p.code_challenge)) {
     return { error: 'PKCE (S256) is required.', redirect: true }

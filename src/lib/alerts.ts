@@ -39,8 +39,8 @@ export function accountExpiredAlert(a: { id: string; workspaceId: string; name: 
     title: `Reconnect ${a.name}`,
     body:
       a.network === 'META_ADS'
-        ? `Khma lost access to this ad account: ${reason} Ad results, goals and alerts stop updating until it is reconnected.`
-        : `Khma lost access to this ${a.network === 'INSTAGRAM' ? 'Instagram account' : 'Facebook Page'}: ${reason} Posts will not publish and results will not update until it is reconnected.`,
+        ? `Loudpilot lost access to this ad account: ${reason} Ad results, goals and alerts stop updating until it is reconnected.`
+        : `Loudpilot lost access to this ${a.network === 'INSTAGRAM' ? 'Instagram account' : 'Facebook Page'}: ${reason} Posts will not publish and results will not update until it is reconnected.`,
     href: '/app/channels',
     dedupeKey: `account:${a.id}:expired:${new Date().toISOString().slice(0, 10)}`,
   })
@@ -55,12 +55,12 @@ function digest(alerts: Alert[]) {
       (a) => `<tr><td style="padding:12px 0;border-top:1px solid #f4f4f5">
 <p style="margin:0;font-size:14px;font-weight:600"><span style="color:${COLOR[a.severity]}">●</span> ${esc(a.title)}</p>
 <p style="margin:4px 0 0;font-size:13px;color:#52525b;line-height:1.5">${esc(a.body)}</p>
-${a.href ? `<p style="margin:6px 0 0;font-size:13px"><a href="${appUrl()}${a.href}" style="color:#4f46e5">Open in Khma →</a></p>` : ''}
+${a.href ? `<p style="margin:6px 0 0;font-size:13px"><a href="${appUrl()}${a.href}" style="color:#4f46e5">Open in Loudpilot →</a></p>` : ''}
 </td></tr>`,
     )
     .join('')
   return `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#18181b">
-<p style="font-size:18px;font-weight:600;margin:0 0 4px">Khma</p>
+<p style="font-size:18px;font-weight:600;margin:0 0 4px">Loudpilot</p>
 <p style="font-size:15px;margin:0 0 12px">${alerts.length === 1 ? 'One thing needs your attention' : `${alerts.length} things need your attention`}</p>
 <table style="width:100%;border-collapse:collapse">${items}</table>
 <p style="font-size:12px;color:#a1a1aa;margin:20px 0 0">You get these because alert emails are on for your account. Turn them off on the Alerts page.</p>
@@ -109,7 +109,7 @@ export async function dispatchAlerts(limit = 200) {
       const recipients = ws.account?.alertEmails ? [...new Set(ws.account.members.map((m) => m.user.email))] : []
       try {
         const subject =
-          toEmail.length === 1 ? `Khma alert: ${toEmail[0].title}` : `Khma: ${toEmail.length} alerts for ${ws.name}`
+          toEmail.length === 1 ? `Loudpilot alert: ${toEmail[0].title}` : `Loudpilot: ${toEmail.length} alerts for ${ws.name}`
         const text = toEmail.map((a) => `• ${a.title}\n  ${a.body}${a.href ? `\n  ${appUrl()}${a.href}` : ''}`).join('\n\n')
         for (const to of recipients) await sendMail(to, subject, text, digest(toEmail))
         await prisma.alert.updateMany({ where: { id: { in: toEmail.map((a) => a.id) } }, data: { emailedAt: new Date() } })
@@ -131,8 +131,8 @@ export async function dispatchAlerts(limit = 200) {
               method: 'POST',
               headers: {
                 'content-type': 'application/json',
-                'x-khma-timestamp': String(ts),
-                'x-khma-signature': `sha256=${signWebhook(p.webhookSecret, ts, body)}`,
+                'x-loudpilot-timestamp': String(ts),
+                'x-loudpilot-signature': `sha256=${signWebhook(p.webhookSecret, ts, body)}`,
               },
               body,
               signal: AbortSignal.timeout(10_000),

@@ -10,7 +10,7 @@ import { TOOLS, ToolError, toolList } from './tools'
 
 const VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']
 
-const INSTRUCTIONS = `Khma is an AI marketing agency platform for one company (the workspace this token belongs to).
+const INSTRUCTIONS = `Loudpilot is an AI marketing agency platform for one company (the workspace this token belongs to).
 Start with get_overview, then get_dossier to learn what the company sells and what worked before.
 Posts saved with create_post / write_post_with_ai are Planner drafts unless schedule=true; publish_post publishes immediately.
 Ad campaigns are read-only here (results via get_analytics). Goals and alerts are checked hourly; the weekly review arrives on Mondays.
@@ -42,12 +42,12 @@ export const CORS = {
 }
 
 export function unauthorized() {
-  return new Response(JSON.stringify(rpcError(null, -32001, 'Sign in to Khma: missing or invalid token')), {
+  return new Response(JSON.stringify(rpcError(null, -32001, 'Sign in to Loudpilot: missing or invalid token')), {
     status: 401,
     headers: {
       ...CORS,
       'content-type': 'application/json',
-      'www-authenticate': `Bearer realm="khma", resource_metadata="${appUrl()}/.well-known/oauth-protected-resource"`,
+      'www-authenticate': `Bearer realm="loudpilot", resource_metadata="${appUrl()}/.well-known/oauth-protected-resource"`,
     },
   })
 }
@@ -59,7 +59,7 @@ async function handle(c: NonNullable<Caller>, msg: Rpc) {
       return rpcResult(msg.id, {
         protocolVersion: VERSIONS.includes(asked) ? asked : VERSIONS[1],
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'khma', title: 'Khma', version: '1.0.0' },
+        serverInfo: { name: 'loudpilot', title: 'Loudpilot', version: '1.0.0' },
         instructions: `${INSTRUCTIONS}\nWorkspace: ${c.workspace.name}.`,
       })
     }
@@ -81,7 +81,7 @@ async function handle(c: NonNullable<Caller>, msg: Rpc) {
         return rpcResult(msg.id, { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: structured })
       } catch (e) {
         if (!(e instanceof ToolError)) console.error('mcp tool failed', name, e)
-        const text = e instanceof ToolError ? e.message : 'Something went wrong in Khma — please try again.'
+        const text = e instanceof ToolError ? e.message : 'Something went wrong in Loudpilot — please try again.'
         return rpcResult(msg.id, { isError: true, content: [{ type: 'text', text }] })
       }
     }

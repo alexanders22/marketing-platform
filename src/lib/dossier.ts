@@ -6,7 +6,7 @@ import { prisma } from './prisma'
 import { safeFetchText } from './safe-fetch'
 import { isValidTimeZone } from './time'
 
-// The dossier: what Khma knows about a company — its website, its post and
+// The dossier: what Loudpilot knows about a company — its website, its post and
 // ad history, and the audit of what worked. Every AI feature reads it.
 
 /* ─── Website ──────────────────────────────────────────────────────────── */

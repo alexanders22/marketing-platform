@@ -32,9 +32,9 @@ export async function requestMagicLink(_: FormState, form: FormData): Promise<Fo
   try {
     await sendMail(
       email,
-      'Your Khma sign-in link',
-      `Sign in to Khma: ${link}\n\n${footer}`,
-      actionEmail('Click the button below to sign in to Khma.', 'Sign in', link, footer),
+      'Your Loudpilot sign-in link',
+      `Sign in to Loudpilot: ${link}\n\n${footer}`,
+      actionEmail('Click the button below to sign in to Loudpilot.', 'Sign in', link, footer),
     )
   } catch (e) {
     console.error('magic link mail failed', e)
@@ -171,9 +171,9 @@ export async function requestPasswordReset(_: FormState, form: FormData): Promis
     // keeps response time from revealing who has an account.
     sendMail(
       email,
-      'Reset your Khma password',
-      `Set a new Khma password: ${link}\n\n${footer}`,
-      actionEmail('Click the button below to choose a new password for your Khma account.', 'Set new password', link, footer),
+      'Reset your Loudpilot password',
+      `Set a new Loudpilot password: ${link}\n\n${footer}`,
+      actionEmail('Click the button below to choose a new password for your Loudpilot account.', 'Set new password', link, footer),
     ).catch((e) => console.error('reset mail failed', e))
   }
   return { sent: email }

@@ -10,7 +10,7 @@ import { resultLabel } from '@/lib/meta-ads'
 import { prisma } from '@/lib/prisma'
 import { dayIn, isValidTimeZone } from '@/lib/time'
 
-export const metadata: Metadata = { title: 'Ad campaign — Khma' }
+export const metadata: Metadata = { title: 'Ad campaign — Loudpilot' }
 
 const shift = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
 const ratio = (a: number, b: number) => (b > 0 ? a / b : null)

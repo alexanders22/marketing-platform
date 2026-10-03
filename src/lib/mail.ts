@@ -53,7 +53,7 @@ export async function sendMail(to: string, subject: string, text: string, html: 
     // The sender must be verified with the provider (SendGrid single sender).
     from:
       process.env.SMTP_FROM ||
-      (process.env.SENDGRID_FROM ? `Khma <${process.env.SENDGRID_FROM}>` : 'Khma <no-reply@khma.local>'),
+      (process.env.SENDGRID_FROM ? `Loudpilot <${process.env.SENDGRID_FROM}>` : 'Loudpilot <no-reply@loudpilot.local>'),
     to,
     subject,
     text,
@@ -64,7 +64,7 @@ export async function sendMail(to: string, subject: string, text: string, html: 
 // Shared look for transactional emails: one message, one button.
 export function actionEmail(intro: string, button: string, link: string, footer: string) {
   return `<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#18181b">
-<p style="font-size:18px;font-weight:600;margin:0 0 12px">Khma</p>
+<p style="font-size:18px;font-weight:600;margin:0 0 12px">Loudpilot</p>
 <p style="font-size:15px;line-height:1.5;margin:0 0 20px">${intro}</p>
 <p style="margin:0 0 20px"><a href="${link}" style="display:inline-block;padding:11px 20px;background:#18181b;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">${button}</a></p>
 <p style="font-size:13px;color:#71717a;line-height:1.5;margin:0">${footer}</p>

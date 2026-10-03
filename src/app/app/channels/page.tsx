@@ -7,7 +7,7 @@ import { metaEnabled } from '@/lib/meta'
 import { prisma } from '@/lib/prisma'
 import { DisconnectButton } from './DisconnectButton'
 
-export const metadata: Metadata = { title: 'Channels — Khma' }
+export const metadata: Metadata = { title: 'Channels — Loudpilot' }
 
 const META = {
   FACEBOOK: { label: 'Facebook Page', icon: SiFacebook, color: '#1877F2' },
@@ -49,7 +49,7 @@ export default async function ChannelsPage({ searchParams }: PageProps<'/app/cha
 
   return (
     <>
-      <PageHeader title="Channels" sub="Connect the pages and ad accounts Khma publishes to and reads results from." />
+      <PageHeader title="Channels" sub="Connect the pages and ad accounts Loudpilot publishes to and reads results from." />
 
       {connected > 0 && (
         <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">

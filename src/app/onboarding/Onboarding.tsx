@@ -93,7 +93,7 @@ export function Onboarding() {
           {step === 'source' && (
             <>
               <Header icon={Store} tint="bg-sky-50 text-sky-600" title="Let's understand your brand">
-                Import your website and Khma will build your brand — or enter the essentials manually.
+                Import your website and Loudpilot will build your brand — or enter the essentials manually.
               </Header>
               <div className="mx-auto mt-8 max-w-xl">
                 <div className="grid grid-cols-2 rounded-lg bg-zinc-100 p-1 text-sm">
@@ -152,7 +152,7 @@ export function Onboarding() {
           {step === 'analyzing' && (
             <>
               <Header icon={Palette} tint="bg-violet-50 text-violet-600" title="Analyzing your brand…">
-                Khma is gathering the brand details it can find on your website.
+                Loudpilot is gathering the brand details it can find on your website.
               </Header>
               <ul className="mx-auto mt-8 max-w-md space-y-3">
                 {CHECKS.map((c, i) => (

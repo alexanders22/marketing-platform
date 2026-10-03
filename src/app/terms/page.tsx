@@ -5,8 +5,8 @@ import { LEGAL, operator } from "@/lib/legal";
 import { TRIAL_CREDITS, TRIAL_DAYS } from "@/lib/plans";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — Khma",
-  description: "The rules for using Khma: accounts, credits, content, connected platforms and liability.",
+  title: "Terms of Service — Loudpilot",
+  description: "The rules for using Loudpilot: accounts, credits, content, connected platforms and liability.",
 };
 
 export default function TermsPage() {
@@ -14,14 +14,14 @@ export default function TermsPage() {
   return (
     <LegalPage title="Terms of Service" updated={LEGAL.updated}>
       <p>
-        These terms are an agreement between you and {operator()} (&ldquo;Khma&rdquo;, &ldquo;we&rdquo;) for the use
-        of {LEGAL.site}, the Khma apps and the Khma API (the &ldquo;Service&rdquo;). By creating an account or using the
+        These terms are an agreement between you and {operator()} (&ldquo;Loudpilot&rdquo;, &ldquo;we&rdquo;) for the use
+        of {LEGAL.site}, the Loudpilot apps and the Loudpilot API (the &ldquo;Service&rdquo;). By creating an account or using the
         Service you accept them. If you accept on behalf of a company, you confirm you may bind it.
       </p>
 
       <h2>1. The Service</h2>
       <p>
-        Khma helps you plan, create, publish and measure marketing: AI-written posts and articles, visuals, campaigns,
+        Loudpilot helps you plan, create, publish and measure marketing: AI-written posts and articles, visuals, campaigns,
         bio pages, and — on the accounts you connect — publishing, ads, analytics, forecasts and recommendations.
         Features marked &ldquo;Soon&rdquo; are not yet available. We may change or improve features over time.
       </p>
@@ -52,22 +52,22 @@ export default function TermsPage() {
           we will restore the credits or refund you. This does not limit any rights you have under consumer law.
         </li>
         <li>
-          Ad spend is paid by you directly to the ad platform (for example Meta) under its own terms. Khma never holds
+          Ad spend is paid by you directly to the ad platform (for example Meta) under its own terms. Loudpilot never holds
           your ad budget.
         </li>
       </ul>
 
       <h2>4. Partner accounts</h2>
       <p>
-        Some customers use Khma inside a partner product. The partner may create your workspace and show your balance
-        and activity in its product. Your account with Khma is still governed by these terms; your relationship with
+        Some customers use Loudpilot inside a partner product. The partner may create your workspace and show your balance
+        and activity in its product. Your account with Loudpilot is still governed by these terms; your relationship with
         the partner is governed by the partner&apos;s terms.
       </p>
 
       <h2>5. Your content</h2>
       <ul>
         <li>
-          You own the content you upload and the content Khma generates for you. You give us a licence to store,
+          You own the content you upload and the content Loudpilot generates for you. You give us a licence to store,
           process and publish it only as needed to run the Service for you.
         </li>
         <li>
@@ -84,9 +84,9 @@ export default function TermsPage() {
 
       <h2>6. Connected platforms</h2>
       <p>
-        When you connect Facebook, Instagram or another network, you authorise Khma to act on that account within the
+        When you connect Facebook, Instagram or another network, you authorise Loudpilot to act on that account within the
         permissions you grant. You must follow that platform&apos;s terms and advertising policies. You can disconnect
-        at any time in Khma or in the platform&apos;s own settings. We are not responsible for the platforms
+        at any time in Loudpilot or in the platform&apos;s own settings. We are not responsible for the platforms
         themselves, their outages, rejections or policy decisions.
       </p>
 
@@ -104,7 +104,7 @@ export default function TermsPage() {
       <h2>8. API</h2>
       <p>
         API keys are confidential. Partners are responsible for requests made with their keys and for the workspaces
-        they create, and must have their own users&apos; consent to share data with Khma.
+        they create, and must have their own users&apos; consent to share data with Loudpilot.
       </p>
 
       <h2>9. Availability</h2>

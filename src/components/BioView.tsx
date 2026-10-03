@@ -92,7 +92,7 @@ export function BioView({
             })}
         </div>
         <Link href="/" className="mt-12 text-xs opacity-60 hover:opacity-100">
-          Made with Khma
+          Made with Loudpilot
         </Link>
       </div>
     </div>

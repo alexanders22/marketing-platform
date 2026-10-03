@@ -13,7 +13,7 @@ import {
 import { accountExpiredAlert, raiseAlert } from './alerts'
 import { prisma } from './prisma'
 
-// Networks Khma can publish to today.
+// Networks Loudpilot can publish to today.
 export const PUBLISHABLE = ['FACEBOOK', 'INSTAGRAM'] as const
 
 // A scheduled post more than this late (server down) is not sent on its own.

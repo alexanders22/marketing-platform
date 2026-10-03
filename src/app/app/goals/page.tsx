@@ -10,7 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { GoalForm } from './GoalForm'
 import { GoalRowActions } from './GoalRowActions'
 
-export const metadata: Metadata = { title: 'Goals — Khma' }
+export const metadata: Metadata = { title: 'Goals — Loudpilot' }
 
 const STATUS = {
   ON_TRACK: { label: 'On track', dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700', bar: 'bg-emerald-500' },
@@ -45,7 +45,7 @@ export default async function GoalsPage() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="mr-auto">
           <h1 className="text-2xl font-semibold tracking-tight">Goals</h1>
-          <p className="text-sm text-zinc-500">Set the numbers that matter. Khma checks them every hour and alerts you when they slip.</p>
+          <p className="text-sm text-zinc-500">Set the numbers that matter. Loudpilot checks them every hour and alerts you when they slip.</p>
         </div>
         {canEdit && (ads > 0 || posts > 0) && <GoalForm campaigns={campaigns} currency={currency} hasAds={ads > 0} hasPosts={posts > 0} />}
       </div>

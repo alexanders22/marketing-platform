@@ -9,7 +9,7 @@ import { TOOLS } from '@/lib/mcp/tools'
 import { prisma } from '@/lib/prisma'
 import { NewToken, RevokeButton } from './TokenControls'
 
-export const metadata: Metadata = { title: 'AI assistants (MCP) — Khma' }
+export const metadata: Metadata = { title: 'AI assistants (MCP) — Loudpilot' }
 
 const RANGES = {
   '1h': { label: '1H', ms: 3_600_000, buckets: 12 },
@@ -55,7 +55,7 @@ export default async function McpPage({ searchParams }: PageProps<'/app/mcp'>) {
           <Bot size={22} /> AI assistants (MCP)
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Work with Khma from Claude, ChatGPT, Cursor, VS Code or Codex: “How did last week go?”, “Plan November for more leads”, “Write
+          Work with Loudpilot from Claude, ChatGPT, Cursor, VS Code or Codex: “How did last week go?”, “Plan November for more leads”, “Write
           three posts like our best reel”. They act as you, in <b className="font-medium text-zinc-700">{workspace.name}</b>.
         </p>
       </div>
@@ -107,7 +107,7 @@ export default async function McpPage({ searchParams }: PageProps<'/app/mcp'>) {
           <Plug size={17} className="text-zinc-500" /> Connect
         </h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Server URL <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-800">{url}</code>. Apps that support sign-in open Khma in your
+          Server URL <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-800">{url}</code>. Apps that support sign-in open Loudpilot in your
           browser — you pick the company and press Allow. For the others, create a personal token below.
         </p>
         <CodeBlock
@@ -115,21 +115,21 @@ export default async function McpPage({ searchParams }: PageProps<'/app/mcp'>) {
             { label: 'Claude Code', code: `claude mcp add --transport http khma ${url}\n# then run /mcp in Claude Code and choose "Authenticate"` },
             {
               label: 'Claude Desktop / Web',
-              code: `Settings → Connectors → Add custom connector\nName: Khma\nURL:  ${url}\nThen press Connect and allow access in the Khma window.`,
+              code: `Settings → Connectors → Add custom connector\nName: Loudpilot\nURL:  ${url}\nThen press Connect and allow access in the Loudpilot window.`,
             },
             {
               label: 'ChatGPT',
-              code: `Settings → Apps & Connectors → Advanced → Developer mode on\nCreate → Name: Khma, MCP server URL: ${url}\nAuthentication: OAuth → Create, then sign in to Khma.`,
+              code: `Settings → Apps & Connectors → Advanced → Developer mode on\nCreate → Name: Loudpilot, MCP server URL: ${url}\nAuthentication: OAuth → Create, then sign in to Loudpilot.`,
             },
             {
               label: 'Codex',
-              code: `# ~/.codex/config.toml\n[mcp_servers.khma]\nurl = "${url}"\nbearer_token_env_var = "KHMA_TOKEN"\n\n# then: export KHMA_TOKEN=khma_pat_…  (a personal token)`,
+              code: `# ~/.codex/config.toml\n[mcp_servers.khma]\nurl = "${url}"\nbearer_token_env_var = "KHMA_TOKEN"\n\n# then: export KHMA_TOKEN=lp_pat_…  (a personal token)`,
             },
             { label: 'Cursor', code: JSON.stringify({ mcpServers: { khma: { url } } }, null, 2) + '\n// ~/.cursor/mcp.json — Cursor asks you to sign in' },
             { label: 'VS Code', code: JSON.stringify({ servers: { khma: { type: 'http', url } } }, null, 2) + '\n// .vscode/mcp.json — VS Code asks you to sign in' },
             {
               label: 'JSON with token',
-              code: JSON.stringify({ mcpServers: { khma: { type: 'http', url, headers: { Authorization: 'Bearer khma_pat_…' } } } }, null, 2),
+              code: JSON.stringify({ mcpServers: { khma: { type: 'http', url, headers: { Authorization: 'Bearer lp_pat_…' } } } }, null, 2),
             },
           ]}
         />

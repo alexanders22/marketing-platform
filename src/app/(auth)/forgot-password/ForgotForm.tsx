@@ -16,7 +16,7 @@ export function ForgotForm() {
         </span>
         <h1 className="mt-4 text-lg font-semibold">Check your inbox</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          If <span className="font-medium text-zinc-800">{state.sent}</span> has a Khma account, we sent a link to set a
+          If <span className="font-medium text-zinc-800">{state.sent}</span> has a Loudpilot account, we sent a link to set a
           new password. It expires in 30 minutes.
         </p>
         <Link href="/login" className="mt-5 inline-block text-sm font-medium hover:underline">

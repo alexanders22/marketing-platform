@@ -7,7 +7,7 @@ import { PUBLISHABLE } from '@/lib/publisher'
 import { mediaUrl } from '@/lib/storage'
 import { PostEditor } from '../PostEditor'
 
-export const metadata: Metadata = { title: 'Edit post — Khma' }
+export const metadata: Metadata = { title: 'Edit post — Loudpilot' }
 
 export default async function EditPostPage({ params }: PageProps<'/app/posts/[id]'>) {
   const { workspace, brand } = await requireContext()

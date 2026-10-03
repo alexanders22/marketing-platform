@@ -1,7 +1,7 @@
 import { forgetMetaUser } from '@/lib/meta-cleanup'
 import { metaEnabled, parseSignedRequest } from '@/lib/meta'
 
-// Meta calls this when someone removes the Khma app from their account.
+// Meta calls this when someone removes the Loudpilot app from their account.
 export async function POST(req: Request) {
   if (!metaEnabled()) return new Response('Not configured', { status: 404 })
   const form = await req.formData().catch(() => null)

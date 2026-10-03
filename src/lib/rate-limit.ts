@@ -1,6 +1,6 @@
 import 'server-only'
 
-// Fixed-window failure counter kept in memory. Khma runs as a single process
+// Fixed-window failure counter kept in memory. Loudpilot runs as a single process
 // (PM2), so this is enough for login throttling; move it to Redis or the DB
 // if the app is ever scaled to several instances.
 const buckets = new Map<string, { count: number; resetAt: number }>()

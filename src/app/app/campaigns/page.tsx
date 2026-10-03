@@ -6,7 +6,7 @@ import { LocalTime } from '@/components/LocalTime'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 
-export const metadata: Metadata = { title: 'Campaigns — Khma' }
+export const metadata: Metadata = { title: 'Campaigns — Loudpilot' }
 
 // Shown in the viewer's time zone, like the campaign page and the Planner.
 const fmt = (d: Date) => <LocalTime iso={d.toISOString()} options={{ day: 'numeric', month: 'short' }} />
@@ -37,7 +37,7 @@ export default async function CampaignsPage() {
       {campaigns.length === 0 ? (
         <div className="rounded-xl border border-zinc-200">
           <EmptyState icon={Target} title="No campaigns yet">
-            Describe your goal once and Khma plans the posts across the weeks you choose — then drops them into your
+            Describe your goal once and Loudpilot plans the posts across the weeks you choose — then drops them into your
             Planner.
           </EmptyState>
         </div>

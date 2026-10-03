@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { mediaUrl } from '@/lib/storage'
 import { CampaignView } from './CampaignView'
 
-export const metadata: Metadata = { title: 'Campaign — Khma' }
+export const metadata: Metadata = { title: 'Campaign — Loudpilot' }
 
 export default async function CampaignPage({ params }: PageProps<'/app/campaigns/[id]'>) {
   const { workspace } = await requireContext()

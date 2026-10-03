@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { requireContext } from '@/lib/context'
 import { BrandSettings } from './BrandSettings'
 
-export const metadata: Metadata = { title: 'Brand settings — Khma' }
+export const metadata: Metadata = { title: 'Brand settings — Loudpilot' }
 
 export default async function BrandPage() {
   const { workspace, brand } = await requireContext()

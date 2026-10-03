@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { mediaUrl } from '@/lib/storage'
 import { Planner, type PlannerPost } from './Planner'
 
-export const metadata: Metadata = { title: 'Planner — Khma' }
+export const metadata: Metadata = { title: 'Planner — Loudpilot' }
 
 export default async function PlannerPage({ searchParams }: PageProps<'/app/planner'>) {
   const { workspace } = await requireContext()

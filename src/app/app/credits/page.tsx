@@ -6,7 +6,7 @@ import { requireContext } from '@/lib/context'
 import { PLANS } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 
-export const metadata: Metadata = { title: 'Plan & credits — Khma' }
+export const metadata: Metadata = { title: 'Plan & credits — Loudpilot' }
 
 const REASON: Record<string, string> = {
   PURCHASE: 'Top-up',

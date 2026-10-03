@@ -43,7 +43,7 @@ export function BrandEditor({
         </div>
       </Block>
 
-      <Block title="Description" hint="Give Khma useful context about what your brand does and who it serves.">
+      <Block title="Description" hint="Give Loudpilot useful context about what your brand does and who it serves.">
         <textarea
           aria-label="Description"
           className={`${inputCls} min-h-28 resize-y`}
@@ -75,7 +75,7 @@ export function BrandEditor({
         </div>
       </Block>
 
-      <Block title="Color palette" hint="Add the colors Khma should use when creating for this brand.">
+      <Block title="Color palette" hint="Add the colors Loudpilot should use when creating for this brand.">
         <div className="flex flex-wrap items-center gap-3">
           {value.colors.map((c, i) => (
             <span key={i} className="group relative">
