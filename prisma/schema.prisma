@@ -161,6 +161,8 @@ model Workspace {
   socialPosts      SocialPost[]
   brandAudits      BrandAudit[]
   strategyPlans    StrategyPlan[]
+  weeklyReviews    WeeklyReview[]
+  recommendations  Recommendation[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -751,4 +753,58 @@ model StrategyPlan {
   updatedAt   DateTime   @updatedAt
 
   @@index([workspaceId, createdAt])
+}
+
+// ─── Weekly review ───────────────────────────────────────────────────────────
+
+// Monday's look back at the last seven days, written by the AI from the
+// numbers in `stats`.
+model WeeklyReview {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // YYYY-MM-DD in the workspace's time zone.
+  weekStart   String
+  weekEnd     String
+  stats       Json
+  // headline, summary, wins, issues
+  data        Json
+  createdAt   DateTime  @default(now())
+
+  recommendations Recommendation[]
+
+  @@index([workspaceId, weekEnd])
+}
+
+enum RecommendationStatus {
+  OPEN
+  APPLIED
+  DISMISSED
+  // Replaced by a newer review before anyone acted on it.
+  EXPIRED
+}
+
+// One concrete next step. Some apply themselves (a post becomes a Planner
+// draft, a goal starts being watched); the rest are steps the owner does
+// and marks done.
+model Recommendation {
+  id          String               @id @default(cuid())
+  workspaceId String
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  reviewId    String
+  review      WeeklyReview         @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  // post, repeat, goal, budget, creative, pause, other
+  kind        String
+  title       String
+  why         String
+  // high, medium, low
+  impact      String
+  payload     Json
+  status      RecommendationStatus @default(OPEN)
+  // Post or goal it became.
+  appliedRef  String?
+  decidedAt   DateTime?
+  createdAt   DateTime             @default(now())
+
+  @@index([workspaceId, status])
 }

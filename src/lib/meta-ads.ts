@@ -201,6 +201,8 @@ export async function syncAdsDue(now = new Date(), limit = 20) {
       network: 'META_ADS',
       status: 'ACTIVE',
       OR: [{ syncedAt: null }, { syncedAt: { lt: new Date(now.getTime() - 60 * 60 * 1000) } }],
+      // After a failure, wait 15 minutes before trying again.
+      NOT: { lastError: { not: null }, updatedAt: { gt: new Date(now.getTime() - 15 * 60 * 1000) } },
     },
     orderBy: { syncedAt: { sort: 'asc', nulls: 'first' } },
     take: limit,

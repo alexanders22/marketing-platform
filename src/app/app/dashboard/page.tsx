@@ -76,9 +76,10 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
   const d = await dashboard(workspace.id, period)
   const last = await prisma.aiSummary.findFirst({ where: { workspaceId: workspace.id, periodDays: period }, orderBy: { createdAt: 'desc' } })
   const summary = last ? (JSON.parse(last.text) as PerformanceSummary) : null
-  const [goals, openAlerts] = await Promise.all([
+  const [goals, openAlerts, openRecs] = await Promise.all([
     prisma.goal.findMany({ where: { workspaceId: workspace.id, active: true, adCampaignId: { not: null } }, select: { adCampaignId: true, status: true } }),
     prisma.alert.count({ where: { workspaceId: workspace.id, readAt: null, severity: { in: ['CRITICAL', 'WARNING'] } } }),
+    prisma.recommendation.count({ where: { workspaceId: workspace.id, status: 'OPEN' } }),
   ])
   // Worst goal status per campaign.
   const RANK = { OFF_TRACK: 3, AT_RISK: 2, ON_TRACK: 1, NO_DATA: 0 } as const
@@ -141,6 +142,13 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
               <span className="h-2 w-2 rounded-full bg-red-500" />
               {openAlerts} alert{openAlerts === 1 ? '' : 's'} need{openAlerts === 1 ? 's' : ''} your attention
               <span className="ml-auto font-medium">View →</span>
+            </Link>
+          )}
+          {openRecs > 0 && (
+            <Link href="/app/weekly" className="flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 hover:bg-indigo-100">
+              <span className="h-2 w-2 rounded-full bg-indigo-500" />
+              {openRecs} recommendation{openRecs === 1 ? '' : 's'} from this week&apos;s review
+              <span className="ml-auto font-medium">Review →</span>
             </Link>
           )}
           <SummaryCard period={period} initial={summary} createdAt={last?.createdAt.toISOString() ?? null} />

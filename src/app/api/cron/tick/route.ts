@@ -5,6 +5,7 @@ import { dispatchAlerts } from '@/lib/alerts'
 import { refreshDossiersDue } from '@/lib/dossier'
 import { checkAllGoals } from '@/lib/goals'
 import { syncAdsDue } from '@/lib/meta-ads'
+import { reviewsDue } from '@/lib/weekly'
 import { publishDue, refreshInsights } from '@/lib/publisher'
 
 // Background work, called every minute by src/instrumentation.ts (or any
@@ -35,13 +36,17 @@ export async function POST(req: Request) {
     lastGoals = Date.now()
     goals = await checkAllGoals()
   }
-  // Post history and audit: weekly per workspace, a few per hour. Slow (AI),
+  // Post history and audit, and Monday reviews: a few per hour. Slow (AI),
   // so it runs after the response and never holds up publishing.
   let dossiers = false
   if (Date.now() - lastDossiers > 60 * 60 * 1000) {
     lastDossiers = Date.now()
     dossiers = true
-    after(() => refreshDossiersDue().catch((e) => console.error('dossiers failed', e)))
+    after(async () => {
+      await refreshDossiersDue().catch((e) => console.error('dossiers failed', e))
+      // Monday reviews, after the dossiers are fresh.
+      await reviewsDue().catch((e) => console.error('reviews failed', e))
+    })
   }
   const alerts = await dispatchAlerts()
   return Response.json({ published, insights, ads, goals, dossiers, alerts })

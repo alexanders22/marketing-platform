@@ -471,3 +471,105 @@ export async function generateStrategy(brandName: string, brand: Brand | null, b
     risks: arr<unknown>(out?.risks, 3).map((x) => str(x, 300)),
   }
 }
+
+// ─── Weekly review ─────────────────────────────────────────────────────────
+
+export type ReviewRec = {
+  kind: 'post' | 'repeat' | 'goal' | 'budget' | 'creative' | 'pause' | 'other'
+  title: string
+  why: string
+  impact: 'high' | 'medium' | 'low'
+  campaign?: string
+  amountPerDay?: number
+  steps?: string[]
+  creative?: { headline: string; primaryText: string; visual: string }
+  post?: { date: string; time: string; network: string; format: string; caption: string; hashtags: string[]; visual: string }
+  goal?: { scope: 'ADS' | 'POSTS'; network?: string | null; metric: string; target: number; windowDays: number }
+}
+
+export type ReviewDraft = {
+  headline: string
+  summary: string
+  wins: { text: string; evidence: string }[]
+  issues: { text: string; evidence: string }[]
+  recommendations: ReviewRec[]
+}
+
+// The agency's Monday meeting: what happened last week, why, and the next
+// concrete steps.
+export async function weeklyReview(brandName: string, brand: Brand | null, facts: unknown, language: PostOptions['language']): Promise<ReviewDraft> {
+  const system = [
+    'You are the account lead of a social media and performance agency writing the client’s Monday review of the last 7 days.',
+    'Rules:',
+    '- Use only the numbers given; cite them as evidence. Compare with the week before. Explain likely causes in plain words.',
+    '- If there was no activity, say so and make getting started the first recommendation.',
+    '- 3–7 recommendations, most valuable first, each specific enough to act on today. Kinds:',
+    '  "post": a ready post for the next 7 days {"post":{"date","time","network":"FACEBOOK"|"INSTAGRAM","format","caption","hashtags":[],"visual"}}; use the formats, days and times that worked.',
+    '  "repeat": like "post" but a new take on one of last week’s best posts — name it in "why".',
+    '  "goal": a target worth watching {"goal":{"scope":"ADS"|"POSTS","network":null|"FACEBOOK"|"INSTAGRAM","metric": one of cost_per_result, results, ctr, cpm, spend, posts, reach, avg_reach, engagements, engagement_rate, views,"target","windowDays":7|30}} — only if no existing goal covers it.',
+    '  "budget": move or change daily budget {"campaign": exact campaign name,"amountPerDay","steps":[]}.',
+    '  "creative": refresh a tired ad {"campaign","creative":{"headline","primaryText","visual"},"steps":[]}.',
+    '  "pause": stop a campaign or ad wasting money {"campaign","steps":[]}.',
+    '  "other": anything else {"steps":[]}.',
+    '- Campaign names must match the facts exactly. Never invent offers, prices or results. Respect "Never repeat" from the dossier.',
+    brandContext(brandName, brand),
+    `Write in ${language}.`,
+    'Return JSON {"headline": one sentence, "summary": 3-4 sentences, "wins": [{"text","evidence"}] 0-3, "issues": [{"text","evidence"}] 0-3, "recommendations": [{"kind","title","why","impact": "high"|"medium"|"low", ...kind fields}]}.',
+  ].join('\n\n')
+  const out = await json<Partial<ReviewDraft>>(system, `Facts:\n${JSON.stringify(facts)}`, 9000, 120_000)
+  const str = (v: unknown, n = 500) => String(v ?? '').slice(0, n)
+  const items = (v: unknown, n: number) =>
+    (Array.isArray(v) ? v : [])
+      .slice(0, n)
+      .map((x) => ({ text: str(x?.text, 400), evidence: str(x?.evidence, 400) }))
+      .filter((x) => x.text)
+  const kinds = ['post', 'repeat', 'goal', 'budget', 'creative', 'pause', 'other']
+  return {
+    headline: str(out?.headline, 300),
+    summary: str(out?.summary, 1500),
+    wins: items(out?.wins, 3),
+    issues: items(out?.issues, 3),
+    recommendations: (Array.isArray(out?.recommendations) ? out.recommendations : []).slice(0, 7).flatMap((r): ReviewRec[] => {
+      if (!r || !kinds.includes(String(r.kind)) || !r.title) return []
+      return [
+        {
+          kind: r.kind as ReviewRec['kind'],
+          title: str(r.title, 200),
+          why: str(r.why, 600),
+          impact: (['high', 'medium', 'low'].includes(String(r.impact)) ? r.impact : 'medium') as ReviewRec['impact'],
+          ...(r.campaign ? { campaign: str(r.campaign, 200) } : {}),
+          ...(Number.isFinite(Number(r.amountPerDay)) && Number(r.amountPerDay) > 0 ? { amountPerDay: Number(r.amountPerDay) } : {}),
+          ...(Array.isArray(r.steps) ? { steps: r.steps.slice(0, 6).map((x) => str(x, 300)) } : {}),
+          ...(r.creative ? { creative: { headline: str(r.creative.headline, 120), primaryText: str(r.creative.primaryText, 1200), visual: str(r.creative.visual, 400) } } : {}),
+          ...(r.post
+            ? {
+                post: {
+                  date: str(r.post.date, 10),
+                  time: /^\d{2}:\d{2}$/.test(String(r.post.time)) ? String(r.post.time) : '10:00',
+                  network: r.post.network === 'FACEBOOK' ? 'FACEBOOK' : 'INSTAGRAM',
+                  format: str(r.post.format, 30),
+                  caption: str(r.post.caption, 2200).trim(),
+                  hashtags: (Array.isArray(r.post.hashtags) ? r.post.hashtags : [])
+                    .map((h) => String(h).replace(/[^\p{L}\p{N}_]/gu, ''))
+                    .filter((h) => h.length > 0 && h.length <= 60)
+                    .slice(0, 8),
+                  visual: str(r.post.visual, 400),
+                },
+              }
+            : {}),
+          ...(r.goal
+            ? {
+                goal: {
+                  scope: r.goal.scope === 'POSTS' ? 'POSTS' : 'ADS',
+                  network: r.goal.network === 'FACEBOOK' || r.goal.network === 'INSTAGRAM' ? r.goal.network : null,
+                  metric: str(r.goal.metric, 40),
+                  target: Number(r.goal.target) || 0,
+                  windowDays: r.goal.windowDays === 30 ? 30 : 7,
+                },
+              }
+            : {}),
+        },
+      ]
+    }),
+  }
+}

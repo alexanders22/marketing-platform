@@ -17,6 +17,7 @@ import {
   Inbox,
   LayoutDashboard,
   LayoutTemplate,
+  ListChecks,
   Link2,
   LogOut,
   Menu,
@@ -36,6 +37,7 @@ import { logout } from '../(auth)/actions'
 
 const NAV = [
   { href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/app/weekly', label: 'This week', icon: ListChecks },
   { href: '/app/strategy', label: 'Strategy', icon: Compass },
   { href: '/app/dossier', label: 'Dossier', icon: BookUser },
   { href: '/app/goals', label: 'Goals', icon: Flag },
@@ -56,6 +58,8 @@ export type SidebarProps = {
   planLabel: string
   // Unread alerts.
   alerts: number
+  // Open recommendations of the latest weekly review.
+  recommendations: number
 }
 
 export function AppSidebar(props: SidebarProps) {
@@ -98,7 +102,7 @@ export function AppSidebar(props: SidebarProps) {
   )
 }
 
-function SidebarBody({ workspace, logoUrl, user, credits, planLabel, alerts, path }: SidebarProps & { path: string }) {
+function SidebarBody({ workspace, logoUrl, user, credits, planLabel, alerts, recommendations, path }: SidebarProps & { path: string }) {
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <WorkspaceMenu workspace={workspace} logoUrl={logoUrl} user={user} />
@@ -118,6 +122,11 @@ function SidebarBody({ workspace, logoUrl, user, credits, planLabel, alerts, pat
             >
               <n.icon size={18} />
               {n.label}
+              {n.href === '/app/weekly' && recommendations > 0 && (
+                <span className="ml-auto rounded-full bg-indigo-600 px-1.5 py-px text-[11px] font-semibold text-white" aria-label={`${recommendations} open recommendations`}>
+                  {recommendations}
+                </span>
+              )}
               {n.href === '/app/alerts' && alerts > 0 && (
                 <span className="ml-auto rounded-full bg-red-500 px-1.5 py-px text-[11px] font-semibold text-white" aria-label={`${alerts} unread`}>
                   {alerts > 99 ? '99+' : alerts}

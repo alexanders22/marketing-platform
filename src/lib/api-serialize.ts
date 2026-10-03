@@ -1,4 +1,4 @@
-import type { Alert, Goal, SocialAccount } from '@prisma/client'
+import type { Alert, Goal, Recommendation, SocialAccount } from '@prisma/client'
 import { alertPayload } from './alerts'
 import { metricDef } from './goal-metrics'
 
@@ -35,3 +35,14 @@ export function goalJson(g: Goal) {
 }
 
 export const alertJson = (a: Alert) => ({ ...alertPayload(a), read: a.readAt !== null, goalId: a.goalId })
+
+export const recommendationJson = (r: Recommendation) => ({
+  id: r.id,
+  kind: r.kind,
+  title: r.title,
+  why: r.why,
+  impact: r.impact,
+  status: r.status.toLowerCase(),
+  details: r.payload,
+  appliedRef: r.appliedRef,
+})

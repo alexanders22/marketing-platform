@@ -94,11 +94,16 @@ function localParts(d: Date, tz: string) {
   return { weekday: p.weekday as string, hour: Number(p.hour) }
 }
 
-export async function computeStats(workspaceId: string, now = new Date()) {
+// The ad account's zone if there is one, else a guess from the locale.
+export async function workspaceTimeZone(workspaceId: string) {
   const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { locale: true } })
   const adAcc = await prisma.socialAccount.findFirst({ where: { workspaceId, network: 'META_ADS' }, select: { meta: true } })
   const tzRaw = (adAcc?.meta as { timeZone?: string } | null)?.timeZone
-  const tz = tzRaw && isValidTimeZone(tzRaw) ? tzRaw : ws.locale === 'ka' ? 'Asia/Tbilisi' : 'UTC'
+  return tzRaw && isValidTimeZone(tzRaw) ? tzRaw : ws.locale === 'ka' ? 'Asia/Tbilisi' : 'UTC'
+}
+
+export async function computeStats(workspaceId: string, now = new Date()) {
+  const tz = await workspaceTimeZone(workspaceId)
 
   // Posts younger than two days are still collecting reach.
   const posts = await prisma.socialPost.findMany({

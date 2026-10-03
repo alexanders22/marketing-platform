@@ -38,6 +38,7 @@ const NAV: { title: string; items: { id: string; label: string }[] }[] = [
       { id: 'analytics', label: 'Analytics' },
       { id: 'goals', label: 'Goals' },
       { id: 'alerts', label: 'Alerts' },
+      { id: 'weekly', label: 'Weekly review' },
     ],
   },
   {
@@ -564,6 +565,7 @@ export default function DocsPage() {
                 ['campaign_issues', 'critical', 'Some ads stopped delivering.'],
                 ['account_disconnected', 'critical', 'Khma lost access to a page or ad account — send a new connect link.'],
                 ['post_failed', 'warning / critical', 'A post failed on some or all accounts.'],
+                ['weekly_review', 'info', 'The Monday review is ready — fetch it from /reviews/latest.'],
               ]}
             />
             <Endpoint method="GET" path="/workspaces/{externalId}/alerts?unread=true">
@@ -592,6 +594,63 @@ export default function DocsPage() {
                 Marks alerts read — the ones in <code>ids</code>, or all unread ones if you send <code>{'{}'}</code>.
               </p>
             </Endpoint>
+          </Section>
+
+          <Section id="weekly" title="Weekly review">
+            <p>
+              Every Monday (from 07:00 in the workspace&apos;s time zone) Khma reviews the last Monday–Sunday: ads, posts, goals and
+              alerts against the week before, with the company dossier in mind. You get a <code>weekly_review</code> alert, then fetch
+              the review and show its recommendations in your app.
+            </p>
+            <Params
+              title="Recommendation kind"
+              rows={[
+                ['post', 'applies itself', 'A ready post for the coming week — becomes a Planner draft.'],
+                ['repeat', 'applies itself', 'A new take on a recent best post — becomes a Planner draft.'],
+                ['goal', 'applies itself', 'A target worth watching — becomes a goal.'],
+                ['budget', 'manual', 'Change or move a daily budget; details.steps say how.'],
+                ['creative', 'manual', 'Refresh a tired ad with the given headline, text and visual.'],
+                ['pause', 'manual', 'Stop a campaign or ad that wastes money.'],
+                ['other', 'manual', 'Anything else, with steps.'],
+              ]}
+            />
+            <Endpoint method="GET" path="/workspaces/{externalId}/reviews/latest">
+              <Example
+                method="GET"
+                path="/workspaces/company_42/reviews/latest"
+                response={{
+                  review: {
+                    id: 'cw1…',
+                    weekStart: '2026-09-28',
+                    weekEnd: '2026-10-04',
+                    headline: 'Leads got 30% cheaper after the video ads took over',
+                    summary: '…',
+                    wins: [{ text: 'Family video ad drove 41 leads at ₾3.40', evidence: '₾140 spend, CTR 2.3%' }],
+                    issues: [{ text: 'Only one post this week', evidence: '1 post vs 3 the week before' }],
+                    createdAt: '2026-10-05T04:00:00.000Z',
+                    recommendations: [
+                      {
+                        id: 'cr1…',
+                        kind: 'post',
+                        title: 'Post an evening reel of the park view on Thursday',
+                        why: 'Reels reached 1.8× your average; evenings 1.6×.',
+                        impact: 'high',
+                        status: 'open',
+                        details: { post: { date: '2026-10-08', time: '19:00', network: 'INSTAGRAM', format: 'Reel', caption: '…', hashtags: ['arca'], visual: '…' } },
+                        appliedRef: null,
+                      },
+                    ],
+                  },
+                }}
+              />
+            </Endpoint>
+            <Endpoint method="POST" path="/workspaces/{externalId}/recommendations/{id}/apply">
+              <p>
+                Posts and goals are created (<code>appliedRef</code> is their id); manual kinds are recorded as done. <code>409</code> if it
+                was already handled.
+              </p>
+            </Endpoint>
+            <Endpoint method="POST" path="/workspaces/{externalId}/recommendations/{id}/dismiss" />
           </Section>
 
           <Section id="metrics" title="Goal metrics">
@@ -706,7 +765,8 @@ def verify_khma(raw_body: bytes, ts: str, signature: str, secret: str) -> bool:
           <Section id="changelog" title="Changelog">
             <ul className="space-y-2">
               <li>
-                <b>2026-10-03</b> — Connect links, channels, analytics, goals, alerts and the <code>alert.created</code> webhook.
+                <b>2026-10-03</b> — Weekly review and recommendations. Connect links, channels, analytics, goals, alerts and the{' '}
+                <code>alert.created</code> webhook.
               </li>
               <li>
                 <b>2026-10-02</b> — Workspaces, signup and credits.
