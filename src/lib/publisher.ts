@@ -189,3 +189,27 @@ export async function refreshInsights(now = new Date(), limit = 100) {
   for (const r of rows) await refreshDelivery(r.id)
   return rows.length
 }
+
+// "Publish now" for one post of a workspace — used by the editor and MCP.
+export async function publishPostNow(workspaceId: string, postId: string): Promise<{ error?: string; published?: number; failed?: number }> {
+  const post = await prisma.post.findFirst({ where: { id: postId, workspaceId } })
+  if (!post || post.kind !== 'SOCIAL') return { error: 'Post not found' }
+  const targets = await targetsFor(post)
+  if (targets.length === 0) return { error: 'Connect a Facebook Page or Instagram account in Channels first' }
+  const claimed = await prisma.post.updateMany({
+    where: { id: postId, status: { in: ['DRAFT', 'SCHEDULED', 'FAILED', 'PUBLISHED'] } },
+    data: { status: 'PUBLISHING' },
+  })
+  if (claimed.count !== 1) return { error: 'This post is being published right now' }
+  try {
+    const deliveries = await deliver(postId, targets)
+    return {
+      published: deliveries.filter((d) => d.status === 'PUBLISHED').length,
+      failed: deliveries.filter((d) => d.status === 'FAILED').length,
+    }
+  } catch (e) {
+    console.error('publishPostNow', postId, e)
+    await prisma.post.update({ where: { id: postId }, data: { status: 'FAILED' } })
+    return { error: 'Publishing failed — try again' }
+  }
+}

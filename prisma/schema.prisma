@@ -163,6 +163,8 @@ model Workspace {
   strategyPlans    StrategyPlan[]
   weeklyReviews    WeeklyReview[]
   recommendations  Recommendation[]
+  accessTokens     AccessToken[]
+  mcpRequests      McpRequest[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -451,8 +453,9 @@ model User {
   role            UserRole  @default(USER)
   createdAt       DateTime  @default(now())
 
-  memberships AccountMember[]
-  sessions    Session[]
+  memberships  AccountMember[]
+  sessions     Session[]
+  accessTokens AccessToken[]
 }
 
 enum LinkPurpose {
@@ -807,4 +810,75 @@ model Recommendation {
   createdAt   DateTime             @default(now())
 
   @@index([workspaceId, status])
+}
+
+// ─── MCP & personal access ───────────────────────────────────────────────────
+
+enum AccessTokenKind {
+  // Created by the user in Settings (Claude Code, Codex, VS Code …).
+  PERSONAL
+  // Issued through OAuth to an AI app (Claude, ChatGPT, Cursor …).
+  OAUTH
+}
+
+// A user's key to one workspace for the MCP server. Only hashes are stored.
+model AccessToken {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kind        AccessTokenKind
+  name        String
+  prefix      String
+  tokenHash   String          @unique
+  // OAuth only: the client and its refresh token.
+  clientId    String?
+  refreshHash String?         @unique
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime        @default(now())
+
+  requests McpRequest[]
+
+  @@index([userId])
+  @@index([workspaceId])
+}
+
+// An AI app registered itself through OAuth dynamic client registration.
+model OAuthClient {
+  id           String   @id @default(cuid())
+  name         String
+  redirectUris String[]
+  createdAt    DateTime @default(now())
+}
+
+model OAuthCode {
+  id            String    @id @default(cuid())
+  codeHash      String    @unique
+  clientId      String
+  userId        String
+  workspaceId   String
+  redirectUri   String
+  codeChallenge String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+// One MCP call, for the usage chart and abuse checks.
+model McpRequest {
+  id          String       @id @default(cuid())
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tokenId     String?
+  token       AccessToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+  method      String
+  tool        String?
+  ok          Boolean
+  ms          Int
+  createdAt   DateTime     @default(now())
+
+  @@index([workspaceId, createdAt])
 }

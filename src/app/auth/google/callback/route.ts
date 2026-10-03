@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { exchangeGoogleCode, googleEnabled } from '@/lib/google'
 import { prisma } from '@/lib/prisma'
-import { createSession } from '@/lib/session'
+import { afterLoginPath, createSession } from '@/lib/session'
 
 export async function GET(req: NextRequest) {
   const fail = () => NextResponse.redirect(new URL('/login?error=google', req.url))
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
       })
 
   await createSession(user.id)
-  const res = NextResponse.redirect(new URL('/app', req.url))
+  const res = NextResponse.redirect(new URL(await afterLoginPath(), req.url))
   res.cookies.delete({ name: 'khma_oauth_state', path: '/auth/google' })
   return res
 }

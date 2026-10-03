@@ -48,3 +48,12 @@ export async function requireUser() {
   if (!user) redirect('/login')
   return user
 }
+
+// Where to go after signing in: back to an OAuth consent page if one sent
+// the user to log in, else the app.
+export async function afterLoginPath() {
+  const store = await cookies()
+  const next = store.get('khma_next')?.value
+  if (next) store.delete('khma_next')
+  return next && next.startsWith('/oauth/consent?') ? next : '/app'
+}

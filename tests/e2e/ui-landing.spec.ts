@@ -106,7 +106,7 @@ test('landing: CTAs go to /signup and /login', async ({ page }) => {
   for (const h of await trial.evaluateAll((as) => as.map((a) => a.getAttribute('href')))) expect(h).toBe('/signup')
   const external = await page.$$eval('a[href]', (as) =>
     // mailto: is the intended contact channel for demo / partnership / support.
-    as.map((a) => a.getAttribute('href')!).filter((h) => !h.startsWith('#') && !h.startsWith('/#') && !h.startsWith('/features/') && !h.startsWith('mailto:') && !['/', '/signup', '/login', '/terms', '/privacy', '/data-deletion', '/docs'].includes(h)),
+    as.map((a) => a.getAttribute('href')!).filter((h) => !h.startsWith('#') && !h.startsWith('/#') && !h.startsWith('/features/') && !h.startsWith('/docs') && !h.startsWith('mailto:') && !['/', '/signup', '/login', '/terms', '/privacy', '/data-deletion', '/docs'].includes(h)),
   )
   expect(external).toEqual([])
   await page.locator('header').getByRole('link', { name: 'Try free' }).click()

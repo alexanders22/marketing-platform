@@ -566,11 +566,11 @@ Authorization: Bearer khma_…
             <IconTile icon={Bot} tint="bg-violet-400/15 text-violet-300" />
             <h3 className="mt-5 flex items-center gap-2 text-xl font-semibold">
               Let your AI assistant drive
-              <span className="rounded-full bg-zinc-700/60 px-2 py-0.5 text-[11px] font-semibold text-zinc-300 uppercase">Soon</span>
+              <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 uppercase">New</span>
             </h3>
             <p className="mt-2 text-sm text-zinc-400">
-              Connect Claude, ChatGPT or Gemini over MCP and ask in plain words: &ldquo;Plan next month&apos;s posts and
-              a lead campaign for the new collection.&rdquo;
+              Connect Claude, ChatGPT, Cursor or VS Code over MCP and ask in plain words: &ldquo;Plan next month&apos;s posts
+              and a lead campaign for the new collection.&rdquo;
             </p>
             <div className="mt-6 space-y-3 rounded-xl bg-zinc-950 p-4 text-[13px] ring-1 ring-white/5">
               <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-white px-3 py-2 text-zinc-950">
@@ -578,11 +578,11 @@ Authorization: Bearer khma_…
               </p>
               <p className="w-fit max-w-[90%] rounded-2xl rounded-bl-sm bg-zinc-800 px-3 py-2 text-zinc-200">
                 ₾412 spent, 81 leads at ₾5.09 — 18% cheaper than the week before. Video ads beat images 2:1. Want me to
-                move the image budget to video?
+                add two more video posts to next week&apos;s plan?
               </p>
             </div>
-            <a href={featureHref("api")} className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-white hover:underline">
-              Explore the Partner API <ArrowRight size={14} />
+            <a href="/docs#mcp" className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-white hover:underline">
+              Connect your assistant <ArrowRight size={14} />
             </a>
           </Card>
         </div>

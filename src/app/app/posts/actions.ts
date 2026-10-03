@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
-import { deliver, targetsFor } from '@/lib/publisher'
+import { publishPostNow, targetsFor } from '@/lib/publisher'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 
 const NETWORKS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST'] as const
@@ -110,28 +110,9 @@ export async function deletePost(id: string) {
 // have it are skipped, so this also retries the ones that failed.
 export async function publishNow(id: string): Promise<{ error?: string; published?: number; failed?: number }> {
   const { workspace } = await requireContext()
-  const post = await prisma.post.findFirst({ where: { id, workspaceId: workspace.id } })
-  if (!post || post.kind !== 'SOCIAL') return { error: 'Post not found' }
-  const targets = await targetsFor(post)
-  if (targets.length === 0) return { error: 'Connect a Facebook Page or Instagram account in Channels first' }
-  const claimed = await prisma.post.updateMany({
-    where: { id, status: { in: ['DRAFT', 'SCHEDULED', 'FAILED', 'PUBLISHED'] } },
-    data: { status: 'PUBLISHING' },
-  })
-  if (claimed.count !== 1) return { error: 'This post is being published right now' }
-  let deliveries
-  try {
-    deliveries = await deliver(id, targets)
-  } catch (e) {
-    console.error('publishNow', id, e)
-    await prisma.post.update({ where: { id }, data: { status: 'FAILED' } })
-    return { error: 'Publishing failed — try again' }
-  }
+  const res = await publishPostNow(workspace.id, id)
   revalidatePath('/app', 'layout')
-  return {
-    published: deliveries.filter((d) => d.status === 'PUBLISHED').length,
-    failed: deliveries.filter((d) => d.status === 'FAILED').length,
-  }
+  return res
 }
 
 // ─── Media ─────────────────────────────────────────────────────────────────

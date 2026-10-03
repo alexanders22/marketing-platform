@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import {
   Bell,
+  Bot,
   BookUser,
   CalendarDays,
   ChevronDown,
@@ -144,6 +145,14 @@ function SidebarBody({ workspace, logoUrl, user, credits, planLabel, alerts, rec
         >
           <Headphones size={18} /> Support
         </a>
+        <Link
+          href="/app/mcp"
+          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] hover:bg-zinc-200/50 ${
+            path.startsWith('/app/mcp') ? 'bg-zinc-200/70 font-medium' : 'text-zinc-700'
+          }`}
+        >
+          <Bot size={18} /> AI assistants
+        </Link>
         <Link
           href="/app/channels"
           className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] hover:bg-zinc-200/50 ${

@@ -6,6 +6,7 @@ import { Logo } from '@/components/landing/Logo'
 import { CONTACT } from '@/components/landing/site'
 import { COST } from '@/lib/credits'
 import { METRICS, RISK_BAND, WINDOWS } from '@/lib/goal-metrics'
+import { TOOLS } from '@/lib/mcp/tools'
 import { CodeBlock } from './CodeBlock'
 
 export const metadata: Metadata = {
@@ -45,6 +46,7 @@ const NAV: { title: string; items: { id: string; label: string }[] }[] = [
     title: 'Guides',
     items: [
       { id: 'metrics', label: 'Goal metrics' },
+      { id: 'mcp', label: 'MCP for AI assistants' },
       { id: 'webhooks', label: 'Webhooks' },
       { id: 'billing', label: 'Credits & revenue share' },
       { id: 'changelog', label: 'Changelog' },
@@ -669,6 +671,36 @@ export default function DocsPage() {
             </p>
           </Section>
 
+          <Section id="mcp" title="MCP for AI assistants">
+            <p>
+              Khma is an MCP server: Claude, ChatGPT, Cursor, VS Code, Codex and other assistants can read results and work in
+              Khma for a signed-in user. Server URL <code>https://khma.brandrepublic.ge/api/mcp</code> (Streamable HTTP).
+            </p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>
+                <b>Sign-in (OAuth 2.1)</b> — apps that support it register themselves, open Khma in the browser, and the user picks
+                the company and presses Allow. Discovery at <code>/.well-known/oauth-protected-resource</code>; PKCE (S256) and
+                refresh tokens.
+              </li>
+              <li>
+                <b>Personal token</b> — for apps without sign-in, create one in Khma → AI assistants and send it as{' '}
+                <code>Authorization: Bearer khma_pat_…</code>.
+              </li>
+              <li>The assistant acts as that user in one workspace, with the same roles as in the app. Up to 120 calls a minute.</li>
+            </ul>
+            <CodeBlock
+              tabs={[
+                { label: 'Claude Code', code: 'claude mcp add --transport http khma https://khma.brandrepublic.ge/api/mcp' },
+                { label: 'Cursor', code: JSON.stringify({ mcpServers: { khma: { url: 'https://khma.brandrepublic.ge/api/mcp' } } }, null, 2) },
+                {
+                  label: 'With a token',
+                  code: JSON.stringify({ mcpServers: { khma: { type: 'http', url: 'https://khma.brandrepublic.ge/api/mcp', headers: { Authorization: 'Bearer khma_pat_…' } } } }, null, 2),
+                },
+              ]}
+            />
+            <Params title="Tool" rows={TOOLS.map((t) => [t.name, t.readOnly ? 'read' : 'write', t.description])} />
+          </Section>
+
           <Section id="webhooks" title="Webhooks">
             <p>
               Give us an HTTPS endpoint and we send every new alert of your workspaces as it happens, signed with a secret only you
@@ -765,7 +797,7 @@ def verify_khma(raw_body: bytes, ts: str, signature: str, secret: str) -> bool:
           <Section id="changelog" title="Changelog">
             <ul className="space-y-2">
               <li>
-                <b>2026-10-03</b> — Weekly review and recommendations. Connect links, channels, analytics, goals, alerts and the{' '}
+                <b>2026-10-03</b> — MCP server with OAuth sign-in. Weekly review and recommendations. Connect links, channels, analytics, goals, alerts and the{' '}
                 <code>alert.created</code> webhook.
               </li>
               <li>

@@ -9,7 +9,7 @@ import { sha256 } from '@/lib/crypto'
 import { actionEmail, appUrl, mailEnabled, sendMail } from '@/lib/mail'
 import { hashPassword, verifyPassword } from '@/lib/password'
 import { clearFailures, isLimited, recordFailure } from '@/lib/rate-limit'
-import { createSession, destroySession } from '@/lib/session'
+import { createSession, destroySession, afterLoginPath } from '@/lib/session'
 
 export type FormState = { error?: string; sent?: string; fields?: Record<string, string> } | undefined
 
@@ -82,7 +82,7 @@ export async function consumeMagicLink(form: FormData) {
     ? await verifyEmailOwner(existing.id, existing.emailVerifiedAt)
     : await prisma.user.create({ data: { email: link.email, name: link.email.split('@')[0], emailVerifiedAt: new Date() } })
   await createSession(user.id)
-  redirect('/app')
+  redirect(await afterLoginPath())
 }
 
 // First proof of email ownership for an account that was created without it
@@ -129,7 +129,7 @@ export async function passwordLogin(_: FormState, form: FormData): Promise<FormS
 
   clearFailures(emailKey)
   await createSession(user.id)
-  redirect('/app')
+  redirect(await afterLoginPath())
 }
 
 const PasswordSignup = z.object({
@@ -152,7 +152,7 @@ export async function passwordSignup(_: FormState, form: FormData): Promise<Form
     data: { email, name: email.split('@')[0], passwordHash: await hashPassword(password) },
   })
   await createSession(user.id)
-  redirect('/app')
+  redirect(await afterLoginPath())
 }
 
 // Same answer whether or not the email has an account. Users who signed up
@@ -207,7 +207,7 @@ export async function resetPassword(_: FormState, form: FormData): Promise<FormS
   ])
   clearFailures(`login:${link.email}`)
   await createSession(user.id)
-  redirect('/app')
+  redirect(await afterLoginPath())
 }
 
 export async function logout() {
