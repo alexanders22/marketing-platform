@@ -1,4 +1,5 @@
 import 'server-only'
+import { accountExpiredAlert, raiseAlert } from './alerts'
 import { decrypt } from './crypto'
 import { MetaError, graph } from './meta'
 import { prisma } from './prisma'
@@ -125,12 +126,31 @@ export async function syncAdAccount(socialAccountId: string, now = new Date()) {
         startsAt: c.start_time ? new Date(c.start_time) : null,
         endsAt: c.stop_time ? new Date(c.stop_time) : null,
       }
+      const before = await prisma.adCampaign.findUnique({
+        where: { socialAccountId_externalId: { socialAccountId: acc.id, externalId: c.id } },
+        select: { status: true },
+      })
       const row = await prisma.adCampaign.upsert({
         where: { socialAccountId_externalId: { socialAccountId: acc.id, externalId: c.id } },
         create: { workspaceId: acc.workspaceId, socialAccountId: acc.id, externalId: c.id, ...data },
         update: data,
       })
       byExternal.set(c.id, { id: row.id, objective: row.objective })
+      // Meta stopped or flagged a campaign since the last read.
+      if (before && before.status !== row.status && (row.status === 'DISAPPROVED' || row.status === 'WITH_ISSUES')) {
+        await raiseAlert({
+          workspaceId: acc.workspaceId,
+          kind: row.status === 'DISAPPROVED' ? 'campaign_rejected' : 'campaign_issues',
+          severity: 'CRITICAL',
+          title: row.status === 'DISAPPROVED' ? `Meta rejected ${row.name}` : `${row.name} has delivery issues`,
+          body:
+            row.status === 'DISAPPROVED'
+              ? 'The campaign does not run. Open it in Meta Ads Manager to see which ad broke which policy, fix it and request a review.'
+              : 'Some ads in this campaign are not delivering. Check the ads and their payment method in Meta Ads Manager.',
+          href: `/app/dashboard/ads/${row.id}`,
+          dedupeKey: `campaign:${row.id}:${row.status}:${now.toISOString().slice(0, 10)}`,
+        })
+      }
     }
 
     const insights = await pages<RawInsight>(`${acc.externalId}/insights`, token, {
@@ -169,6 +189,7 @@ export async function syncAdAccount(socialAccountId: string, now = new Date()) {
       where: { id: acc.id },
       data: { lastError: message, ...(e instanceof MetaError && e.needsReconnect ? { status: 'EXPIRED' } : {}) },
     })
+    if (e instanceof MetaError && e.needsReconnect) await accountExpiredAlert(acc, message)
     throw e
   }
 }

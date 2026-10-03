@@ -42,6 +42,21 @@ function Delta({ cur, prev, lowerIsBetter = false }: { cur: number | null; prev:
   )
 }
 
+const GOAL = {
+  ON_TRACK: { label: 'On track', cls: 'bg-emerald-500' },
+  AT_RISK: { label: 'At risk', cls: 'bg-amber-500' },
+  OFF_TRACK: { label: 'Off track', cls: 'bg-red-500' },
+  NO_DATA: { label: 'No data', cls: 'bg-zinc-300' },
+} as const
+
+function GoalDot({ status }: { status: keyof typeof GOAL }) {
+  return (
+    <Link href="/app/goals" className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-zinc-600 hover:underline">
+      <span className={`h-2 w-2 rounded-full ${GOAL[status].cls}`} /> {GOAL[status].label}
+    </Link>
+  )
+}
+
 function Kpi({ label, value, delta }: { label: string; value: string; delta: React.ReactNode }) {
   return (
     <div className="min-w-0 rounded-xl border border-zinc-200 p-4">
@@ -61,6 +76,17 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
   const d = await dashboard(workspace.id, period)
   const last = await prisma.aiSummary.findFirst({ where: { workspaceId: workspace.id, periodDays: period }, orderBy: { createdAt: 'desc' } })
   const summary = last ? (JSON.parse(last.text) as PerformanceSummary) : null
+  const [goals, openAlerts] = await Promise.all([
+    prisma.goal.findMany({ where: { workspaceId: workspace.id, active: true, adCampaignId: { not: null } }, select: { adCampaignId: true, status: true } }),
+    prisma.alert.count({ where: { workspaceId: workspace.id, readAt: null, severity: { in: ['CRITICAL', 'WARNING'] } } }),
+  ])
+  // Worst goal status per campaign.
+  const RANK = { OFF_TRACK: 3, AT_RISK: 2, ON_TRACK: 1, NO_DATA: 0 } as const
+  const goalOf = new Map<string, keyof typeof RANK>()
+  for (const g of goals) {
+    const prevStatus = goalOf.get(g.adCampaignId!)
+    if (!prevStatus || RANK[g.status] > RANK[prevStatus]) goalOf.set(g.adCampaignId!, g.status)
+  }
 
   const c = d.current
   const p = d.previous
@@ -110,6 +136,13 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
         </section>
       ) : (
         <>
+          {openAlerts > 0 && (
+            <Link href="/app/alerts" className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 hover:bg-red-100">
+              <span className="h-2 w-2 rounded-full bg-red-500" />
+              {openAlerts} alert{openAlerts === 1 ? '' : 's'} need{openAlerts === 1 ? 's' : ''} your attention
+              <span className="ml-auto font-medium">View →</span>
+            </Link>
+          )}
           <SummaryCard period={period} initial={summary} createdAt={last?.createdAt.toISOString() ?? null} />
 
           {d.adAccounts.some((a) => a.status !== 'ACTIVE' || a.lastError) && (
@@ -189,11 +222,12 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
             <section>
               <h2 className="mb-3 font-semibold">Campaigns</h2>
               <div className="overflow-x-auto rounded-xl border border-zinc-200">
-                <table className="w-full min-w-[760px] text-sm">
+                <table className="w-full min-w-[840px] text-sm">
                   <thead className="bg-zinc-50 text-left text-xs text-zinc-500">
                     <tr>
                       <th className="px-4 py-2.5 font-medium">Campaign</th>
                       <th className="px-3 py-2.5 font-medium">Status</th>
+                      <th className="px-3 py-2.5 font-medium">Goal</th>
                       <th className="px-3 py-2.5 text-right font-medium">Spend</th>
                       <th className="px-3 py-2.5 text-right font-medium">Results</th>
                       <th className="px-3 py-2.5 text-right font-medium">Cost / result</th>
@@ -217,6 +251,15 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
                           </td>
                           <td className="px-3 py-3">
                             <span className={`rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${s.cls}`}>{s.label}</span>
+                          </td>
+                          <td className="px-3 py-3">
+                            {goalOf.get(r.id) ? (
+                              <GoalDot status={goalOf.get(r.id)!} />
+                            ) : (
+                              <Link href="/app/goals" className="text-xs text-zinc-400 hover:text-zinc-700">
+                                + set
+                              </Link>
+                            )}
                           </td>
                           <td className="px-3 py-3 text-right tabular-nums">{formatMoney(r.spend, r.currency)}</td>
                           <td className="px-3 py-3 text-right tabular-nums">

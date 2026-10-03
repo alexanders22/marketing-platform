@@ -10,6 +10,7 @@ import {
   publishToInstagram,
   type PostMetrics,
 } from './meta'
+import { accountExpiredAlert, raiseAlert } from './alerts'
 import { prisma } from './prisma'
 
 // Networks Khma can publish to today.
@@ -71,6 +72,7 @@ export async function deliver(postId: string, targets: SocialAccount[]) {
       data = { postId, socialAccountId: account.id, status: 'FAILED', error: errorText(e) }
       if (e instanceof MetaError && e.needsReconnect) {
         await prisma.socialAccount.update({ where: { id: account.id }, data: { status: 'EXPIRED', lastError: errorText(e) } })
+        await accountExpiredAlert(account, errorText(e))
       }
     }
     await prisma.postDelivery.upsert({
@@ -80,8 +82,20 @@ export async function deliver(postId: string, targets: SocialAccount[]) {
     })
   }
 
-  const deliveries = await prisma.postDelivery.findMany({ where: { postId } })
+  const deliveries = await prisma.postDelivery.findMany({ where: { postId }, include: { socialAccount: { select: { name: true } } } })
   const ok = deliveries.some((d) => d.status === 'PUBLISHED')
+  const failed = deliveries.filter((d) => d.status === 'FAILED')
+  if (failed.length) {
+    await raiseAlert({
+      workspaceId: post.workspaceId,
+      kind: 'post_failed',
+      severity: ok ? 'WARNING' : 'CRITICAL',
+      title: ok ? `Post published only partly` : `Post could not be published`,
+      body: failed.map((d) => `${d.socialAccount.name}: ${d.error ?? 'failed'}`).join(' · ').slice(0, 900),
+      href: `/app/posts/${postId}`,
+      dedupeKey: `post:${postId}:failed:${failed.map((d) => d.socialAccountId).sort().join(',')}:${new Date().toISOString().slice(0, 13)}`,
+    })
+  }
   await prisma.post.update({
     where: { id: postId },
     data: { status: ok ? 'PUBLISHED' : 'FAILED', publishedAt: ok ? (post.publishedAt ?? new Date()) : null },
@@ -144,6 +158,7 @@ export async function refreshDelivery(id: string) {
   } catch (e) {
     if (e instanceof MetaError && e.needsReconnect) {
       await prisma.socialAccount.update({ where: { id: d.socialAccountId }, data: { status: 'EXPIRED', lastError: errorText(e) } })
+      await accountExpiredAlert(d.socialAccount, errorText(e))
     }
     await prisma.postDelivery.update({ where: { id }, data: { metricsAt: new Date() } })
     return null

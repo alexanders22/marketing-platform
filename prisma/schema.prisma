@@ -75,6 +75,8 @@ model Account {
   plan            Plan         @default(NONE)
   billingCycle    BillingCycle @default(MONTHLY)
   trialEndsAt     DateTime?
+  // Email account owners and admins when an alert fires.
+  alertEmails     Boolean      @default(true)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -153,6 +155,8 @@ model Workspace {
   bioPages         BioPage[]
   adCampaigns      AdCampaign[]
   aiSummaries      AiSummary[]
+  goals            Goal[]
+  alerts           Alert[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -515,7 +519,8 @@ model AdCampaign {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  days AdInsightDay[]
+  days  AdInsightDay[]
+  goals Goal[]
 
   @@unique([socialAccountId, externalId])
   @@index([workspaceId])
@@ -552,5 +557,84 @@ model AiSummary {
   text        String
   createdAt   DateTime  @default(now())
 
+  @@index([workspaceId, createdAt])
+}
+
+// ─── Goals & alerts ──────────────────────────────────────────────────────────
+
+enum GoalScope {
+  // One ad campaign, all ads of the workspace, or published posts.
+  CAMPAIGN
+  ADS
+  POSTS
+}
+
+enum GoalStatus {
+  NO_DATA
+  ON_TRACK
+  AT_RISK
+  OFF_TRACK
+}
+
+// A target the owner sets, e.g. "cost per lead at most ₾5 over 7 days" or
+// "average reach per Instagram post at least 1,000". Checked every hour.
+model Goal {
+  id           String      @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scope        GoalScope
+  adCampaignId String?
+  adCampaign   AdCampaign? @relation(fields: [adCampaignId], references: [id], onDelete: Cascade)
+  // POSTS only: FACEBOOK / INSTAGRAM, or null for both.
+  network      String?
+  // See src/lib/goals.ts METRICS.
+  metric       String
+  // true: the value must stay at or below target (costs); false: at least.
+  atMost       Boolean
+  target       Float
+  // Rolling window in days (1, 7, 30).
+  windowDays   Int         @default(7)
+  active       Boolean     @default(true)
+  // Last evaluation.
+  status       GoalStatus  @default(NO_DATA)
+  actual       Float?
+  checkedAt    DateTime?
+  createdById  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  alerts Alert[]
+
+  @@index([workspaceId])
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+model Alert {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  goalId      String?
+  goal        Goal?         @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  // goal_off_track, goal_at_risk, goal_recovered, campaign_rejected,
+  // campaign_issues, account_disconnected, post_failed
+  kind        String
+  severity    AlertSeverity
+  title       String
+  body        String
+  // Link inside the app (dashboard, campaign, post, channels).
+  href        String?
+  // Prevents the same alert twice (e.g. one per goal per status change).
+  dedupeKey   String?
+  readAt      DateTime?
+  emailedAt   DateTime?
+  webhookAt   DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@unique([workspaceId, dedupeKey])
   @@index([workspaceId, createdAt])
 }

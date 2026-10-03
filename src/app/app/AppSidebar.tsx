@@ -4,10 +4,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import {
+  Bell,
   CalendarDays,
   ChevronDown,
   Coins,
   FilePen,
+  Flag,
   FileText,
   Headphones,
   Inbox,
@@ -32,6 +34,8 @@ import { logout } from '../(auth)/actions'
 
 const NAV = [
   { href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/app/goals', label: 'Goals', icon: Flag },
+  { href: '/app/alerts', label: 'Alerts', icon: Bell },
   { href: '/app/planner', label: 'Planner', icon: CalendarDays },
   { href: '/app/campaigns', label: 'Campaigns', icon: Target },
   { href: '/app/inbox', label: 'Inbox', icon: Inbox },
@@ -46,6 +50,8 @@ export type SidebarProps = {
   user: { name: string; email: string }
   credits: number
   planLabel: string
+  // Unread alerts.
+  alerts: number
 }
 
 export function AppSidebar(props: SidebarProps) {
@@ -58,6 +64,12 @@ export function AppSidebar(props: SidebarProps) {
     <>
       <div className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-zinc-200 bg-[#f4f3f1]/95 px-4 backdrop-blur lg:hidden">
         <span className="truncate font-semibold">{props.workspace}</span>
+        {props.alerts > 0 && (
+          <Link href="/app/alerts" className="relative ml-auto mr-1 p-2 text-zinc-700" aria-label={`${props.alerts} unread alerts`}>
+            <Bell size={19} />
+            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
+          </Link>
+        )}
         <button onClick={() => setOpen(true)} aria-label="Open menu" className="p-2 text-zinc-700">
           <Menu size={20} />
         </button>
@@ -82,7 +94,7 @@ export function AppSidebar(props: SidebarProps) {
   )
 }
 
-function SidebarBody({ workspace, logoUrl, user, credits, planLabel, path }: SidebarProps & { path: string }) {
+function SidebarBody({ workspace, logoUrl, user, credits, planLabel, alerts, path }: SidebarProps & { path: string }) {
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <WorkspaceMenu workspace={workspace} logoUrl={logoUrl} user={user} />
@@ -102,6 +114,11 @@ function SidebarBody({ workspace, logoUrl, user, credits, planLabel, path }: Sid
             >
               <n.icon size={18} />
               {n.label}
+              {n.href === '/app/alerts' && alerts > 0 && (
+                <span className="ml-auto rounded-full bg-red-500 px-1.5 py-px text-[11px] font-semibold text-white" aria-label={`${alerts} unread`}>
+                  {alerts > 99 ? '99+' : alerts}
+                </span>
+              )}
             </Link>
           )
         })}

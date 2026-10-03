@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { requireContext } from '@/lib/context'
 import { PLANS } from '@/lib/plans'
+import { prisma } from '@/lib/prisma'
 import { AppSidebar } from './AppSidebar'
 
 export const metadata: Metadata = { title: 'Khma' }
@@ -18,6 +19,7 @@ function planLabel(plan: string, trialEndsAt: Date | null) {
 // Light app shell (the marketing site stays dark).
 export default async function AppLayout({ children }: LayoutProps<'/app'>) {
   const { user, account, workspace, brand } = await requireContext()
+  const alerts = await prisma.alert.count({ where: { workspaceId: workspace.id, readAt: null } })
   return (
     <div className="min-h-screen bg-[#f4f3f1] text-zinc-900 lg:flex [color-scheme:light]">
       <AppSidebar
@@ -26,6 +28,7 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
         user={{ name: user.name, email: user.email }}
         credits={account.creditBalance}
         planLabel={planLabel(account.plan, account.trialEndsAt)}
+        alerts={alerts}
       />
       <main className="min-w-0 flex-1 p-2 lg:py-3 lg:pr-3 lg:pl-0">
         <div className="min-h-[calc(100vh-1.5rem)] rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 sm:p-8">

@@ -14,6 +14,9 @@ export function startFakeMeta() {
   const calls: Call[] = []
   const fetchedImages: { url: string; status: number; type: string | null }[] = []
   let failNextPublish: { code: number; message: string } | null = null
+  let failPath: { re: RegExp; code: number; message: string } | null = null
+  let leadsStatus = 'ACTIVE'
+  const hooks: { headers: Record<string, string | string[] | undefined>; body: string }[] = []
   let n = 0
 
   const server: Server = createServer(async (req, res) => {
@@ -26,6 +29,18 @@ export function startFakeMeta() {
     const json = (status: number, data: unknown) => {
       res.writeHead(status, { 'content-type': 'application/json' })
       res.end(JSON.stringify(data))
+    }
+
+    // Partner webhook receiver (not part of Meta).
+    if (path === '/hook') {
+      hooks.push({ headers: req.headers, body })
+      return json(200, { ok: true })
+    }
+
+    if (failPath && failPath.re.test(path)) {
+      const e = failPath
+      failPath = null
+      return json(400, { error: { message: e.message, code: e.code } })
     }
 
     if (path === '/dialog/oauth') {
@@ -85,7 +100,7 @@ export function startFakeMeta() {
     if (path === '/act_1/campaigns')
       return json(200, {
         data: [
-          { id: 'cmp-leads', name: 'Lead Gen — Tbilisi', objective: 'OUTCOME_LEADS', effective_status: 'ACTIVE', daily_budget: '2000', start_time: '2026-06-01T00:00:00+0400' },
+          { id: 'cmp-leads', name: 'Lead Gen — Tbilisi', objective: 'OUTCOME_LEADS', effective_status: leadsStatus, daily_budget: '2000', start_time: '2026-06-01T00:00:00+0400' },
           { id: 'cmp-aware', name: 'Spring Awareness', objective: 'OUTCOME_AWARENESS', effective_status: 'PAUSED', lifetime_budget: '90000' },
         ],
       })
@@ -146,6 +161,9 @@ export function startFakeMeta() {
     calls,
     fetchedImages,
     failNextPublish: (code: number, message: string) => (failNextPublish = { code, message }),
+    failNext: (re: RegExp, code: number, message: string) => (failPath = { re, code, message }),
+    setLeadsStatus: (s: string) => (leadsStatus = s),
+    hooks,
     listen: () => new Promise<void>((r) => server.listen(FAKE_META_PORT, '127.0.0.1', () => r())),
     close: () => new Promise<void>((r) => server.close(() => r())),
   }
