@@ -59,6 +59,14 @@ export default async function FeaturePage({ params }: PageProps<"/features/[slug
               >
                 {soon ? "Get early access" : f.slug === "api" ? "Talk to us" : "Start free"} <ArrowRight size={16} />
               </a>
+              {f.slug === "api" && (
+                <Link
+                  href="/docs"
+                  className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-white/5"
+                >
+                  Read the docs
+                </Link>
+              )}
               <Link
                 href="/#pricing"
                 className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-white/5"

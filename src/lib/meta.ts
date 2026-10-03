@@ -26,6 +26,9 @@ export const META_SCOPES = (
   ].join(',')
 ).split(',')
 
+// Signed { s: state, ws?: workspaceId, ret?: returnUrl } for the callback.
+export const META_STATE_COOKIE = 'khma_meta_state'
+
 export const metaEnabled = () => Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET)
 export const metaRedirectUri = () => `${appUrl()}/auth/meta/callback`
 

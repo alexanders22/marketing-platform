@@ -1,29 +1,60 @@
 import { NextResponse, after, type NextRequest } from 'next/server'
 import { requireContext } from '@/lib/context'
 import { encrypt } from '@/lib/crypto'
-import { exchangeMetaCode, listAdAccounts, listPages, metaEnabled } from '@/lib/meta'
+import { META_STATE_COOKIE, exchangeMetaCode, listAdAccounts, listPages, metaEnabled } from '@/lib/meta'
 import { syncAdAccount } from '@/lib/meta-ads'
 import { prisma } from '@/lib/prisma'
+import { unseal } from '@/lib/signed'
 
 // Meta sends the person back here. Every Page they picked becomes a FACEBOOK
 // account, its linked Instagram professional account an INSTAGRAM account,
 // and (with ads_read) each ad account a META_ADS account.
+//
+// Two ways in: from Channels (signed-in user, their current workspace) or a
+// partner connect link (workspace + returnUrl sealed in the state cookie).
+const PARTNER_REASON: Record<string, string> = {
+  'meta-off': 'not_configured',
+  'meta-denied': 'cancelled',
+  'meta-state': 'expired',
+  'meta-api': 'meta_error',
+  'meta-empty': 'nothing_shared',
+}
+
 export async function GET(req: NextRequest) {
-  const { workspace, role } = await requireContext()
-  const back = (q: string) => {
-    const res = NextResponse.redirect(new URL(`/app/channels?${q}`, req.url))
-    res.cookies.delete({ name: 'khma_meta_state', path: '/auth/meta' })
+  const cookie = unseal<{ s: string; ws?: string; ret?: string }>(req.cookies.get(META_STATE_COOKIE)?.value)
+  const partner = cookie?.ws && cookie.ret ? { ws: cookie.ws, ret: cookie.ret } : null
+
+  const redirect = (url: string | URL) => {
+    const res = NextResponse.redirect(url)
+    res.cookies.delete({ name: META_STATE_COOKIE, path: '/auth/meta' })
     return res
   }
+  const join = (base: string, q: string) => `${base}${base.includes('?') ? '&' : '?'}${q}`
+  const back = (q: string) => {
+    if (partner) {
+      const [k, v] = q.split('=')
+      return redirect(
+        join(partner.ret, k === 'connected' ? `khma_status=connected&khma_accounts=${v}` : `khma_status=error&khma_reason=${PARTNER_REASON[v] ?? 'error'}`),
+      )
+    }
+    return redirect(new URL(`/app/channels?${q}`, req.url))
+  }
+
+  let workspaceId: string
+  if (partner) {
+    workspaceId = partner.ws
+  } else {
+    const { workspace, role } = await requireContext()
+    if (role === 'EDITOR') return back('error=role')
+    workspaceId = workspace.id
+  }
   if (!metaEnabled()) return back('error=meta-off')
-  if (role === 'EDITOR') return back('error=role')
 
   const q = req.nextUrl.searchParams
   if (q.get('error')) return back('error=meta-denied')
   const code = q.get('code')
   const state = q.get('state')
-  const expected = req.cookies.get('khma_meta_state')?.value
-  if (!code || !state || !expected || state !== expected) return back('error=meta-state')
+  if (!code || !state || !cookie || state !== cookie.s) return back('error=meta-state')
 
   let user, pages, ads
   try {
@@ -81,8 +112,8 @@ export async function GET(req: NextRequest) {
   const saved = await prisma.$transaction(
     rows.map(({ token, ...r }) =>
       prisma.socialAccount.upsert({
-        where: { workspaceId_network_externalId: { workspaceId: workspace.id, network: r.network, externalId: r.externalId } },
-        create: { workspaceId: workspace.id, ...r, ...base, accessTokenEnc: encrypt(token) },
+        where: { workspaceId_network_externalId: { workspaceId, network: r.network, externalId: r.externalId } },
+        create: { workspaceId, ...r, ...base, accessTokenEnc: encrypt(token) },
         update: { ...r, ...base, accessTokenEnc: encrypt(token) },
       }),
     ),

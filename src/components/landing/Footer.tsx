@@ -14,6 +14,7 @@ export function Footer() {
       links: [
         { label: "How it works", href: "/#how" },
         { label: "Ads & analytics", href: featureHref("ads") },
+        { label: "API documentation", href: "/docs" },
         { label: "Pricing", href: "/#pricing" },
       ],
     },

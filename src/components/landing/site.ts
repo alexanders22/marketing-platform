@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import {
   BarChart3,
+  BookOpen,
   CalendarDays,
   Code2,
   Inbox,
@@ -228,6 +229,7 @@ export const RESOURCES: { title: string; links: { icon: Icon; label: string; bod
     links: [
       { icon: Tags, label: "Pricing", body: "Plans, credits and the free trial", href: "/#pricing" },
       { icon: Code2, label: "Partner API", body: "Workspaces, credits and revenue share", href: featureHref("api") },
+      { icon: BookOpen, label: "API documentation", body: "Endpoints, connect links and webhooks", href: "/docs" },
     ],
   },
   {

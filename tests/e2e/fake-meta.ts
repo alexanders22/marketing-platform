@@ -164,7 +164,29 @@ export function startFakeMeta() {
     failNext: (re: RegExp, code: number, message: string) => (failPath = { re, code, message }),
     setLeadsStatus: (s: string) => (leadsStatus = s),
     hooks,
-    listen: () => new Promise<void>((r) => server.listen(FAKE_META_PORT, '127.0.0.1', () => r())),
+    // Specs that use the fake run in parallel workers: whoever holds the port
+    // first goes ahead, the others wait their turn.
+    listen: async () => {
+      for (let i = 0; i < 300; i++) {
+        const ok = await new Promise<boolean>((resolve) => {
+          const onError = (e: NodeJS.ErrnoException) => {
+            server.off('listening', onListening)
+            if (e.code !== 'EADDRINUSE') throw e
+            resolve(false)
+          }
+          const onListening = () => {
+            server.off('error', onError)
+            resolve(true)
+          }
+          server.once('error', onError)
+          server.once('listening', onListening)
+          server.listen(FAKE_META_PORT, '127.0.0.1')
+        })
+        if (ok) return
+        await new Promise((r) => setTimeout(r, 500))
+      }
+      throw new Error('fake Meta port stayed busy')
+    },
     close: () => new Promise<void>((r) => server.close(() => r())),
   }
 }
