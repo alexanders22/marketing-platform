@@ -157,6 +157,10 @@ model Workspace {
   aiSummaries      AiSummary[]
   goals            Goal[]
   alerts           Alert[]
+  brandProfile     BrandProfile?
+  socialPosts      SocialPost[]
+  brandAudits      BrandAudit[]
+  strategyPlans    StrategyPlan[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -408,6 +412,9 @@ model SocialAccount {
   adCampaigns AdCampaign[]
   // Ad accounts: when campaigns and insights were last read.
   syncedAt    DateTime?
+  socialPosts SocialPost[]
+  // When post history was last read.
+  historyAt   DateTime?
 
   @@unique([workspaceId, network, externalId])
   @@index([connectedBy])
@@ -521,6 +528,7 @@ model AdCampaign {
 
   days  AdInsightDay[]
   goals Goal[]
+  ads   AdItem[]
 
   @@unique([socialAccountId, externalId])
   @@index([workspaceId])
@@ -636,5 +644,111 @@ model Alert {
   createdAt   DateTime      @default(now())
 
   @@unique([workspaceId, dedupeKey])
+  @@index([workspaceId, createdAt])
+}
+
+// ─── Dossier & strategist ───────────────────────────────────────────────────
+
+// What Khma knows about the company: read from its website (several pages)
+// and summarised by AI. See src/lib/dossier.ts for the data shape.
+model BrandProfile {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  data        Json
+  // Pages read for it.
+  sources     String[]
+  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime  @default(now())
+}
+
+// A post on a connected account — published before Khma or through it —
+// with its latest results. The memory the audit learns from.
+model SocialPost {
+  id              String        @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  socialAccountId String
+  socialAccount   SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  externalId      String
+  network         String
+  // IMAGE, VIDEO, REEL, CAROUSEL, TEXT, LINK
+  format          String
+  text            String        @default("")
+  permalink       String?
+  imageUrl        String?
+  publishedAt     DateTime
+  // { reach, views, likes, comments, shares, saves, engagements }
+  metrics         Json
+  // Published from Khma (matches a PostDelivery).
+  fromKhma        Boolean       @default(false)
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([socialAccountId, externalId])
+  @@index([workspaceId, publishedAt])
+}
+
+// One ad (creative) with its last-90-day results.
+model AdItem {
+  id          String     @id @default(cuid())
+  campaignId  String
+  campaign    AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  externalId  String
+  name        String
+  status      String
+  title       String?
+  body        String?
+  imageUrl    String?
+  cta         String?
+  spend       Float      @default(0)
+  impressions Int        @default(0)
+  clicks      Int        @default(0)
+  results     Int        @default(0)
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([campaignId, externalId])
+}
+
+// The AI audit of everything above: what works, what to avoid.
+model BrandAudit {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // Numbers computed by Khma (formats, times, top/bottom posts …).
+  stats       Json
+  // AI reading of them.
+  data        Json
+  postsCount  Int
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+// A strategy for one business goal: diagnosis, audiences, budget, ads,
+// content and goals. Items are applied one by one by the owner.
+model StrategyPlan {
+  id          String     @id @default(cuid())
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title       String
+  goal        String
+  objective   String
+  budget      Float?
+  currency    String?
+  startsOn    String
+  endsOn      String
+  status      PlanStatus @default(DRAFT)
+  // Plan body (see src/lib/strategist.ts) incl. which parts were applied.
+  data        Json
+  createdById String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
   @@index([workspaceId, createdAt])
 }

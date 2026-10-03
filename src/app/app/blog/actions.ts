@@ -1,5 +1,6 @@
 'use server'
 
+import { withDossier } from '@/lib/dossier'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { aiEnabled, generateBlogArticle, LANGUAGES, LENGTHS, TONES } from '@/lib/ai'
@@ -29,7 +30,7 @@ export async function createAiBlog(raw: z.input<typeof AiBlog>): Promise<{ id?: 
     .slice(0, 10)
   let article
   try {
-    article = await generateBlogArticle(workspace.name, brand, { ...parsed.data, keywords })
+    article = await generateBlogArticle(workspace.name, await withDossier(brand, workspace.id), { ...parsed.data, keywords })
   } catch (e) {
     console.error('blog generation failed', e)
     return { error: 'The AI could not write this article. Please try again.' }
@@ -67,7 +68,7 @@ export async function writeArticle(postId: string): Promise<{ error?: string }> 
   const c = post.campaign
   let article
   try {
-    article = await generateBlogArticle(workspace.name, brand, {
+    article = await generateBlogArticle(workspace.name, await withDossier(brand, workspace.id), {
       topic: [post.title, post.outline].filter(Boolean).join('\n\n'),
       keywords: post.hashtags,
       tone: (TONES as readonly string[]).includes(c?.tone ?? '') ? (c!.tone as (typeof TONES)[number]) : 'Professional',

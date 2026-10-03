@@ -1,5 +1,6 @@
 'use server'
 
+import { withDossier } from '@/lib/dossier'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import {
@@ -59,7 +60,7 @@ export async function createSocialCampaign(raw: z.input<typeof Social>): Promise
   try {
     for (const [i, chunk] of chunks(dates, BATCH).entries()) {
       const brief = i === 0 ? c.brief : `${c.brief}\n\nThis continues the campaign; earlier angles: ${made.map((m) => m.post.angle).join('; ')}`
-      const posts = await generateCampaignPosts(workspace.name, brand, {
+      const posts = await generateCampaignPosts(workspace.name, await withDossier(brand, workspace.id), {
         brief,
         dates: chunk.map((d) => dayIn(d, c.timeZone)),
         tone: c.tone,
@@ -123,7 +124,7 @@ export async function createBlogCampaign(raw: z.input<typeof Blog>): Promise<{ i
 
   let outlines
   try {
-    outlines = await generateBlogOutlines(workspace.name, brand, { brief: c.brief, count: dates.length, language: c.language })
+    outlines = await generateBlogOutlines(workspace.name, await withDossier(brand, workspace.id), { brief: c.brief, count: dates.length, language: c.language })
   } catch (e) {
     console.error('blog plan failed', e)
     return { error: 'The AI could not plan this series. Please try again.' }
@@ -178,7 +179,7 @@ export async function regenerateCampaignPost(postId: string): Promise<{ error?: 
   const others = c.posts.filter((p) => p.id !== post.id && p.title).map((p) => p.title)
   let next: PlannedPost
   try {
-    ;[next] = await generateCampaignPosts(workspace.name, brand, {
+    ;[next] = await generateCampaignPosts(workspace.name, await withDossier(brand, workspace.id), {
       brief: `${c.brief}\n\nWrite ONE replacement post with a fresh angle, different from: ${others.join('; ')}`,
       dates: [(post.scheduledAt ?? new Date()).toISOString().slice(0, 10)],
       tone: (TONES as readonly string[]).includes(c.tone) ? (c.tone as (typeof TONES)[number]) : 'Professional',

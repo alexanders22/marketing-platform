@@ -2,6 +2,7 @@ import { NextResponse, after, type NextRequest } from 'next/server'
 import { requireContext } from '@/lib/context'
 import { encrypt } from '@/lib/crypto'
 import { META_STATE_COOKIE, exchangeMetaCode, listAdAccounts, listPages, metaEnabled } from '@/lib/meta'
+import { refreshDossier } from '@/lib/dossier'
 import { syncAdAccount } from '@/lib/meta-ads'
 import { prisma } from '@/lib/prisma'
 import { unseal } from '@/lib/signed'
@@ -118,11 +119,13 @@ export async function GET(req: NextRequest) {
       }),
     ),
   )
-  // Read ad campaigns right away instead of waiting for the hourly ticker.
+  // Read ad campaigns, then post and ad history and the audit, right away
+  // instead of waiting for the ticker.
   after(async () => {
     for (const a of saved.filter((s) => s.network === 'META_ADS')) {
       await syncAdAccount(a.id).catch((e) => console.error('ads sync failed', a.id, e instanceof Error ? e.message : e))
     }
+    await refreshDossier(workspaceId).catch((e) => console.error('dossier failed', workspaceId, e instanceof Error ? e.message : e))
   })
   return back(`connected=${rows.length}`)
 }

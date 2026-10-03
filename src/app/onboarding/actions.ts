@@ -1,6 +1,9 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
+import { aiEnabled } from '@/lib/ai'
+import { refreshProfile } from '@/lib/dossier'
 import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/session'
 import { importBrandFromWebsite, type ImportedBrand } from '@/lib/brand-import'
@@ -43,8 +46,13 @@ export async function completeOnboarding(draft: BrandDraft): Promise<{ error?: s
         socialLinks: b.socialLinks,
       },
     })
-    return true
+    return ws.id
   })
   if (!created) redirect('/app')
+  // Read the whole website in the background: the dossier is ready by the
+  // time the owner opens it.
+  if (b.website && aiEnabled()) {
+    after(() => refreshProfile(created).catch((e) => console.warn('profile after onboarding failed', e instanceof Error ? e.message : e)))
+  }
   return {}
 }

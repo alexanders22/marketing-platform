@@ -40,19 +40,24 @@ const TONE_HINT: Record<PostOptions['tone'], string> = {
   'Founder-led': 'first person from the founder, personal story, honest and human',
 }
 
-function brandContext(name: string, brand: BrandKit | null) {
+// BrandKit plus, when known, the dossier brief (company profile and what
+// worked before) — see src/lib/dossier.ts.
+type Brand = BrandKit & { dossier?: string }
+
+function brandContext(name: string, brand: Brand | null) {
   return [
     `Brand: ${name}`,
     brand?.website && `Website: ${brand.website}`,
     brand?.description && `About: ${brand.description}`,
     brand?.audience && `Audience: ${brand.audience}`,
     brand?.voice && `Voice: ${brand.voice}`,
+    brand?.dossier && `What the agency knows about this company (use it; never repeat what did not work):\n${brand.dossier}`,
   ]
     .filter(Boolean)
     .join('\n')
 }
 
-export async function generatePost(brandName: string, brand: BrandKit | null, o: PostOptions): Promise<GeneratedPost> {
+export async function generatePost(brandName: string, brand: Brand | null, o: PostOptions): Promise<GeneratedPost> {
   if (!client) throw new Error('AI is not configured')
   const system = [
     'You write social media posts for one brand. Stay strictly on brand and never invent prices, dates, offers or facts that are not in the request, the attached images or the brand details.',
@@ -91,7 +96,7 @@ export async function generatePost(brandName: string, brand: BrandKit | null, o:
 // One square social image for the post, in the brand's colours.
 export async function generateImage(
   brandName: string,
-  brand: BrandKit | null,
+  brand: Brand | null,
   brief: string,
   caption: string,
   variant: number,
@@ -159,7 +164,7 @@ export type PlannedPost = { angle: string; caption: string; hashtags: string[] }
 // campaign forward (tease → launch → proof → reminder → last call …).
 export async function generateCampaignPosts(
   brandName: string,
-  brand: BrandKit | null,
+  brand: Brand | null,
   o: { brief: string; dates: string[]; tone: PostOptions['tone']; language: PostOptions['language'] },
 ): Promise<PlannedPost[]> {
   const system = [
@@ -182,7 +187,7 @@ export type BlogOutline = { title: string; summary: string; keywords: string[] }
 
 export async function generateBlogOutlines(
   brandName: string,
-  brand: BrandKit | null,
+  brand: Brand | null,
   o: { brief: string; count: number; language: PostOptions['language'] },
 ): Promise<BlogOutline[]> {
   const system = [
@@ -205,7 +210,7 @@ const BLOG_LENGTH = { Short: '500–700 words', Medium: '900–1200 words', Long
 
 export async function generateBlogArticle(
   brandName: string,
-  brand: BrandKit | null,
+  brand: Brand | null,
   o: {
     topic: string
     keywords: string[]
@@ -236,7 +241,7 @@ export type PerformanceSummary = { headline: string; wins: string[]; concerns: s
 // with no data it says so instead of guessing.
 export async function summarizePerformance(
   brandName: string,
-  brand: BrandKit | null,
+  brand: Brand | null,
   facts: unknown,
   language: PostOptions['language'] = 'English',
 ): Promise<PerformanceSummary> {
@@ -254,5 +259,215 @@ export async function summarizePerformance(
     wins: list(out?.wins, 3),
     concerns: list(out?.concerns, 3),
     actions: list(out?.actions, 4),
+  }
+}
+
+// ─── Dossier ───────────────────────────────────────────────────────────────
+
+export type CompanyProfile = {
+  summary: string
+  industry: string
+  offerings: { name: string; description: string; price?: string }[]
+  usp: string[]
+  audiences: { name: string; description: string }[]
+  locations: string[]
+  tone: string
+  proof: string[]
+  keywords: string[]
+  gaps: string[]
+}
+
+const strList = (v: unknown, n: number, len = 300) => (Array.isArray(v) ? v.map((x) => String(x).slice(0, len)).filter(Boolean).slice(0, n) : [])
+
+// Reads the company's own pages. Only what the pages say — gaps are listed
+// instead of filled in.
+export async function buildCompanyProfile(name: string, pages: { url: string; text: string }[]): Promise<CompanyProfile> {
+  const system = [
+    'You are a marketing strategist reading a company website to brief an advertising agency.',
+    'Use ONLY what the pages say. Never invent prices, products, numbers, awards or locations. If something important is missing (prices, target customer, proof, contact), list it under "gaps".',
+    'Return JSON {"summary": 2-3 sentences, "industry": string, "offerings": [{"name","description","price"?}] up to 12, "usp": string[] up to 6, "audiences": [{"name","description"}] up to 4, "locations": string[], "tone": one sentence on how the brand speaks, "proof": string[] (reviews, numbers, clients, awards stated on the site), "keywords": string[] up to 12, "gaps": string[]}. Write in English.',
+  ].join('\n\n')
+  const body = pages.map((p) => `### ${p.url}\n${p.text}`).join('\n\n').slice(0, 60_000)
+  const out = await json<Partial<CompanyProfile>>(system, `Company: ${name}\n\n${body}`, 4000, 90_000)
+  return {
+    summary: String(out?.summary ?? '').slice(0, 800),
+    industry: String(out?.industry ?? '').slice(0, 120),
+    offerings: (Array.isArray(out?.offerings) ? out.offerings : []).slice(0, 12).map((o) => ({
+      name: String(o?.name ?? '').slice(0, 120),
+      description: String(o?.description ?? '').slice(0, 400),
+      ...(o?.price ? { price: String(o.price).slice(0, 60) } : {}),
+    })),
+    usp: strList(out?.usp, 6),
+    audiences: (Array.isArray(out?.audiences) ? out.audiences : []).slice(0, 4).map((a) => ({
+      name: String(a?.name ?? '').slice(0, 80),
+      description: String(a?.description ?? '').slice(0, 300),
+    })),
+    locations: strList(out?.locations, 10, 120),
+    tone: String(out?.tone ?? '').slice(0, 300),
+    proof: strList(out?.proof, 8),
+    keywords: strList(out?.keywords, 12, 60),
+    gaps: strList(out?.gaps, 8),
+  }
+}
+
+export type AuditFinding = { insight: string; evidence: string }
+export type BrandAuditData = {
+  summary: string
+  works: AuditFinding[]
+  doesnt: AuditFinding[]
+  topics: { name: string; verdict: 'works' | 'weak' | 'untested'; evidence: string }[]
+  bestTimes: string
+  formats: string
+  frequency: string
+  ads: AuditFinding[]
+  avoid: string[]
+  opportunities: string[]
+}
+
+const findings = (v: unknown, n: number): AuditFinding[] =>
+  (Array.isArray(v) ? v : [])
+    .slice(0, n)
+    .map((f) => ({ insight: String(f?.insight ?? '').slice(0, 400), evidence: String(f?.evidence ?? '').slice(0, 400) }))
+    .filter((f) => f.insight)
+
+// The agency's first read of the account: patterns in what was published
+// and advertised, backed by the computed numbers.
+export async function auditBrand(brandName: string, brand: Brand | null, profile: CompanyProfile | null, stats: unknown): Promise<BrandAuditData> {
+  const system = [
+    'You are the head of a social media and performance agency auditing a new client’s last 12 months.',
+    'Every finding must cite evidence from the numbers or posts given (e.g. "carousels: 2.4× the average engagement over 18 posts"). Do not invent numbers. With fewer than 5 posts or no data in an area, say it is untested instead of concluding.',
+    'Group posts into topics by what they are about (product, behind the scenes, offers, tips, news …) and judge each topic.',
+    'Write for a busy owner: plain words, specific, no jargon.',
+    brandContext(brandName, brand),
+    profile ? `Company profile: ${JSON.stringify(profile)}` : '',
+    'Return JSON {"summary": 2-3 sentences, "works": [{"insight","evidence"}] up to 5, "doesnt": [{"insight","evidence"}] up to 5, "topics": [{"name","verdict": "works"|"weak"|"untested","evidence"}] up to 8, "bestTimes": one sentence, "formats": one sentence, "frequency": one sentence, "ads": [{"insight","evidence"}] up to 4, "avoid": string[] up to 5 concrete things never to repeat, "opportunities": string[] up to 5 things not tried yet that fit this company}.',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  const out = await json<Partial<BrandAuditData>>(system, `Numbers and posts:\n${JSON.stringify(stats)}`, 5000, 90_000)
+  return {
+    summary: String(out?.summary ?? '').slice(0, 800),
+    works: findings(out?.works, 5),
+    doesnt: findings(out?.doesnt, 5),
+    topics: (Array.isArray(out?.topics) ? out.topics : []).slice(0, 8).map((t) => ({
+      name: String(t?.name ?? '').slice(0, 80),
+      verdict: (['works', 'weak', 'untested'].includes(String(t?.verdict)) ? t!.verdict : 'untested') as 'works' | 'weak' | 'untested',
+      evidence: String(t?.evidence ?? '').slice(0, 300),
+    })),
+    bestTimes: String(out?.bestTimes ?? '').slice(0, 300),
+    formats: String(out?.formats ?? '').slice(0, 300),
+    frequency: String(out?.frequency ?? '').slice(0, 300),
+    ads: findings(out?.ads, 4),
+    avoid: strList(out?.avoid, 5),
+    opportunities: strList(out?.opportunities, 5),
+  }
+}
+
+// ─── Strategist ────────────────────────────────────────────────────────────
+
+export type StrategyDraft = {
+  headline: string
+  diagnosis: string[]
+  strategy: string
+  audiences: { id: string; name: string; who: string; why: string; targeting: { ages: string; genders: string; locations: string[]; interests: string[] }; message: string }[]
+  budgetSplit: { label: string; share: number; why: string }[]
+  ads: {
+    id: string
+    name: string
+    objective: string
+    audienceId: string
+    share: number
+    days: number
+    creatives: { headline: string; primaryText: string; cta: string; visual: string }[]
+    why: string
+  }[]
+  pillars: { name: string; why: string; share: number }[]
+  posts: { id: string; date: string; time: string; network: string; format: string; pillar: string; caption: string; hashtags: string[]; visual: string; why: string }[]
+  goals: { id: string; scope: 'ADS' | 'POSTS'; network?: string | null; metric: string; target: number; windowDays: number; why: string }[]
+  weekly: string
+  risks: string[]
+}
+
+export async function generateStrategy(brandName: string, brand: Brand | null, brief: unknown, language: PostOptions['language']): Promise<StrategyDraft> {
+  const system = [
+    'You are the strategy director of a full-service advertising agency (social media + Meta ads). The client tells you a business goal; you return the plan your agency will run.',
+    'Rules:',
+    '- Ground every decision in the dossier, the client facts and past results. Quote the evidence briefly in "why". Never invent prices, offers, numbers or results.',
+    '- Repeat what worked, avoid what did not (see "Never repeat"). Prefer formats and times that performed best.',
+    '- Forecasts are computed by the system, not by you: do not write expected leads, reach or costs.',
+    '- Budget: give shares (0–1) of the total; ads[].share is that campaign’s share of the TOTAL budget. Shares across budgetSplit sum to 1.',
+    '- Posts: only for the first 14 days of the period, 3–10 posts, each with a ready caption and 3–8 hashtags (no #). Dates YYYY-MM-DD inside the period, time HH:MM.',
+    '- Goals use only these metric ids — ads: cost_per_result, results, ctr, cpm, spend; posts: posts, reach, avg_reach, engagements, engagement_rate, views. scope "ADS" or "POSTS"; percent targets in percent (2 = 2%). Money targets only when the facts give a currency and past cost per result.',
+    '- If there is no ad budget, plan organic only and say what an ad budget would add.',
+    brandContext(brandName, brand),
+    `Write in ${language}.`,
+    'Return JSON {"headline": one sentence, "diagnosis": string[2-5] what stands between the client and the goal, "strategy": 3-5 sentences, "audiences": [{"id":"a1","name","who","why","targeting":{"ages":"25-44","genders":"all|women|men","locations":string[],"interests":string[]},"message": the angle for them}] 1-3, "budgetSplit": [{"label","share","why"}], "ads": [{"id":"c1","name","objective": "SALES"|"LEADS"|"TRAFFIC"|"AWARENESS"|"ENGAGEMENT","audienceId","share","days","creatives":[{"headline","primaryText","cta","visual"}] 2-3,"why"}] 0-3, "pillars": [{"name","why","share"}] 2-4, "posts": [{"id":"p1","date","time","network": "FACEBOOK"|"INSTAGRAM","format": "Reel"|"Carousel"|"Photo"|"Video"|"Text","pillar","caption","hashtags": string[],"visual": what to shoot or design for it,"why": the evidence for this post}], "goals": [{"id":"g1","scope","network": "FACEBOOK"|"INSTAGRAM"|null,"metric","target","windowDays": 7|30,"why"}] 2-5, "weekly": what the agency checks every week, "risks": string[1-3]}.',
+  ].join('\n\n')
+  const out = await json<Partial<StrategyDraft>>(system, `Brief and facts:\n${JSON.stringify(brief)}`, 16000, 150_000)
+  const arr = <T,>(v: unknown, n: number) => (Array.isArray(v) ? (v as T[]).slice(0, n) : [])
+  const str = (v: unknown, n = 500) => String(v ?? '').slice(0, n)
+  const num = (v: unknown, lo: number, hi: number, d: number) => {
+    const x = Number(v)
+    return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d
+  }
+  return {
+    headline: str(out?.headline, 300),
+    diagnosis: arr<unknown>(out?.diagnosis, 5).map((x) => str(x, 400)),
+    strategy: str(out?.strategy, 1500),
+    audiences: arr<StrategyDraft['audiences'][number]>(out?.audiences, 3).map((a, i) => ({
+      id: str(a?.id, 20) || `a${i + 1}`,
+      name: str(a?.name, 80),
+      who: str(a?.who, 300),
+      why: str(a?.why, 300),
+      targeting: {
+        ages: str(a?.targeting?.ages, 20),
+        genders: str(a?.targeting?.genders, 20),
+        locations: arr<unknown>(a?.targeting?.locations, 10).map((x) => str(x, 80)),
+        interests: arr<unknown>(a?.targeting?.interests, 12).map((x) => str(x, 80)),
+      },
+      message: str(a?.message, 300),
+    })),
+    budgetSplit: arr<StrategyDraft['budgetSplit'][number]>(out?.budgetSplit, 5).map((b) => ({ label: str(b?.label, 80), share: num(b?.share, 0, 1, 0), why: str(b?.why, 300) })),
+    ads: arr<StrategyDraft['ads'][number]>(out?.ads, 3).map((c, i) => ({
+      id: str(c?.id, 20) || `c${i + 1}`,
+      name: str(c?.name, 120),
+      objective: ['SALES', 'LEADS', 'TRAFFIC', 'AWARENESS', 'ENGAGEMENT'].includes(String(c?.objective)) ? String(c.objective) : 'LEADS',
+      audienceId: str(c?.audienceId, 20),
+      share: num(c?.share, 0, 1, 0),
+      days: Math.round(num(c?.days, 3, 90, 14)),
+      creatives: arr<StrategyDraft['ads'][number]['creatives'][number]>(c?.creatives, 3).map((k) => ({
+        headline: str(k?.headline, 120),
+        primaryText: str(k?.primaryText, 1200),
+        cta: str(k?.cta, 40),
+        visual: str(k?.visual, 400),
+      })),
+      why: str(c?.why, 400),
+    })),
+    pillars: arr<StrategyDraft['pillars'][number]>(out?.pillars, 4).map((p) => ({ name: str(p?.name, 80), why: str(p?.why, 300), share: num(p?.share, 0, 1, 0) })),
+    posts: arr<StrategyDraft['posts'][number]>(out?.posts, 10).map((p, i) => ({
+      id: str(p?.id, 20) || `p${i + 1}`,
+      date: /^\d{4}-\d{2}-\d{2}$/.test(String(p?.date)) ? String(p.date) : '',
+      time: /^\d{2}:\d{2}$/.test(String(p?.time)) ? String(p.time) : '10:00',
+      network: ['FACEBOOK', 'INSTAGRAM'].includes(String(p?.network)) ? String(p.network) : 'INSTAGRAM',
+      format: str(p?.format, 30),
+      pillar: str(p?.pillar, 80),
+      caption: str(p?.caption, 2200).trim(),
+      hashtags: arr<unknown>(p?.hashtags, 8)
+        .map((h) => String(h).replace(/[^\p{L}\p{N}_]/gu, ''))
+        .filter((h) => h.length > 0 && h.length <= 60),
+      visual: str(p?.visual, 400),
+      why: str(p?.why, 300),
+    })),
+    goals: arr<StrategyDraft['goals'][number]>(out?.goals, 5).map((g, i) => ({
+      id: str(g?.id, 20) || `g${i + 1}`,
+      scope: g?.scope === 'POSTS' ? 'POSTS' : 'ADS',
+      network: g?.network === 'FACEBOOK' || g?.network === 'INSTAGRAM' ? g.network : null,
+      metric: str(g?.metric, 40),
+      target: num(g?.target, 0, 1e9, 0),
+      windowDays: g?.windowDays === 30 ? 30 : 7,
+      why: str(g?.why, 300),
+    })),
+    weekly: str(out?.weekly, 600),
+    risks: arr<unknown>(out?.risks, 3).map((x) => str(x, 300)),
   }
 }

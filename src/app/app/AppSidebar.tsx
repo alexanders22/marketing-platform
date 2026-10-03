@@ -5,9 +5,11 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import {
   Bell,
+  BookUser,
   CalendarDays,
   ChevronDown,
   Coins,
+  Compass,
   FilePen,
   Flag,
   FileText,
@@ -34,6 +36,8 @@ import { logout } from '../(auth)/actions'
 
 const NAV = [
   { href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/app/strategy', label: 'Strategy', icon: Compass },
+  { href: '/app/dossier', label: 'Dossier', icon: BookUser },
   { href: '/app/goals', label: 'Goals', icon: Flag },
   { href: '/app/alerts', label: 'Alerts', icon: Bell },
   { href: '/app/planner', label: 'Planner', icon: CalendarDays },

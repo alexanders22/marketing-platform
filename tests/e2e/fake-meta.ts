@@ -122,6 +122,64 @@ export function startFakeMeta() {
       return json(200, { data: rows.slice(0, half), paging: { cursors: { after: 'p2' }, next: 'more' } })
     }
 
+    // Post history: 24 Facebook posts (carousels at 19:00 do best, text at
+    // 10:00 worst) and 12 Instagram media (reels best), one every ~15 days.
+    if (req.method === 'GET' && path === '/page-1/published_posts') {
+      const kinds = [
+        { type: 'album', hour: 19, eng: 120 },
+        { type: 'photo', hour: 13, eng: 40 },
+        { type: 'video_inline', hour: 19, eng: 80 },
+        { type: 'status', hour: 10, eng: 10 },
+      ]
+      const data = Array.from({ length: 24 }, (_, i) => {
+        const k = kinds[i % 4]
+        const d = new Date(Date.now() - (3 + i * 15) * 86_400_000)
+        d.setUTCHours(k.hour - 4, 0, 0, 0)
+        return {
+          id: `page-1_h${i}`,
+          message: `${k.type === 'album' ? 'New apartments gallery' : k.type === 'status' ? 'Office hours update' : 'Project news'} #${i}`,
+          created_time: d.toISOString().replace('Z', '+0000'),
+          permalink_url: `https://facebook.test/h${i}`,
+          attachments: { data: [{ type: k.type }] },
+          reactions: { summary: { total_count: k.eng - 4 } },
+          comments: { summary: { total_count: 3 } },
+          shares: { count: 1 },
+          ...(params.fields.includes('insights') ? { insights: { data: [{ name: 'post_total_media_view_unique', values: [{ value: k.eng * 20 }] }] } } : {}),
+        }
+      })
+      return json(200, { data })
+    }
+    if (req.method === 'GET' && path === '/ig-1/media') {
+      const kinds = [
+        { media_type: 'VIDEO', media_product_type: 'REELS', reach: 3000, eng: 300 },
+        { media_type: 'IMAGE', media_product_type: 'FEED', reach: 800, eng: 50 },
+        { media_type: 'CAROUSEL_ALBUM', media_product_type: 'FEED', reach: 1500, eng: 150 },
+      ]
+      const data = Array.from({ length: 12 }, (_, i) => {
+        const k = kinds[i % 3]
+        return {
+          id: `igm-h${i}`,
+          caption: `Instagram ${k.media_product_type.toLowerCase()} ${i} #arca`,
+          media_type: k.media_type,
+          media_product_type: k.media_product_type,
+          timestamp: new Date(Date.now() - (4 + i * 25) * 86_400_000).toISOString().replace('Z', '+0000'),
+          permalink: `https://instagram.test/h${i}`,
+          like_count: k.eng - 20,
+          comments_count: 10,
+          insights: { data: [{ name: 'reach', values: [{ value: k.reach }] }, { name: 'saved', values: [{ value: 6 }] }, { name: 'shares', values: [{ value: 4 }] }, { name: 'total_interactions', values: [{ value: k.eng }] }] },
+        }
+      })
+      return json(200, { data })
+    }
+    if (req.method === 'GET' && path === '/act_1/ads')
+      return json(200, {
+        data: [
+          { id: 'ad-1', name: 'Family video', campaign_id: 'cmp-leads', effective_status: 'ACTIVE', creative: { title: 'A home near the park', body: 'Two bedrooms, ready in spring.', call_to_action_type: 'LEARN_MORE' }, insights: { data: [{ spend: '300', impressions: '40000', clicks: '900', actions: [{ action_type: 'lead', value: '90' }] }] } },
+          { id: 'ad-2', name: 'Price banner', campaign_id: 'cmp-leads', effective_status: 'ACTIVE', creative: { title: 'From $1,200/m²', body: 'Limited units.', call_to_action_type: 'SIGN_UP' }, insights: { data: [{ spend: '300', impressions: '50000', clicks: '400', actions: [{ action_type: 'lead', value: '20' }] }] } },
+          { id: 'ad-3', name: 'Awareness reel', campaign_id: 'cmp-aware', effective_status: 'PAUSED', creative: { body: 'Spring in Arca' }, insights: { data: [{ spend: '100', impressions: '30000', clicks: '60', reach: '20000' }] } },
+        ],
+      })
+
     if (req.method === 'POST' && path === '/page-1/feed') return json(200, { id: `page-1_${++n}` })
     if (req.method === 'POST' && path === '/page-1/photos')
       return json(200, params.published === 'false' ? { id: `photo-${++n}` } : { id: `photo-${++n}`, post_id: `page-1_${n}` })

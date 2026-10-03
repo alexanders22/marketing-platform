@@ -10,6 +10,7 @@ export const COST = {
   blogArticle: 3,
   blogOutline: 1,
   summary: 1,
+  strategy: 5,
 } as const
 
 export type Charge = { amount: number; reason: CreditReason; note: string }

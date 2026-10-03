@@ -1,5 +1,6 @@
 'use server'
 
+import { withDossier } from '@/lib/dossier'
 import { revalidatePath } from 'next/cache'
 import { aiEnabled, summarizePerformance, type PerformanceSummary } from '@/lib/ai'
 import { PERIODS, dashboard, summaryFacts, type Period } from '@/lib/analytics'
@@ -21,7 +22,7 @@ export async function generateSummary(period: number): Promise<{ summary?: Perfo
   }
   let summary: PerformanceSummary
   try {
-    summary = await summarizePerformance(workspace.name, brand, summaryFacts(data))
+    summary = await summarizePerformance(workspace.name, await withDossier(brand, workspace.id), summaryFacts(data))
   } catch (e) {
     console.error('summary failed', e)
     return { error: 'The summary could not be written — try again.' }

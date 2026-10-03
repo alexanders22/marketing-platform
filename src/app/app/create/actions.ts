@@ -1,5 +1,6 @@
 'use server'
 
+import { withDossier } from '@/lib/dossier'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { aiEnabled, generateImage, generatePost, LANGUAGES, LENGTHS, TONES } from '@/lib/ai'
@@ -50,9 +51,10 @@ export async function createPost(raw: z.input<typeof Input>): Promise<{ post?: C
     return { error: notEnough(maxCost, account.creditBalance) }
   }
 
+  const known = await withDossier(brand, workspace.id)
   let text
   try {
-    text = await generatePost(workspace.name, brand, { ...input, aiHashtags: input.aiHashtags })
+    text = await generatePost(workspace.name, known, { ...input, aiHashtags: input.aiHashtags })
   } catch (e) {
     console.error('generatePost failed', e)
     return { error: 'The AI could not write this post. Please try again.' }
@@ -72,7 +74,7 @@ export async function createPost(raw: z.input<typeof Input>): Promise<{ post?: C
 
   const results = await Promise.allSettled(
     Array.from({ length: input.images }, (_, i) =>
-      generateImage(workspace.name, brand, input.prompt, text.caption, i, input.attachments).then((img) =>
+      generateImage(workspace.name, known, input.prompt, text.caption, i, input.attachments).then((img) =>
         saveMedia(workspace.id, img.data, img.mime, input.prompt),
       ),
     ),

@@ -1,6 +1,8 @@
+import { after } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { cronSecret } from '@/lib/cron-secret'
 import { dispatchAlerts } from '@/lib/alerts'
+import { refreshDossiersDue } from '@/lib/dossier'
 import { checkAllGoals } from '@/lib/goals'
 import { syncAdsDue } from '@/lib/meta-ads'
 import { publishDue, refreshInsights } from '@/lib/publisher'
@@ -11,6 +13,7 @@ import { publishDue, refreshInsights } from '@/lib/publisher'
 // every tick.
 let lastInsights = 0
 let lastGoals = 0
+let lastDossiers = 0
 
 export async function POST(req: Request) {
   const given = Buffer.from(req.headers.get('x-khma-cron') ?? '')
@@ -32,6 +35,14 @@ export async function POST(req: Request) {
     lastGoals = Date.now()
     goals = await checkAllGoals()
   }
+  // Post history and audit: weekly per workspace, a few per hour. Slow (AI),
+  // so it runs after the response and never holds up publishing.
+  let dossiers = false
+  if (Date.now() - lastDossiers > 60 * 60 * 1000) {
+    lastDossiers = Date.now()
+    dossiers = true
+    after(() => refreshDossiersDue().catch((e) => console.error('dossiers failed', e)))
+  }
   const alerts = await dispatchAlerts()
-  return Response.json({ published, insights, ads, goals, alerts })
+  return Response.json({ published, insights, ads, goals, dossiers, alerts })
 }
