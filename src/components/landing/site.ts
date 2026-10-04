@@ -38,8 +38,8 @@ import {
 export type Icon = ComponentType<{ size?: number; className?: string }>;
 
 // Sales / partnership enquiries.
-export const CONTACT = "mailto:info@brandrepublic.ge?subject=Loudpilot%20demo";
-export const SUPPORT = "mailto:info@brandrepublic.ge?subject=Loudpilot%20support";
+export const CONTACT = "mailto:info@loudpilot.app?subject=Loudpilot%20demo";
+export const SUPPORT = "mailto:info@loudpilot.app?subject=Loudpilot%20support";
 
 export type Feature = {
   slug: string;

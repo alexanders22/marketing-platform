@@ -129,7 +129,7 @@ export function Pricing() {
           </p>
         </div>
         <a
-          href="mailto:info@brandrepublic.ge?subject=Loudpilot%20partnership"
+          href="mailto:info@loudpilot.app?subject=Loudpilot%20partnership"
           className="shrink-0 rounded-lg border border-white/10 px-4 py-2 text-sm font-medium transition hover:bg-white/5"
         >
           Let&apos;s talk

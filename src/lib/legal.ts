@@ -7,7 +7,7 @@ export const LEGAL = {
   entityId: process.env.LEGAL_ENTITY_ID ?? "",
   address: process.env.LEGAL_ADDRESS ?? "",
   country: "Georgia",
-  email: "info@brandrepublic.ge",
+  email: "info@loudpilot.app",
   site: "https://loudpilot.app",
   updated: "2 October 2026",
 };
