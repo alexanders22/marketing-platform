@@ -169,6 +169,7 @@ model Workspace {
   recommendations  Recommendation[]
   accessTokens     AccessToken[]
   mcpRequests      McpRequest[]
+  conversations    Conversation[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -423,6 +424,10 @@ model SocialAccount {
   socialPosts SocialPost[]
   // When post history was last read.
   historyAt   DateTime?
+  conversations Conversation[]
+  // Inbox: last read of conversations, and why it failed (e.g. no permission).
+  inboxSyncedAt DateTime?
+  inboxError    String?
 
   @@unique([workspaceId, network, externalId])
   @@index([connectedBy])
@@ -902,4 +907,49 @@ model AdminLog {
 
   @@index([targetType, targetId])
   @@index([createdAt])
+}
+
+// Inbox: a direct-message thread on a Facebook Page (Messenger) or an
+// Instagram professional account.
+model Conversation {
+  id               String        @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  socialAccountId  String
+  socialAccount    SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  network          SocialNetwork
+  externalId       String
+  // The person on the other side (PSID / IGSID) — replies go to this id.
+  participantId    String
+  participantName  String
+  lastMessageAt    DateTime
+  lastText         String?
+  lastFromMe       Boolean       @default(false)
+  // Messages from the person newer than the last time someone opened it.
+  unread           Int           @default(0)
+  readAt           DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  messages Message[]
+
+  @@unique([socialAccountId, externalId])
+  @@index([workspaceId, lastMessageAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  externalId     String
+  fromMe         Boolean
+  text           String
+  // [{ type, url }] for photos, files, stickers, shares.
+  attachments    Json?
+  sentAt         DateTime
+  // Loudpilot user who sent the reply (null for messages read from Meta).
+  sentById       String?
+
+  @@unique([conversationId, externalId])
+  @@index([conversationId, sentAt])
 }

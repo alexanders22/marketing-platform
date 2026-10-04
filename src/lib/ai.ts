@@ -573,3 +573,23 @@ export async function weeklyReview(brandName: string, brand: Brand | null, facts
     }),
   }
 }
+
+// A reply to a direct message, in the language the person wrote in.
+export async function suggestReply(
+  brandName: string,
+  brand: Brand | null,
+  thread: { fromMe: boolean; text: string; at: string }[],
+): Promise<string> {
+  const system = [
+    'You answer direct messages for one brand on Facebook Messenger and Instagram, like its best community manager.',
+    'Rules: reply in the language of the customer’s last message; short (1–4 sentences), warm and helpful; answer what they asked.',
+    'Never invent prices, availability, dates, addresses or promises that are not in the brand details or the thread — if unknown, say a teammate will confirm and ask for what you need (phone, preferred time, etc.).',
+    brandContext(brandName, brand),
+    'Return JSON {"reply": string}.',
+  ].join('\n\n')
+  const lines = thread.map((m) => `${m.fromMe ? brandName : 'Customer'} (${m.at}): ${m.text || '[attachment]'}`).join('\n')
+  const out = await json<{ reply?: string }>(system, `Conversation, oldest first:\n${lines}`, 2500, 45_000)
+  const reply = String(out?.reply ?? '').trim()
+  if (!reply) throw new Error('Empty AI reply')
+  return reply.slice(0, 2000)
+}

@@ -18,6 +18,25 @@ export function startFakeMeta() {
   let leadsStatus = 'ACTIVE'
   const hooks: { headers: Record<string, string | string[] | undefined>; body: string }[] = []
   let n = 0
+  const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString()
+  type FakeMsg = { id: string; message: string; created_time: string; from: { id: string; name?: string; username?: string } }
+  const threads: Record<'messenger' | 'instagram', { id: string; person: { id: string; name?: string; username?: string }; self: { id: string; name?: string; username?: string }; messages: FakeMsg[] }> = {
+    messenger: {
+      id: 't_fb_1',
+      person: { id: 'psid-1', name: 'Nino Beridze' },
+      self: { id: 'page-1', name: 'Bloom Bakery' },
+      messages: [
+        { id: 'm_fb_2', message: 'Do you have gluten-free bread today?', created_time: ago(5), from: { id: 'psid-1', name: 'Nino Beridze' } },
+        { id: 'm_fb_1', message: 'Hello!', created_time: ago(6), from: { id: 'psid-1', name: 'Nino Beridze' } },
+      ],
+    },
+    instagram: {
+      id: 't_ig_1',
+      person: { id: 'igsid-1', username: 'levan.k' },
+      self: { id: 'ig-1', username: 'bloombakery' },
+      messages: [{ id: 'm_ig_1', message: 'Can I order a cake for Saturday?', created_time: ago(60 * 30), from: { id: 'igsid-1', username: 'levan.k' } }],
+    },
+  }
 
   const server: Server = createServer(async (req, res) => {
     const url = new URL(req.url!, `http://127.0.0.1:${FAKE_META_PORT}`)
@@ -79,7 +98,7 @@ export function startFakeMeta() {
     if (path === '/me') return json(200, { id: 'meta-user-1', name: 'Test Person' })
     if (path === '/me/permissions')
       return json(200, {
-        data: ['pages_show_list', 'pages_manage_posts', 'instagram_content_publish', 'ads_read'].map((permission) => ({ permission, status: 'granted' })),
+        data: ['pages_show_list', 'pages_manage_posts', 'instagram_content_publish', 'ads_read', 'pages_messaging', 'pages_manage_metadata', 'instagram_manage_messages'].map((permission) => ({ permission, status: 'granted' })),
       })
     if (path === '/me/accounts')
       return json(200, {
@@ -185,6 +204,30 @@ export function startFakeMeta() {
     if (req.method === 'POST' && path === '/page-1/feed') return json(200, { id: `page-1_${++n}` })
     if (req.method === 'POST' && path === '/page-1/photos')
       return json(200, params.published === 'false' ? { id: `photo-${++n}` } : { id: `photo-${++n}`, post_id: `page-1_${n}` })
+    // Inbox: one Messenger and one Instagram thread; replies are appended.
+    if (req.method === 'GET' && path === '/page-1/conversations') {
+      const t = threads[params.platform === 'instagram' ? 'instagram' : 'messenger']
+      return json(200, {
+        data: [
+          {
+            id: t.id,
+            updated_time: t.messages[0].created_time,
+            participants: { data: [t.person, t.self] },
+            messages: { data: t.messages.slice(0, 20) },
+          },
+        ],
+      })
+    }
+    if (req.method === 'POST' && path === '/page-1/messages') {
+      const to = JSON.parse(params.recipient).id
+      const text = JSON.parse(params.message).text as string
+      if (text.includes('LATE')) return json(400, { error: { message: 'This message is sent outside of allowed window.', code: 10, error_subcode: 2018278 } })
+      const t = Object.values(threads).find((x) => x.person.id === to)
+      if (!t) return json(400, { error: { message: 'No matching user found', code: 100, error_subcode: 2018001 } })
+      const mid = `m_out_${++n}`
+      t.messages.unshift({ id: mid, message: text, created_time: new Date().toISOString(), from: t.self })
+      return json(200, { recipient_id: to, message_id: mid })
+    }
     if (req.method === 'POST' && path === '/ig-1/media') return json(200, { id: `container-${++n}` })
     if (req.method === 'POST' && path === '/ig-1/media_publish') return json(200, { id: `igmedia-${++n}` })
 

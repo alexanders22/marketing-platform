@@ -4,6 +4,7 @@ import { cronSecret } from '@/lib/cron-secret'
 import { dispatchAlerts } from '@/lib/alerts'
 import { refreshDossiersDue } from '@/lib/dossier'
 import { checkAllGoals } from '@/lib/goals'
+import { syncInboxDue } from '@/lib/inbox'
 import { syncAdsDue } from '@/lib/meta-ads'
 import { reviewsDue } from '@/lib/weekly'
 import { publishDue, refreshInsights } from '@/lib/publisher'
@@ -30,6 +31,8 @@ export async function POST(req: Request) {
     insights = await refreshInsights()
   }
   const ads = await syncAdsDue()
+  // Direct messages: each account every 2 minutes.
+  const inbox = await syncInboxDue()
   // Goals hourly, after fresh ad and post numbers.
   let goals = 0
   if (q.get('goals') === '1' || Date.now() - lastGoals > 60 * 60 * 1000) {
@@ -49,5 +52,5 @@ export async function POST(req: Request) {
     })
   }
   const alerts = await dispatchAlerts()
-  return Response.json({ published, insights, ads, goals, dossiers, alerts })
+  return Response.json({ published, insights, ads, inbox, goals, dossiers, alerts })
 }

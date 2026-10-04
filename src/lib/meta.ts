@@ -23,6 +23,9 @@ export const META_SCOPES = (
     'instagram_manage_insights',
     'business_management',
     'ads_read',
+    'pages_messaging',
+    'pages_manage_metadata',
+    'instagram_manage_messages',
   ].join(',')
 ).split(',')
 

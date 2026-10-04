@@ -65,6 +65,8 @@ export type SidebarProps = {
   alerts: number
   // Open recommendations of the latest weekly review.
   recommendations: number
+  // Conversations with unread messages.
+  inbox: number
   // Companies the user can switch between.
   companies: { id: string; name: string; logoUrl: string | null; paused: boolean }[]
   currentId: string
@@ -112,7 +114,7 @@ export function AppSidebar(props: SidebarProps) {
   )
 }
 
-function SidebarBody({ credits, planLabel, alerts, recommendations, path, ...rest }: SidebarProps & { path: string }) {
+function SidebarBody({ credits, planLabel, alerts, recommendations, inbox, path, ...rest }: SidebarProps & { path: string }) {
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <WorkspaceMenu {...rest} />
@@ -135,6 +137,11 @@ function SidebarBody({ credits, planLabel, alerts, recommendations, path, ...res
               {n.href === '/app/weekly' && recommendations > 0 && (
                 <span className="ml-auto rounded-full bg-indigo-600 px-1.5 py-px text-[11px] font-semibold text-white" aria-label={`${recommendations} open recommendations`}>
                   {recommendations}
+                </span>
+              )}
+              {n.href === '/app/inbox' && inbox > 0 && (
+                <span className="ml-auto rounded-full bg-indigo-600 px-1.5 py-px text-[11px] font-semibold text-white" aria-label={`${inbox} unread conversations`}>
+                  {inbox > 99 ? '99+' : inbox}
                 </span>
               )}
               {n.href === '/app/alerts' && alerts > 0 && (
