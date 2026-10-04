@@ -12,6 +12,7 @@ export const COST = {
   summary: 1,
   strategy: 5,
   reply: 1,
+  advice: 1,
 } as const
 
 export type Charge = { amount: number; reason: CreditReason; note: string }

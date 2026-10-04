@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react'
 import { ArrowLeft, FileText, Loader2, Target, Zap } from 'lucide-react'
 import { ChannelPicker, type Network } from '@/components/channels'
 import { createBlogCampaign, createSocialCampaign } from '../actions'
+import { audienceLine, BriefAssistant } from '@/components/BriefAssistant'
 
 const TONES = ['Professional', 'Friendly', 'Educational', 'Bold', 'Founder-led'] as const
 const LANGS = ['English', 'Georgian', 'Russian'] as const
@@ -68,6 +69,16 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
       </div>
 
       <div className="mt-8 space-y-5">
+        {kind !== 'blog' && (
+          <BriefAssistant
+            kind="campaign"
+            defaultOpen={false}
+            onUse={(idea, audience) => {
+              setName(idea.title.slice(0, 80))
+              setBrief([idea.prompt, audienceLine(audience)].filter(Boolean).join('\n'))
+            }}
+          />
+        )}
         <Field label="Campaign name">
           <input className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === 'blog' ? 'Spring guides' : 'Summer sale'} />
         </Field>

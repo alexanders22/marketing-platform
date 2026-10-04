@@ -43,6 +43,7 @@ import { useRouter } from 'next/navigation'
 import { savePost } from '../posts/actions'
 import { createPost, type CreatedPost } from './actions'
 import { HashtagModal, type Library } from './HashtagModal'
+import { audienceLine, BriefAssistant } from '@/components/BriefAssistant'
 
 type Tone = 'Professional' | 'Friendly' | 'Educational' | 'Bold' | 'Founder-led'
 type Length = 'Short' | 'Medium' | 'Long'
@@ -251,6 +252,15 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
           <p className="mt-2 text-center text-zinc-500">
             Turn a simple idea into a polished, on-brand social post ready to refine and publish.
           </p>
+
+          <div className="mt-6">
+            <BriefAssistant
+              kind="post"
+              language={language}
+              defaultOpen={false}
+              onUse={(idea, audience) => setPrompt([idea.prompt, idea.format && `Format: ${idea.format}.`, audienceLine(audience)].filter(Boolean).join('\n'))}
+            />
+          </div>
 
           {/* ─── Prompt box ─────────────────────────────────────────── */}
           <div

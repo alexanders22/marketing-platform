@@ -34,6 +34,8 @@ test.beforeAll(async ({ browser }) => {
   await page.waitForURL(/connected=3/)
   ws = sql(`select "workspaceId" from "SocialAccount" where network='META_ADS' order by "createdAt" desc limit 1`)
   await expect.poll(() => sql(`select count(*) from "AdCampaign" where "workspaceId"='${ws}'`), { timeout: 20_000 }).toBe('2')
+  // The first sync reads 12 months of daily insights after the campaigns.
+  await expect.poll(() => sql(`select "syncedAt" is not null from "SocialAccount" where "workspaceId"='${ws}' and network='META_ADS'`), { timeout: 30_000 }).toBe('t')
   campaignId = sql(`select id from "AdCampaign" where "workspaceId"='${ws}' and name like 'Lead Gen%'`)
 })
 test.afterAll(async () => {

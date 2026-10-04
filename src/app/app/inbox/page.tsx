@@ -50,7 +50,9 @@ export default async function InboxPage({ searchParams }: PageProps<'/app/inbox'
 
   if (accounts.length === 0) {
     return (
-      <EmptyState
+      <>
+        <h1 className="sr-only">Inbox</h1>
+        <EmptyState
         icon={MessagesSquare}
         title="Connect a Facebook Page or Instagram"
         action={
@@ -60,7 +62,8 @@ export default async function InboxPage({ searchParams }: PageProps<'/app/inbox'
         }
       >
         Messages from Messenger and Instagram Direct land here, and you answer them without leaving Loudpilot.
-      </EmptyState>
+        </EmptyState>
+      </>
     )
   }
 

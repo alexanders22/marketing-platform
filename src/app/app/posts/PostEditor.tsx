@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { ArrowLeft, CalendarClock, ExternalLink, Heart, ImagePlus, LayoutTemplate, Loader2, MessageCircle, Pencil, Send, Sparkles, Trash2, Wand2, X } from 'lucide-react'
+import { BriefAssistant } from '@/components/BriefAssistant'
 import { ChannelPicker, NETWORKS, type Network } from '@/components/channels'
 import { useIsClient } from '@/components/LocalTime'
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker'
@@ -238,6 +239,18 @@ export function PostEditor({
                 : 'Publishing starts once channels are connected — until then posts are planned drafts.'}
             </p>
           </section>
+
+          {editable && !content.trim() && (
+            <BriefAssistant
+              kind="post"
+              defaultOpen={false}
+              onUse={(idea) => {
+                setContent(idea.caption || idea.prompt)
+                if (idea.network !== 'BOTH') setChannels([idea.network])
+                setSaved(false)
+              }}
+            />
+          )}
 
           <section>
             <p className="mb-2 text-sm font-semibold">Text</p>

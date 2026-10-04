@@ -9,7 +9,7 @@ import { requireContext } from '@/lib/context'
 import type { DossierStats } from '@/lib/dossier'
 import { formatMoney, formatNumber, formatPercent } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
-import { RefreshButton } from './RefreshButton'
+import { FactDelete, RefreshButton } from './RefreshButton'
 
 export const metadata: Metadata = { title: 'Dossier — Loudpilot' }
 
@@ -59,11 +59,12 @@ const VERDICT = {
 
 export default async function DossierPage() {
   const { workspace, brand, role } = await requireContext()
-  const [profileRow, auditRow, accounts, postCount] = await Promise.all([
+  const [profileRow, auditRow, accounts, postCount, facts] = await Promise.all([
     prisma.brandProfile.findUnique({ where: { workspaceId: workspace.id } }),
     prisma.brandAudit.findFirst({ where: { workspaceId: workspace.id }, orderBy: { createdAt: 'desc' } }),
     prisma.socialAccount.findMany({ where: { workspaceId: workspace.id }, select: { network: true, name: true, historyAt: true } }),
     prisma.socialPost.count({ where: { workspaceId: workspace.id } }),
+    prisma.brandFact.findMany({ where: { workspaceId: workspace.id }, orderBy: { updatedAt: 'desc' } }),
   ])
   const profile = profileRow?.data as CompanyProfile | undefined
   const audit = auditRow?.data as BrandAuditData | undefined
@@ -357,6 +358,23 @@ export default async function DossierPage() {
             No dossier yet. {canEdit ? 'Build it — Loudpilot reads your website and connected accounts.' : 'An owner or admin can build it.'}
           </section>
         )
+      )}
+
+      {facts.length > 0 && (
+        <Card title="What you told Loudpilot">
+          <p className="-mt-2 mb-3 text-sm text-zinc-500">Answers to its questions. Every post, campaign and plan uses them.</p>
+          <ul className="divide-y divide-zinc-100">
+            {facts.map((f) => (
+              <li key={f.id} className="flex items-start justify-between gap-3 py-2.5 text-sm">
+                <span>
+                  <span className="text-zinc-500">{f.question}</span>
+                  <span className="mt-0.5 block font-medium">{f.answer}</span>
+                </span>
+                <FactDelete id={f.id} />
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
     </div>
   )

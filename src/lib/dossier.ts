@@ -283,9 +283,10 @@ export async function refreshDossiersDue(limit = 5) {
 
 // A compact brief every AI feature adds to its prompt.
 export async function dossierBrief(workspaceId: string) {
-  const [profile, audit] = await Promise.all([
+  const [profile, audit, facts] = await Promise.all([
     prisma.brandProfile.findUnique({ where: { workspaceId } }),
     prisma.brandAudit.findFirst({ where: { workspaceId }, orderBy: { createdAt: 'desc' } }),
+    prisma.brandFact.findMany({ where: { workspaceId }, orderBy: { updatedAt: 'desc' }, take: 30 }),
   ])
   const p = profile?.data as CompanyProfile | undefined
   const a = audit?.data as BrandAuditData | undefined
@@ -305,6 +306,8 @@ export async function dossierBrief(workspaceId: string) {
     if (a.bestTimes) lines.push(`Best times: ${a.bestTimes}`)
     if (a.formats) lines.push(`Formats: ${a.formats}`)
   }
+  // The owner's own answers win over anything guessed from the website.
+  if (facts.length) lines.push(`The owner told us:\n${facts.map((f) => `- ${f.question} ${f.answer}`).join('\n')}`)
   return lines.join('\n')
 }
 

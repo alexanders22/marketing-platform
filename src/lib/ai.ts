@@ -143,7 +143,8 @@ export async function generateImage(
 
 // ─── Campaigns & blog ──────────────────────────────────────────────────────
 
-async function json<T>(system: string, prompt: string, maxOutputTokens: number, timeoutMs = 60_000): Promise<T> {
+// `schema` (JSON Schema) makes the model return exactly that shape.
+async function json<T>(system: string, prompt: string, maxOutputTokens: number, timeoutMs = 60_000, schema?: unknown): Promise<T> {
   if (!client) throw new Error('AI is not configured')
   const res = await client.models.generateContent({
     model: MODEL,
@@ -151,6 +152,7 @@ async function json<T>(system: string, prompt: string, maxOutputTokens: number, 
     config: {
       systemInstruction: system,
       responseMimeType: 'application/json',
+      ...(schema ? { responseJsonSchema: schema } : {}),
       maxOutputTokens,
       abortSignal: AbortSignal.timeout(timeoutMs),
     },
@@ -592,4 +594,77 @@ export async function suggestReply(
   const reply = String(out?.reply ?? '').trim()
   if (!reply) throw new Error('Empty AI reply')
   return reply.slice(0, 2000)
+}
+
+export type BriefAdvice = {
+  known: string[]
+  audiences: { name: string; where: string; who: string; wants: string; how: string }[]
+  questions: { question: string; why: string; options: string[] }[]
+  ideas: { title: string; why: string; network: 'FACEBOOK' | 'INSTAGRAM' | 'BOTH'; format: string; audience: string; prompt: string; caption: string }[]
+}
+
+// The agency's first move before any post or campaign: who to talk to
+// (location + product), what is still unknown (asked, with likely answers),
+// and ideas that follow from the data. Never guesses facts it was not given.
+export async function adviseBrief(
+  brandName: string,
+  brand: Brand | null,
+  input: { kind: 'post' | 'campaign'; goal: string; performance: unknown; language: PostOptions['language'] },
+): Promise<BriefAdvice> {
+  const system = [
+    'You are the strategist of a marketing agency. A client is about to create a social ' + (input.kind === 'campaign' ? 'campaign' : 'post') + '. Many clients do not know their audience — you help.',
+    'Do this:',
+    '1. "known": 2–6 short facts you rely on (from the brand details, dossier, owner answers and performance). No guesses.',
+    '2. "audiences": 2–3 audience segments for THIS product in THIS location: "where" (city/area/country, or online), "who" (age, situation, interests), "wants" (need or pain), "how" (angle and channel that reaches them). If the location or product is unknown, still propose likely segments but say so in "who" and ask about it.',
+    '3. "questions": 0–4 questions about what you truly need and do not know (e.g. where they sell, main product to promote, price range, offer/deadline, who buys). Never ask what is already answered in "The owner told us". Each with "why" and 2–4 likely answer "options" written as the owner would answer.',
+    '4. "ideas": 3 concrete ' + (input.kind === 'campaign' ? 'campaign ideas (a theme for several posts)' : 'post ideas') + ' that follow from the data and the goal: "title", "why" (cite the fact or number), "network" FACEBOOK|INSTAGRAM|BOTH, "format" (Reel, Carousel, Photo, Story, Text), "audience" (exactly the "name" of one of your audiences), "prompt" (a brief for the copywriter, 1–3 sentences), "caption" (a ready first draft, ≤ 400 characters, no hashtags).',
+    'Audience "name" is a short label of 2–5 words (e.g. "Weekend party hosts"); details go in "who".',
+    'Use the formats, days and topics that worked; avoid what did not. Never invent prices, offers, dates or numbers.',
+    brandContext(brandName, brand),
+    `Write everything in ${input.language}.`,
+    'Return JSON {"known": string[], "audiences": [...], "questions": [...], "ideas": [...]}.',
+  ].join('\n\n')
+  const str = { type: 'string' }
+  const obj = (props: Record<string, unknown>) => ({ type: 'object', properties: props, required: Object.keys(props) })
+  const schema = obj({
+    known: { type: 'array', items: str },
+    audiences: { type: 'array', items: obj({ name: str, where: str, who: str, wants: str, how: str }) },
+    questions: { type: 'array', items: obj({ question: str, why: str, options: { type: 'array', items: str } }) },
+    ideas: {
+      type: 'array',
+      items: obj({ title: str, why: str, network: { type: 'string', enum: ['FACEBOOK', 'INSTAGRAM', 'BOTH'] }, format: str, audience: str, prompt: str, caption: str }),
+    },
+  })
+  const out = await json<Partial<BriefAdvice>>(
+    system,
+    [`Goal from the client: ${input.goal || '(none — suggest what to do)'}`, `Recent performance: ${JSON.stringify(input.performance)}`].join('\n\n'),
+    8000,
+    90_000,
+    schema,
+  )
+  const s = (v: unknown, n = 300) => String(v ?? '').trim().slice(0, n)
+  const arr = (v: unknown) => (Array.isArray(v) ? v : [])
+  return {
+    known: arr(out?.known).map((x) => s(x, 200)).filter(Boolean).slice(0, 6),
+    audiences: arr(out?.audiences)
+      .slice(0, 3)
+      .map((a) => ({ name: s(a?.name, 80), where: s(a?.where, 120), who: s(a?.who), wants: s(a?.wants), how: s(a?.how) }))
+      .filter((a) => a.name),
+    questions: arr(out?.questions)
+      .slice(0, 4)
+      .map((q) => ({ question: s(q?.question, 200), why: s(q?.why, 200), options: arr(q?.options).map((o) => s(o, 120)).filter(Boolean).slice(0, 4) }))
+      .filter((q) => q.question),
+    ideas: arr(out?.ideas)
+      .slice(0, 3)
+      .map((i) => ({
+        title: s(i?.title, 120),
+        why: s(i?.why),
+        network: (['FACEBOOK', 'INSTAGRAM'].includes(String(i?.network)) ? i.network : 'BOTH') as BriefAdvice['ideas'][number]['network'],
+        format: s(i?.format, 30),
+        audience: s(i?.audience, 80),
+        prompt: s(i?.prompt, 600),
+        caption: s(i?.caption, 600),
+      }))
+      .filter((i) => i.title && i.prompt),
+  }
 }
