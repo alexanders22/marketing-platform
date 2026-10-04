@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { NEXT_COOKIE, checkAuthorize, withQuery } from '@/lib/oauth'
 import { getSessionUser } from '@/lib/session'
+import { appUrl } from '@/lib/mail'
 
 // Start of the OAuth flow. Not signed in → log in first and come back to
 // the consent page; signed in → straight to it.
@@ -12,8 +13,8 @@ export async function GET(req: NextRequest) {
     return new Response(`Loudpilot could not start the connection: ${check.error}`, { status: 400 })
   }
   const consent = `/oauth/consent?${req.nextUrl.searchParams.toString()}`
-  if (await getSessionUser()) return NextResponse.redirect(new URL(consent, req.url))
-  const res = NextResponse.redirect(new URL('/login', req.url))
+  if (await getSessionUser()) return NextResponse.redirect(new URL(consent, appUrl()))
+  const res = NextResponse.redirect(new URL('/login', appUrl()))
   res.cookies.set(NEXT_COOKIE, consent, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 900 })
   return res
 }

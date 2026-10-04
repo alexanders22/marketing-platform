@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { googleEnabled, googleRedirectUri } from '@/lib/google'
+import { appUrl } from '@/lib/mail'
 
 export async function GET(req: Request) {
-  if (!googleEnabled()) return NextResponse.redirect(new URL('/login', req.url))
+  if (!googleEnabled()) return NextResponse.redirect(new URL('/login', appUrl()))
   const state = randomBytes(16).toString('base64url')
   const url = new URL('https://accounts.google.com/o/oauth2/v2/auth')
   url.search = new URLSearchParams({
