@@ -5,6 +5,9 @@ import { z } from 'zod'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 import { publishPostNow, targetsFor } from '@/lib/publisher'
+import { aiEnabled, generateImage } from '@/lib/ai'
+import { charge, COST, notEnough } from '@/lib/credits'
+import { withDossier } from '@/lib/dossier'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 
 const NETWORKS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST'] as const
@@ -24,6 +27,8 @@ const PostInput = z.object({
   // true = publish automatically at scheduledAt; otherwise the post is a
   // draft that only sits in the Planner.
   schedule: z.boolean().optional(),
+  // Saved on the way to the Studio: an empty draft is fine then.
+  allowEmpty: z.boolean().optional(),
 })
 
 export type PostInput = z.input<typeof PostInput>
@@ -33,7 +38,7 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
   const parsed = PostInput.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const p = parsed.data
-  if (p.kind === 'SOCIAL' && !p.content.trim() && p.mediaIds.length === 0) return { error: 'Write something or add an image' }
+  if (p.kind === 'SOCIAL' && !p.content.trim() && p.mediaIds.length === 0 && !p.allowEmpty) return { error: 'Write something or add an image' }
   if (p.kind === 'BLOG' && !p.title) return { error: 'Give the article a title' }
   if (p.kind === 'SOCIAL' && p.hashtags.some((h) => !/^[\p{L}\p{N}_]{1,60}$/u.test(h))) {
     return { error: 'Hashtags can only contain letters, digits and _' }
@@ -146,4 +151,34 @@ export async function listMedia(): Promise<{ id: string; url: string }[]> {
     select: { id: true },
   })
   return rows.map((m) => ({ id: m.id, url: mediaUrl(m.id) }))
+}
+
+// AI images for a post, from a short description (and the post text). Each
+// delivered image costs COST.image; failed ones are free.
+export async function generatePostImages(input: { prompt: string; caption: string; count: number }): Promise<{ images?: { id: string; url: string }[]; error?: string }> {
+  const { account, workspace, brand } = await requireContext()
+  const prompt = input.prompt.trim().slice(0, 1000)
+  const count = Math.min(4, Math.max(1, Math.floor(input.count) || 1))
+  if (!prompt && !input.caption.trim()) return { error: 'Describe the image or write the post text first' }
+  if (!aiEnabled()) return { error: 'AI generation is not connected yet.' }
+  const max = count * COST.image
+  if (account.creditBalance < max) return { error: notEnough(max, account.creditBalance) }
+
+  const known = await withDossier(brand, workspace.id)
+  const results = await Promise.allSettled(
+    Array.from({ length: count }, (_, i) =>
+      generateImage(workspace.name, known, prompt || input.caption.slice(0, 300), input.caption.slice(0, 2000), i, []).then((img) =>
+        saveMedia(workspace.id, img.data, img.mime, prompt || 'Post image'),
+      ),
+    ),
+  )
+  const media = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+  results.forEach((r) => r.status === 'rejected' && console.error('generatePostImages failed', r.reason))
+  if (media.length === 0) return { error: 'The AI could not draw this. Try a different description.' }
+  const ok = await charge(account.id, workspace.id, [
+    { amount: media.length * COST.image, reason: 'AI_IMAGE', note: `${media.length} post image${media.length > 1 ? 's' : ''}` },
+  ])
+  if (!ok) return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
+  revalidatePath('/app', 'layout')
+  return { images: media.map((m) => ({ id: m.id, url: mediaUrl(m.id) })) }
 }

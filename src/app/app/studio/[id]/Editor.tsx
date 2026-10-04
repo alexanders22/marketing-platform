@@ -52,9 +52,12 @@ const MAX_TEXT = 2000
 export function Editor({
   design,
   brand,
+  forPost,
 }: {
   design: { id: string; name: string; width: number; height: number; data: DesignDoc }
   brand: Brand
+  // Opened from a post editor: the export goes back into that post.
+  forPost?: { postId: string; replaceMediaId?: string }
 }) {
   const router = useRouter()
   const [doc, setDoc] = useState<DesignDoc>(design.data)
@@ -349,7 +352,7 @@ export function Editor({
     setError(undefined)
     try {
       const url = await render()
-      const res = await exportDesign(design.id, url.split(',')[1], true)
+      const res = await exportDesign(design.id, url.split(',')[1], forPost ?? 'new')
       if (res.error) setError(res.error)
       else if (res.postId) router.push(`/app/posts/${res.postId}`)
     } catch (e) {
@@ -463,7 +466,7 @@ export function Editor({
             disabled={busy !== null}
             className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
           >
-            {busy === 'post' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Use in post
+            {busy === 'post' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} {forPost ? 'Save to post' : 'Use in post'}
           </button>
         </div>
       </div>

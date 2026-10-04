@@ -3,11 +3,12 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { ArrowLeft, CalendarClock, ExternalLink, Heart, ImagePlus, MessageCircle, Send, Sparkles, Trash2, X } from 'lucide-react'
+import { ArrowLeft, CalendarClock, ExternalLink, Heart, ImagePlus, LayoutTemplate, Loader2, MessageCircle, Pencil, Send, Sparkles, Trash2, Wand2, X } from 'lucide-react'
 import { ChannelPicker, NETWORKS, type Network } from '@/components/channels'
 import { useIsClient } from '@/components/LocalTime'
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker'
-import { deletePost, publishNow, savePost } from './actions'
+import { designFromMedia } from '../studio/actions'
+import { deletePost, generatePostImages, publishNow, savePost } from './actions'
 
 export type PostDraft = {
   id?: string
@@ -82,6 +83,10 @@ export function PostEditor({
   const [edited, setWhen] = useState<string | null>(null)
   const when = edited ?? (isClient ? (initial.scheduledAt ? toLocalInput(initial.scheduledAt) : (defaultWhen ?? '')) : '')
   const [picker, setPicker] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiCount, setAiCount] = useState(1)
+  const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string>()
   const [saved, setSaved] = useState(false)
   const [pending, start] = useTransition()
@@ -97,8 +102,9 @@ export function PostEditor({
   const reachable = channels.filter((c) => connected.includes(c))
   const [notice, setNotice] = useState<string>()
 
-  const persist = (schedule: boolean) =>
+  const persist = (schedule: boolean, allowEmpty = false) =>
     savePost({
+        allowEmpty,
         id: initial.id,
         kind: 'SOCIAL',
         content,
@@ -135,6 +141,56 @@ export function PostEditor({
       if (!initial.id && res.id) router.replace(`/app/posts/${res.id}`)
       router.refresh()
     })
+
+  // Images can't change once the post is out.
+  const editable = status !== 'PUBLISHED' && status !== 'PUBLISHING'
+
+  // The Studio works on a saved post: save what is on screen first (a
+  // scheduled post stays scheduled), then come back to it from the Studio.
+  const saveForStudio = async () => {
+    const res = await persist(status === 'SCHEDULED', true)
+    if (res.error) {
+      setError(res.error)
+      return null
+    }
+    return res.id ?? initial.id ?? null
+  }
+
+  const designInStudio = () =>
+    start(async () => {
+      setError(undefined)
+      const id = await saveForStudio()
+      if (id) router.push(`/app/studio?post=${id}`)
+    })
+
+  const editInStudio = (m: PickedMedia) =>
+    start(async () => {
+      setError(undefined)
+      const aspect = await new Promise<number>((resolve) => {
+        const img = new Image()
+        img.onload = () => resolve(img.naturalWidth / img.naturalHeight || 1)
+        img.onerror = () => resolve(1)
+        img.src = m.url
+      })
+      const id = await saveForStudio()
+      if (!id) return
+      const res = await designFromMedia(m.id, aspect)
+      if (res.error || !res.id) return setError(res.error ?? 'Could not open the Studio')
+      router.push(`/app/studio/${res.id}?post=${id}&replace=${m.id}`)
+    })
+
+  const generate = async () => {
+    setGenerating(true)
+    setError(undefined)
+    const res = await generatePostImages({ prompt: aiPrompt, caption: content, count: aiCount })
+    setGenerating(false)
+    if (res.error || !res.images) return setError(res.error)
+    setMedia((cur) => [...cur, ...res.images!].slice(0, 10))
+    setSaved(false)
+    setAiOpen(false)
+    setAiPrompt('')
+    router.refresh()
+  }
 
   const remove = () =>
     start(async () => {
@@ -213,30 +269,72 @@ export function PostEditor({
 
           <section>
             <p className="mb-2 text-sm font-semibold">Images</p>
-            <div className="flex flex-wrap gap-2">
-              {media.map((m) => (
-                <span key={m.id} className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={m.url} alt="" className="h-24 w-24 rounded-xl object-cover ring-1 ring-zinc-200" />
+            {media.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {media.map((m) => (
+                  <span key={m.id} className="group relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={m.url} alt="" className="h-24 w-24 rounded-xl object-cover ring-1 ring-zinc-200" />
+                    {editable && (
+                      <button
+                        onClick={() => editInStudio(m)}
+                        disabled={pending}
+                        className="absolute inset-x-1 bottom-1 inline-flex items-center justify-center gap-1 rounded-lg bg-white/90 py-1 text-[11px] font-semibold text-zinc-900 shadow-sm hover:bg-white"
+                        aria-label="Edit image in Studio"
+                      >
+                        <Pencil size={11} /> Studio
+                      </button>
+                    )}
+                    <button
+                      onClick={() => (setMedia(media.filter((x) => x.id !== m.id)), setSaved(false))}
+                      className="absolute -top-1.5 -right-1.5 grid h-5 w-5 place-items-center rounded-full bg-zinc-900 text-white"
+                      aria-label="Remove image"
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {media.length < 10 && (
+              <div className="grid gap-2 sm:grid-cols-3">
+                <MediaOption icon={ImagePlus} title="Upload" sub="Your photos or library" label="Add images: upload or pick from the library" onClick={() => setPicker(true)} />
+                {editable && <MediaOption icon={LayoutTemplate} title="Design in Studio" sub="Brand templates" onClick={designInStudio} disabled={pending} />}
+                <MediaOption icon={Wand2} title="Generate with AI" sub="Edit it in Studio after" onClick={() => setAiOpen((v) => !v)} active={aiOpen} />
+              </div>
+            )}
+            {aiOpen && (
+              <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50/50 p-4">
+                <label className="text-sm font-medium" htmlFor="ai-image">
+                  Describe the image
+                </label>
+                <textarea
+                  id="ai-image"
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder={content.trim() ? 'Leave empty to draw from the post text' : 'e.g. Sunset view from a balcony of the new building'}
+                  className="mt-1.5 min-h-20 w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+                />
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm text-zinc-600">
+                    Variants
+                    <select value={aiCount} onChange={(e) => setAiCount(Number(e.target.value))} className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-sm">
+                      {[1, 2, 3, 4].map((n) => (
+                        <option key={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
                   <button
-                    onClick={() => (setMedia(media.filter((x) => x.id !== m.id)), setSaved(false))}
-                    className="absolute -top-1.5 -right-1.5 grid h-5 w-5 place-items-center rounded-full bg-zinc-900 text-white"
-                    aria-label="Remove image"
+                    onClick={generate}
+                    disabled={generating}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-60"
                   >
-                    <X size={11} />
+                    {generating ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                    {generating ? 'Drawing…' : `Generate · ${aiCount} credit${aiCount > 1 ? 's' : ''}`}
                   </button>
-                </span>
-              ))}
-              {media.length < 10 && (
-                <button
-                  onClick={() => setPicker(true)}
-                  className="grid h-24 w-24 place-items-center rounded-xl border-2 border-dashed border-zinc-200 text-zinc-500 hover:border-zinc-300"
-                  aria-label="Add images"
-                >
-                  <ImagePlus size={20} />
-                </button>
-              )}
-            </div>
+                </div>
+              </div>
+            )}
           </section>
 
           <section>
@@ -398,5 +496,44 @@ export function PostEditor({
         />
       )}
     </div>
+  )
+}
+
+function MediaOption({
+  icon: Icon,
+  title,
+  sub,
+  onClick,
+  disabled,
+  active,
+  label,
+}: {
+  label?: string
+  icon: typeof ImagePlus
+  title: string
+  sub: string
+  onClick: () => void
+  disabled?: boolean
+  active?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-expanded={active}
+      aria-label={label}
+      className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition disabled:opacity-60 ${
+        active ? 'border-violet-300 bg-violet-50' : 'border-dashed border-zinc-300 hover:border-zinc-400 hover:bg-zinc-50'
+      }`}
+    >
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-zinc-700 ring-1 ring-zinc-200">
+        <Icon size={17} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">{title}</span>
+        <span className="block truncate text-xs text-zinc-500">{sub}</span>
+      </span>
+    </button>
   )
 }

@@ -10,7 +10,19 @@ import { createDesign, deleteDesign, duplicateDesign } from './actions'
 
 type Design = { id: string; name: string; width: number; height: number; data: DesignDoc; preview: string | null; updatedAt: string }
 
-export function StudioHome({ brandName, colors, designs }: { brandName: string; colors: string[]; designs: Design[] }) {
+export function StudioHome({
+  brandName,
+  colors,
+  designs,
+  forPost,
+}: {
+  brandName: string
+  colors: string[]
+  designs: Design[]
+  // Opened from a post: designs open with "Save to post".
+  forPost?: string
+}) {
+  const q2 = forPost ? `?post=${forPost}` : ''
   const router = useRouter()
   const [size, setSize] = useState<string>(SIZES[0].id)
   const [busy, setBusy] = useState<string | null>(null)
@@ -23,7 +35,7 @@ export function StudioHome({ brandName, colors, designs }: { brandName: string; 
     setBusy(templateId)
     start(async () => {
       const res = await createDesign(size, templateId)
-      router.push(`/app/studio/${res.id}`)
+      router.push(`/app/studio/${res.id}${q2}`)
     })
   }
 
@@ -35,6 +47,14 @@ export function StudioHome({ brandName, colors, designs }: { brandName: string; 
         <h1 className="inline-flex items-center gap-3 text-2xl font-semibold sm:text-3xl">
           <LayoutTemplate size={26} /> Design studio
         </h1>
+        {forPost && (
+          <p className="mx-auto mt-3 w-fit rounded-full bg-white/80 px-3 py-1 text-sm font-medium text-indigo-700 ring-1 ring-indigo-200">
+            Designing an image for your post —{' '}
+            <Link href={`/app/posts/${forPost}`} className="underline">
+              back to the post
+            </Link>
+          </p>
+        )}
         <p className="mx-auto mt-3 max-w-xl text-zinc-600">
           Posts, stories and ad creatives in {brandName}&apos;s colours. Pick a format and a template — every template uses
           your brand palette.
@@ -98,7 +118,7 @@ export function StudioHome({ brandName, colors, designs }: { brandName: string; 
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
           {shown.map((d) => (
             <div key={d.id} className="group relative">
-              <Link href={`/app/studio/${d.id}`} className="block">
+              <Link href={`/app/studio/${d.id}${q2}`} className="block">
                 <div className="grid aspect-square place-items-center overflow-hidden rounded-xl bg-zinc-100 ring-1 ring-zinc-200 transition group-hover:ring-zinc-400">
                   {d.preview ? (
                     // eslint-disable-next-line @next/next/no-img-element

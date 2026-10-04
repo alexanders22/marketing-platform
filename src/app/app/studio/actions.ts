@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { requireContext } from '@/lib/context'
-import { palette, SIZES, TEMPLATES, resizeDoc } from '@/lib/design'
+import { palette, SIZES, TEMPLATES, resizeDoc, uid, type DesignDoc } from '@/lib/design'
 import { prisma } from '@/lib/prisma'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 
@@ -55,6 +55,27 @@ const SaveInput = z.object({
   data: Doc,
 })
 
+// Open an existing image (upload, AI image, earlier export) in the Studio:
+// a canvas of the closest social size with the image filling it.
+export async function designFromMedia(mediaId: string, aspect: number) {
+  const { workspace } = await requireContext()
+  const media = await prisma.media.findFirst({ where: { id: mediaId, workspaceId: workspace.id, kind: 'IMAGE' } })
+  if (!media) return { error: 'Image not found' }
+  const ratio = Number.isFinite(aspect) && aspect > 0 ? aspect : 1
+  const size = [...SIZES].filter((s) => s.id !== 'youtube' && s.id !== 'linkedin').sort((a, b) => Math.abs(Math.log(a.w / a.h / ratio)) - Math.abs(Math.log(b.w / b.h / ratio)))[0]
+  const doc: DesignDoc = {
+    background: '#ffffff',
+    layers: [
+      { id: uid(), type: 'image', name: 'Image', x: 0, y: 0, w: size.w, h: size.h, rotation: 0, mediaId: media.id, src: mediaUrl(media.id), fit: 'cover', radius: 0, opacity: 1 },
+    ],
+  }
+  const design = await prisma.design.create({
+    data: { workspaceId: workspace.id, name: `Edit · ${size.name}`, width: size.w, height: size.h, data: doc as unknown as Prisma.InputJsonValue },
+  })
+  revalidatePath('/app/studio')
+  return { id: design.id }
+}
+
 export async function createDesign(sizeId: string, templateId: string) {
   const { workspace, brand } = await requireContext()
   const size = SIZES.find((s) => s.id === sizeId) ?? SIZES[0]
@@ -96,11 +117,13 @@ export async function saveDesign(raw: z.input<typeof SaveInput>): Promise<{ erro
   return {}
 }
 
-// Stores the rendered PNG as media; optionally opens it as a new post draft.
+// Stores the rendered PNG as media. `target`: 'new' opens it as a new post
+// draft; a post id puts it into that post (in place of `replaceMediaId`
+// when the design started as an edit of one of its images).
 export async function exportDesign(
   id: string,
   png: string,
-  asPost: boolean,
+  target?: 'new' | { postId: string; replaceMediaId?: string },
 ): Promise<{ mediaId?: string; url?: string; postId?: string; error?: string }> {
   const { workspace, user } = await requireContext()
   const design = await prisma.design.findFirst({ where: { id, workspaceId: workspace.id } })
@@ -113,10 +136,18 @@ export async function exportDesign(
   await prisma.design.update({ where: { id }, data: { previewMediaId: media.id } })
 
   let postId: string | undefined
-  if (asPost) {
+  if (target === 'new') {
     const post = await prisma.post.create({
       data: { workspaceId: workspace.id, kind: 'SOCIAL', content: '', mediaIds: [media.id], createdById: user.id },
     })
+    postId = post.id
+  } else if (target) {
+    const post = await prisma.post.findFirst({ where: { id: target.postId, workspaceId: workspace.id }, select: { id: true, mediaIds: true, status: true } })
+    if (!post) return { error: 'Post not found' }
+    if (post.status === 'PUBLISHING' || post.status === 'PUBLISHED') return { error: 'This post is already published' }
+    const at = target.replaceMediaId ? post.mediaIds.indexOf(target.replaceMediaId) : -1
+    const mediaIds = at >= 0 ? post.mediaIds.map((m, i) => (i === at ? media.id : m)) : [...post.mediaIds, media.id].slice(-10)
+    await prisma.post.update({ where: { id: post.id }, data: { mediaIds } })
     postId = post.id
   }
   revalidatePath('/app', 'layout')
