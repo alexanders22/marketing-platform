@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import {
   Bell,
   Bot,
   BookUser,
   CalendarDays,
-  ChevronDown,
+  Check,
+  ChevronsUpDown,
   Coins,
   Compass,
   FilePen,
@@ -19,6 +20,7 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   ListChecks,
+  Loader2,
   Link2,
   LogOut,
   Menu,
@@ -26,6 +28,7 @@ import {
   Palette,
   Plus,
   Send,
+  ShieldCheck,
   Sparkles,
   StickyNote,
   Target,
@@ -35,6 +38,7 @@ import {
 import { FaLinkedinIn } from 'react-icons/fa6'
 import { SiFacebook, SiInstagram, SiX } from 'react-icons/si'
 import { logout } from '../(auth)/actions'
+import { switchCompany } from './companies/actions'
 
 const NAV = [
   { href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -61,6 +65,11 @@ export type SidebarProps = {
   alerts: number
   // Open recommendations of the latest weekly review.
   recommendations: number
+  // Companies the user can switch between.
+  companies: { id: string; name: string; logoUrl: string | null; paused: boolean }[]
+  currentId: string
+  canAddCompany: boolean
+  superAdmin: boolean
 }
 
 export function AppSidebar(props: SidebarProps) {
@@ -103,10 +112,10 @@ export function AppSidebar(props: SidebarProps) {
   )
 }
 
-function SidebarBody({ workspace, logoUrl, user, credits, planLabel, alerts, recommendations, path }: SidebarProps & { path: string }) {
+function SidebarBody({ credits, planLabel, alerts, recommendations, path, ...rest }: SidebarProps & { path: string }) {
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <WorkspaceMenu workspace={workspace} logoUrl={logoUrl} user={user} />
+      <WorkspaceMenu {...rest} />
 
       <CreateMenu />
 
@@ -274,8 +283,30 @@ function CreateMenu() {
   )
 }
 
-function WorkspaceMenu({ workspace, logoUrl, user }: Pick<SidebarProps, 'workspace' | 'logoUrl' | 'user'>) {
+function CompanyBadge({ name, logoUrl, size = 'h-8 w-8' }: { name: string; logoUrl: string | null; size?: string }) {
+  return (
+    <span className={`grid ${size} shrink-0 place-items-center overflow-hidden rounded-lg bg-white ring-1 ring-zinc-200`}>
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logoUrl} alt="" className="h-full w-full object-contain" />
+      ) : (
+        <span className="text-sm font-bold text-orange-600">{name.slice(0, 1).toUpperCase()}</span>
+      )}
+    </span>
+  )
+}
+
+function WorkspaceMenu({
+  workspace,
+  logoUrl,
+  user,
+  companies,
+  currentId,
+  canAddCompany,
+  superAdmin,
+}: Pick<SidebarProps, 'workspace' | 'logoUrl' | 'user' | 'companies' | 'currentId' | 'canAddCompany' | 'superAdmin'>) {
   const [open, setOpen] = useState(false)
+  const [switching, startSwitch] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false)
@@ -289,25 +320,48 @@ function WorkspaceMenu({ workspace, logoUrl, user }: Pick<SidebarProps, 'workspa
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-zinc-200/50"
         aria-expanded={open}
+        aria-label={`Company: ${workspace}`}
       >
-        <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-white ring-1 ring-zinc-200">
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" className="h-full w-full object-contain" />
-          ) : (
-            <span className="text-sm font-bold text-orange-600">{workspace.slice(0, 1).toUpperCase()}</span>
-          )}
-        </span>
+        <CompanyBadge name={workspace} logoUrl={logoUrl} />
         <span className="min-w-0 flex-1 truncate font-medium">{workspace}</span>
-        <ChevronDown size={16} className="shrink-0 text-zinc-500" />
+        {switching ? <Loader2 size={16} className="shrink-0 animate-spin text-zinc-500" /> : <ChevronsUpDown size={16} className="shrink-0 text-zinc-500" />}
       </button>
       {open && (
         <div className="absolute top-full right-0 left-0 z-20 mt-1 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-lg">
+          <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold tracking-wide text-zinc-500">COMPANIES</p>
+          <ul className="max-h-64 overflow-y-auto" aria-label="Companies">
+            {companies.map((c) => (
+              <li key={c.id}>
+                <button
+                  onClick={() => {
+                    setOpen(false)
+                    if (c.id !== currentId) startSwitch(() => switchCompany(c.id))
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-zinc-100"
+                >
+                  <CompanyBadge name={c.name} logoUrl={c.logoUrl} size="h-6 w-6" />
+                  <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                  {c.paused && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">PAUSED</span>}
+                  {c.id === currentId && <Check size={15} className="shrink-0 text-emerald-600" aria-label="Current company" />}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {canAddCompany && (
+            <MenuLink href="/onboarding/company" icon={Plus} onClick={() => setOpen(false)}>
+              Add company
+            </MenuLink>
+          )}
+          <div className="my-1 h-px bg-zinc-100" />
           <div className="px-2.5 py-2">
             <p className="truncate text-sm font-medium">{user.name}</p>
             <p className="truncate text-xs text-zinc-500">{user.email}</p>
           </div>
-          <div className="my-1 h-px bg-zinc-100" />
+          {superAdmin && (
+            <MenuLink href="/admin" icon={ShieldCheck} onClick={() => setOpen(false)}>
+              Admin panel
+            </MenuLink>
+          )}
           <MenuLink href="/app/brand" icon={Palette} onClick={() => setOpen(false)}>
             Brand settings
           </MenuLink>

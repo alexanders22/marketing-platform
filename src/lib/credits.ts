@@ -32,7 +32,8 @@ export async function charge(
       if (inTx && !(await inTx(tx))) throw new Abort()
       if (total <= 0) return true
       const res = await tx.account.updateMany({
-        where: { id: accountId, creditBalance: { gte: total } },
+        // A paused account spends nothing.
+        where: { id: accountId, creditBalance: { gte: total }, pausedAt: null },
         data: { creditBalance: { decrement: total } },
       })
       if (res.count === 0) throw new Abort()

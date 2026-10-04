@@ -77,6 +77,10 @@ model Account {
   trialEndsAt     DateTime?
   // Email account owners and admins when an alert fires.
   alertEmails     Boolean      @default(true)
+  // Paused by a super admin: members are locked out, nothing publishes,
+  // syncs or spends credits until it is resumed.
+  pausedAt        DateTime?
+  pausedReason    String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -451,6 +455,8 @@ model User {
   googleId        String?   @unique
   emailVerifiedAt DateTime?
   role            UserRole  @default(USER)
+  // Blocked by a super admin: can't sign in, sessions and tokens stop working.
+  disabledAt      DateTime?
   createdAt       DateTime  @default(now())
 
   memberships  AccountMember[]
@@ -881,4 +887,19 @@ model McpRequest {
   createdAt   DateTime     @default(now())
 
   @@index([workspaceId, createdAt])
+}
+
+// What super admins changed, for the record.
+model AdminLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  adminEmail String
+  action     String
+  targetType String
+  targetId   String
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }

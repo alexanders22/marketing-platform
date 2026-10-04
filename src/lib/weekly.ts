@@ -8,6 +8,7 @@ import { METRICS } from './goal-metrics'
 import { resultLabel } from './meta-ads'
 import { prisma } from './prisma'
 import { dayIn, zonedToUtc } from './time'
+import { ACTIVE_WORKSPACE } from './pause'
 
 // The weekly loop: every Monday Loudpilot looks back at the last seven days
 // (Mon–Sun in the workspace's zone), explains what happened and proposes
@@ -177,7 +178,7 @@ export async function reviewsDue(now = new Date(), limit = 3) {
   if (process.env.KHMA_AUTO_REVIEW === 'off' || !aiEnabled()) return 0
   // Active customers with something to review.
   const candidates = await prisma.workspace.findMany({
-    where: { accountId: { not: null }, OR: [{ socialAccounts: { some: { status: 'ACTIVE' } } }, { posts: { some: { status: 'PUBLISHED' } } }] },
+    where: { accountId: { not: null }, ...ACTIVE_WORKSPACE, OR: [{ socialAccounts: { some: { status: 'ACTIVE' } } }, { posts: { some: { status: 'PUBLISHED' } } }] },
     select: { id: true, weeklyReviews: { orderBy: { weekEnd: 'desc' }, take: 1, select: { weekEnd: true } } },
     take: 500,
   })

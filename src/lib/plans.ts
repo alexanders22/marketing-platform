@@ -9,6 +9,8 @@ export const PLANS: {
   monthly: number
   users: number
   profiles: number
+  // Companies (brands) one account can run, each with its own channels.
+  companies: number
   credits: number
   popular?: boolean
 }[] = [
@@ -19,6 +21,7 @@ export const PLANS: {
     monthly: 29,
     users: 1,
     profiles: 5,
+    companies: 2,
     credits: 300,
   },
   {
@@ -28,6 +31,7 @@ export const PLANS: {
     monthly: 79,
     users: 5,
     profiles: 20,
+    companies: 10,
     credits: 1500,
     popular: true,
   },
@@ -38,6 +42,7 @@ export const PLANS: {
     monthly: 199,
     users: 20,
     profiles: 100,
+    companies: 50,
     credits: 5000,
   },
 ]
@@ -47,3 +52,6 @@ export const TRIAL_DAYS = 7
 export const TRIAL_CREDITS = 50
 
 export const yearlyTotal = (monthly: number) => monthly * 10
+
+// How many companies an account may have; one until a plan is picked.
+export const companyLimit = (plan: string) => PLANS.find((p) => p.id === plan)?.companies ?? 1

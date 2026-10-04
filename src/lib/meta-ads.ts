@@ -4,6 +4,7 @@ import { decrypt } from './crypto'
 import { MetaError, graph } from './meta'
 import { prisma } from './prisma'
 import { dayIn, isValidTimeZone } from './time'
+import { ACTIVE_WORKSPACE } from './pause'
 
 // Reads campaigns and daily campaign insights from connected Meta ad
 // accounts (ads_read) into AdCampaign / AdInsightDay.
@@ -200,6 +201,7 @@ export async function syncAdsDue(now = new Date(), limit = 20) {
     where: {
       network: 'META_ADS',
       status: 'ACTIVE',
+      workspace: ACTIVE_WORKSPACE,
       OR: [{ syncedAt: null }, { syncedAt: { lt: new Date(now.getTime() - 60 * 60 * 1000) } }],
       // After a failure, wait 15 minutes before trying again.
       NOT: { lastError: { not: null }, updatedAt: { gt: new Date(now.getTime() - 15 * 60 * 1000) } },

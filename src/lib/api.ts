@@ -69,7 +69,11 @@ export async function requirePartner(req: Request): Promise<Partner> {
 export async function partnerWorkspace(partner: Partner, externalId: string): Promise<Workspace> {
   const ws = await prisma.workspace.findUnique({
     where: { partnerId_externalId: { partnerId: partner.id, externalId } },
+    include: { account: { select: { pausedAt: true } } },
   })
   if (!ws) throw new ApiError(404, 'workspace_not_found', 'Workspace not found')
-  return ws
+  if (ws.account?.pausedAt) throw new ApiError(403, 'account_paused', 'This account is paused')
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { account, ...rest } = ws
+  return rest
 }

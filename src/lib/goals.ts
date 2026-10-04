@@ -4,6 +4,7 @@ import { raiseAlert } from './alerts'
 import { classify, formatMetric, metricDef, WINDOWS } from './goal-metrics'
 import { prisma } from './prisma'
 import { dayIn, isValidTimeZone } from './time'
+import { ACTIVE_WORKSPACE } from './pause'
 
 // Goals are checked hourly over complete days (yesterday and before), so a
 // morning with little delivery yet never looks like a failure. Posts count
@@ -242,7 +243,7 @@ export async function checkGoal(goal: Goal, now = new Date()) {
 }
 
 export async function checkAllGoals(now = new Date()) {
-  const goals = await prisma.goal.findMany({ where: { active: true }, take: 2000 })
+  const goals = await prisma.goal.findMany({ where: { active: true, workspace: ACTIVE_WORKSPACE }, take: 2000 })
   for (const g of goals) {
     await checkGoal(g, now).catch((e) => console.error('goal check failed', g.id, e instanceof Error ? e.message : e))
   }

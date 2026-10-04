@@ -59,6 +59,7 @@ export async function authenticate(req: Request) {
     include: { user: true, workspace: { include: { account: true, brandKit: true } } },
   })
   if (!row || row.revokedAt || (row.expiresAt && row.expiresAt < new Date())) return null
+  if (row.user.disabledAt || row.workspace.account?.pausedAt) return null
   // The user must still belong to the account that owns the workspace.
   const member = row.workspace.accountId
     ? await prisma.accountMember.findFirst({ where: { userId: row.userId, accountId: row.workspace.accountId } })

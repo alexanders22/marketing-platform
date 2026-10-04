@@ -12,6 +12,7 @@ import {
 } from './meta'
 import { accountExpiredAlert, raiseAlert } from './alerts'
 import { prisma } from './prisma'
+import { ACTIVE_WORKSPACE } from './pause'
 
 // Networks Loudpilot can publish to today.
 export const PUBLISHABLE = ['FACEBOOK', 'INSTAGRAM'] as const
@@ -117,6 +118,7 @@ export async function publishDue(now = new Date()) {
       status: 'SCHEDULED',
       scheduledAt: { lte: now, gte: new Date(now.getTime() - MAX_LATE_MS) },
       channels: { hasSome: [...PUBLISHABLE] },
+      workspace: ACTIVE_WORKSPACE,
     },
     orderBy: { scheduledAt: 'asc' },
     take: 50,
@@ -174,7 +176,7 @@ export async function refreshInsights(now = new Date(), limit = 100) {
   const rows = await prisma.postDelivery.findMany({
     where: {
       status: 'PUBLISHED',
-      socialAccount: { status: 'ACTIVE' },
+      socialAccount: { status: 'ACTIVE', workspace: ACTIVE_WORKSPACE },
       createdAt: { gte: new Date(now.getTime() - 30 * 24 * h) },
       OR: [
         { metricsAt: null },

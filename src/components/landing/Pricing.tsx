@@ -11,6 +11,7 @@ const PLANS = [
     blurb: "For founders and small brands running their own marketing.",
     monthly: 29,
     users: 1,
+    companies: 2,
     profiles: 5,
     credits: "300",
   },
@@ -21,6 +22,7 @@ const PLANS = [
     blurb: "For marketing teams handling a few brands and ad accounts.",
     monthly: 79,
     users: 5,
+    companies: 10,
     profiles: 20,
     credits: "1,500",
     popular: true,
@@ -32,6 +34,7 @@ const PLANS = [
     blurb: "For agencies and partners serving many clients at once.",
     monthly: 199,
     users: 20,
+    companies: 50,
     profiles: 100,
     credits: "5,000",
   },
@@ -102,6 +105,7 @@ export function Pricing() {
               <p className="mt-8 text-xs font-medium uppercase tracking-wider text-zinc-500">What&apos;s included</p>
               <ul className="mt-3 space-y-3 text-sm">
                 <Row icon={UserRound} label="Users" value={p.users} />
+                <Row icon={Building2} label="Companies" value={p.companies} />
                 <Row icon={Sparkles} label="Social & ad profiles" value={p.profiles} />
                 <Row icon={Coins} label="AI credits / month" value={p.credits} />
               </ul>

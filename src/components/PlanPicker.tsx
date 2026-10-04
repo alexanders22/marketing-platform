@@ -125,6 +125,7 @@ export function PlanPicker({ current, after = '/app' }: { current?: PlanId | nul
                 <p className="mt-5 text-xs font-semibold tracking-wide text-zinc-500">WHAT&apos;S INCLUDED</p>
                 <ul className="mt-2 space-y-2.5 text-sm text-zinc-700">
                   <Row icon={UserRound} label="Users" value={p.users} />
+                  <Row icon={Building2} label="Companies" value={p.companies} />
                   <Row icon={Share2} label="Social profiles" value={p.profiles} />
                   <Row icon={Coins} label="Credits" value={p.credits.toLocaleString()} />
                 </ul>

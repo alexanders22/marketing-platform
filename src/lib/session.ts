@@ -9,7 +9,10 @@ import { sha256 } from './crypto'
 export const SESSION_COOKIE = 'khma_session'
 const TTL_MS = 30 * 24 * 60 * 60 * 1000
 
+// A user blocked by a super admin never gets a session.
 export async function createSession(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { disabledAt: true } })
+  if (!user || user.disabledAt) redirect('/login?error=blocked')
   const token = randomBytes(32).toString('base64url')
   const expiresAt = new Date(Date.now() + TTL_MS)
   await prisma.session.create({ data: { userId, tokenHash: sha256(token), expiresAt } })
@@ -29,6 +32,7 @@ export async function destroySession() {
   const token = store.get(SESSION_COOKIE)?.value
   if (token) await prisma.session.deleteMany({ where: { tokenHash: sha256(token) } })
   store.delete(SESSION_COOKIE)
+  store.delete('khma_ws')
 }
 
 // One lookup per request, however many components ask.
@@ -39,7 +43,7 @@ export const getSessionUser = cache(async () => {
     where: { tokenHash: sha256(token) },
     include: { user: true },
   })
-  if (!session || session.expiresAt < new Date()) return null
+  if (!session || session.expiresAt < new Date() || session.user.disabledAt) return null
   return session.user
 })
 

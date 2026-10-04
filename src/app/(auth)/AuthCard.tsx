@@ -15,6 +15,7 @@ type Props = {
 const ERRORS: Record<string, string> = {
   link: 'That sign-in link is invalid or has expired. Request a new one.',
   google: 'Google sign-in failed. Please try again.',
+  blocked: 'This account is blocked. Contact info@loudpilot.app.',
 }
 
 export function AuthCard({ mode, googleEnabled, mailEnabled, error }: Props) {

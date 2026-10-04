@@ -5,6 +5,8 @@ import { ArrowLeft, ArrowRight, Check, Link2, Loader2, Palette, Store } from 'lu
 import { BrandEditor } from '@/components/BrandEditor'
 import { PlanPicker } from '@/components/PlanPicker'
 import type { BrandDraft } from '@/lib/brand-schema'
+import Link from 'next/link'
+import { addCompany } from '../app/companies/actions'
 import { analyzeWebsite, completeOnboarding } from './actions'
 
 type Step = 'source' | 'analyzing' | 'review' | 'plan'
@@ -12,7 +14,8 @@ type Step = 'source' | 'analyzing' | 'review' | 'plan'
 const EMPTY: BrandDraft = { name: '', website: '', description: '', logoUrl: '', colors: [], socialLinks: [] }
 const CHECKS = ['Scanning your website', 'Extracting logos and colors', 'Finding social profiles', 'Preparing your brand']
 
-export function Onboarding() {
+// `company`: one more company for an existing account (no plan step).
+export function Onboarding({ mode: flow = 'first' }: { mode?: 'first' | 'company' }) {
   const [step, setStep] = useState<Step>('source')
   const [mode, setMode] = useState<'website' | 'manual'>('website')
   const [url, setUrl] = useState('')
@@ -61,16 +64,16 @@ export function Onboarding() {
   const save = () => {
     setError(undefined)
     startSave(async () => {
-      const res = await completeOnboarding({
-        ...brand,
-        socialLinks: brand.socialLinks.filter((l) => l.trim() && l.trim() !== 'https://'),
-      })
-      if (res.error) return setError(res.error)
+      const draft = { ...brand, socialLinks: brand.socialLinks.filter((l) => l.trim() && l.trim() !== 'https://') }
+      // addCompany redirects into the new company when it succeeds.
+      const res = flow === 'company' ? await addCompany(draft) : await completeOnboarding(draft)
+      if (res?.error) return setError(res.error)
       setStep('plan')
     })
   }
 
   const progress = { source: 1, analyzing: 2, review: 2, plan: 3 }[step]
+  const steps = flow === 'company' ? 2 : 3
 
   return (
     <div className="min-h-screen bg-[#f4f3f1] px-4 py-10 text-zinc-900 sm:py-16">
@@ -80,6 +83,11 @@ export function Onboarding() {
         </div>
       ) : (
         <div className="mx-auto max-w-3xl rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5 sm:p-10">
+          {flow === 'company' && step === 'source' && (
+            <Link href="/app" className="mb-2 inline-flex rounded-lg p-1.5 text-zinc-600 hover:bg-zinc-100" aria-label="Back to the app">
+              <ArrowLeft size={20} />
+            </Link>
+          )}
           {step !== 'source' && (
             <button
               onClick={() => setStep('source')}
@@ -92,7 +100,7 @@ export function Onboarding() {
 
           {step === 'source' && (
             <>
-              <Header icon={Store} tint="bg-sky-50 text-sky-600" title="Let's understand your brand">
+              <Header icon={Store} tint="bg-sky-50 text-sky-600" title={flow === 'company' ? 'Add a company' : "Let's understand your brand"}>
                 Import your website and Loudpilot will build your brand — or enter the essentials manually.
               </Header>
               <div className="mx-auto mt-8 max-w-xl">
@@ -196,9 +204,11 @@ export function Onboarding() {
 
       <div className="mx-auto mt-8 flex max-w-md items-center gap-4">
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-200">
-          <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${(progress / 3) * 100}%` }} />
+          <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${(progress / steps) * 100}%` }} />
         </div>
-        <span className="text-sm text-zinc-500">{progress} / 3</span>
+        <span className="text-sm text-zinc-500">
+          {progress} / {steps}
+        </span>
       </div>
     </div>
   )
