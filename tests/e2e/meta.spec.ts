@@ -88,7 +88,7 @@ test('publish now: text-only goes to Facebook, Instagram needs an image', async 
   page.once('dialog', (d) => d.accept())
   await page.getByRole('button', { name: 'Publish now' }).click()
   await expect(page.getByText('failed on 1')).toBeVisible()
-  await expect(page.getByText('Instagram posts need at least one image')).toBeVisible()
+  await expect(page.getByText('Instagram posts need an image or a video')).toBeVisible()
   await expect(page.getByRole('link', { name: 'View' })).toHaveAttribute('href', /facebook\.test/)
   expect(sql(`select status from "Post" where id='${id}'`)).toBe('PUBLISHED')
   const feed = meta.calls.filter((c) => c.path === '/page-1/feed').at(-1)!

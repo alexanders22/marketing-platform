@@ -29,11 +29,14 @@ function outgoingText(post: { content: string; hashtags: string[] }) {
   return [post.content.trim(), tags].filter(Boolean).join('\n\n')
 }
 
-async function imageUrls(workspaceId: string, mediaIds: string[]) {
-  if (mediaIds.length === 0) return []
-  const media = await prisma.media.findMany({ where: { workspaceId, id: { in: mediaIds }, mime: { startsWith: 'image/' } } })
-  // Keep the order the author chose.
-  return mediaIds.filter((id) => media.some((m) => m.id === id)).map((id) => signedMediaUrl(id))
+// Signed links the networks fetch: the images in the author's order, or the
+// post's video. Videos get a longer link — Meta downloads them later.
+async function outgoingMedia(workspaceId: string, mediaIds: string[]) {
+  if (mediaIds.length === 0) return { images: [] as string[] }
+  const media = await prisma.media.findMany({ where: { workspaceId, id: { in: mediaIds } } })
+  const video = media.find((m) => m.kind === 'VIDEO')
+  if (video) return { images: [] as string[], video: signedMediaUrl(video.id, 6 * 3600) }
+  return { images: mediaIds.filter((id) => media.some((m) => m.id === id && m.mime.startsWith('image/'))).map((id) => signedMediaUrl(id)) }
 }
 
 // Connected accounts a post goes to: every active account of each network
@@ -47,11 +50,12 @@ export async function targetsFor(post: { workspaceId: string; channels: string[]
   })
 }
 
-async function sendTo(account: SocialAccount, text: string, images: string[]) {
+async function sendTo(account: SocialAccount, text: string, media: { images: string[]; video?: string }) {
   if (!account.accessTokenEnc) throw new MetaError('This account has no access token — reconnect it')
   const token = decrypt(account.accessTokenEnc)
-  if (account.network === 'FACEBOOK') return publishToFacebook(account.externalId, token, { text, imageUrls: images })
-  if (account.network === 'INSTAGRAM') return publishToInstagram(account.externalId, token, { text, imageUrls: images })
+  const out = { text, imageUrls: media.images, videoUrl: media.video }
+  if (account.network === 'FACEBOOK') return publishToFacebook(account.externalId, token, out)
+  if (account.network === 'INSTAGRAM') return publishToInstagram(account.externalId, token, out)
   throw new Error(`Publishing to ${account.network} is not supported yet`)
 }
 
@@ -61,13 +65,13 @@ async function sendTo(account: SocialAccount, text: string, images: string[]) {
 export async function deliver(postId: string, targets: SocialAccount[]) {
   const post = await prisma.post.findUniqueOrThrow({ where: { id: postId }, include: { deliveries: true } })
   const text = outgoingText(post)
-  const images = await imageUrls(post.workspaceId, post.mediaIds)
+  const media = await outgoingMedia(post.workspaceId, post.mediaIds)
 
   for (const account of targets) {
     if (post.deliveries.some((d) => d.socialAccountId === account.id && d.status === 'PUBLISHED')) continue
     let data: Prisma.PostDeliveryUncheckedCreateInput
     try {
-      const r = await sendTo(account, text, images)
+      const r = await sendTo(account, text, media)
       data = { postId, socialAccountId: account.id, status: 'PUBLISHED', externalId: r.id, permalink: r.permalink, error: null }
     } catch (e) {
       data = { postId, socialAccountId: account.id, status: 'FAILED', error: errorText(e) }

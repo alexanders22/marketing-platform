@@ -143,6 +143,8 @@ export function PostEditor({
       router.refresh()
     })
 
+  const hasVideo = media.some((m) => m.kind === 'video')
+
   // Images can't change once the post is out.
   const editable = status !== 'PUBLISHED' && status !== 'PUBLISHING'
 
@@ -286,9 +288,13 @@ export function PostEditor({
               <div className="mb-3 flex flex-wrap gap-2">
                 {media.map((m) => (
                   <span key={m.id} className="group relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={m.url} alt="" className="h-24 w-24 rounded-xl object-cover ring-1 ring-zinc-200" />
-                    {editable && (
+                    {m.kind === 'video' ? (
+                      <video src={m.url} poster={m.poster ?? undefined} controls playsInline aria-label="Post video" className="h-48 rounded-xl bg-black ring-1 ring-zinc-200" />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.url} alt="" className="h-24 w-24 rounded-xl object-cover ring-1 ring-zinc-200" />
+                    )}
+                    {editable && m.kind !== 'video' && (
                       <button
                         onClick={() => editInStudio(m)}
                         disabled={pending}
@@ -309,7 +315,8 @@ export function PostEditor({
                 ))}
               </div>
             )}
-            {media.length < 10 && (
+            {hasVideo && <p className="text-xs text-zinc-500">Goes out as a Reel on Instagram and a video on Facebook. Remove the video to add images instead.</p>}
+            {media.length < 10 && !hasVideo && (
               <div className="grid gap-2 sm:grid-cols-3">
                 <MediaOption icon={ImagePlus} title="Upload" sub="Your photos or library" label="Add images: upload or pick from the library" onClick={() => setPicker(true)} />
                 {editable && <MediaOption icon={LayoutTemplate} title="Design in Studio" sub="Brand templates" onClick={designInStudio} disabled={pending} />}

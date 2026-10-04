@@ -21,6 +21,7 @@ export default async function EditPostPage({ params }: PageProps<'/app/posts/[id
   })
   if (!post) notFound()
   if (post.kind === 'BLOG') redirect(`/app/blog/${post.id}`)
+  const media = await prisma.media.findMany({ where: { id: { in: post.mediaIds }, workspaceId: workspace.id }, select: { id: true, kind: true, posterId: true } })
   const accounts = await prisma.socialAccount.findMany({
     where: { workspaceId: workspace.id, network: { in: [...PUBLISHABLE] }, status: 'ACTIVE' },
     select: { network: true },
@@ -32,7 +33,12 @@ export default async function EditPostPage({ params }: PageProps<'/app/posts/[id
         id: post.id,
         content: post.content,
         hashtags: post.hashtags,
-        media: post.mediaIds.map((m) => ({ id: m, url: mediaUrl(m) })),
+        media: post.mediaIds.map((m) => {
+          const row = media.find((x) => x.id === m)
+          return row?.kind === 'VIDEO'
+            ? { id: m, url: mediaUrl(m), kind: 'video' as const, poster: row.posterId ? mediaUrl(row.posterId) : null }
+            : { id: m, url: mediaUrl(m), kind: 'image' as const }
+        }),
         channels: post.channels as Network[],
         scheduledAt: post.scheduledAt?.toISOString() ?? null,
         aiGenerated: post.aiGenerated,

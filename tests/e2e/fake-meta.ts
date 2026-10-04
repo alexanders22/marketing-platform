@@ -84,7 +84,7 @@ export function startFakeMeta() {
     }
 
     // Networks fetch images themselves: do the same with the signed URL.
-    const imageUrl = params.image_url ?? (path.endsWith('/photos') ? params.url : undefined)
+    const imageUrl = params.image_url ?? params.video_url ?? (path.endsWith('/photos') ? params.url : undefined)
     if (imageUrl) {
       const r = await fetch(imageUrl)
       fetchedImages.push({ url: imageUrl, status: r.status, type: r.headers.get('content-type') })
@@ -202,6 +202,13 @@ export function startFakeMeta() {
       })
 
     if (req.method === 'POST' && path === '/page-1/feed') return json(200, { id: `page-1_${++n}` })
+    if (req.method === 'POST' && path === '/page-1/videos') {
+      // Like Meta: the video is fetched from file_url.
+      const r = await fetch(params.file_url)
+      fetchedImages.push({ url: params.file_url, status: r.status, type: r.headers.get('content-type') })
+      if (!r.ok) return json(400, { error: { message: 'Video could not be fetched', code: 9004 } })
+      return json(200, { id: `video-${++n}` })
+    }
     if (req.method === 'POST' && path === '/page-1/photos')
       return json(200, params.published === 'false' ? { id: `photo-${++n}` } : { id: `photo-${++n}`, post_id: `page-1_${n}` })
     // Inbox: one Messenger and one Instagram thread; replies are appended.

@@ -101,10 +101,11 @@ export async function generateImage(
   caption: string,
   variant: number,
   attachments: Attachment[],
+  aspect: '1:1' | '9:16' | '4:5' | '16:9' = '1:1',
 ): Promise<{ data: Buffer; mime: string }> {
   if (!client) throw new Error('AI is not configured')
   const prompt = [
-    `Create a square (1:1) social media image for the brand "${brandName}".`,
+    `Create a ${aspect === '1:1' ? 'square (1:1)' : aspect === '16:9' ? 'landscape (16:9)' : `vertical (${aspect})`} social media image for the brand "${brandName}".`,
     brand?.description && `About the brand: ${brand.description}`,
     brand?.colors.length ? `Use the brand colours ${brand.colors.join(', ')} as the dominant palette.` : '',
     `Post brief: ${brief}`,
@@ -127,7 +128,7 @@ export async function generateImage(
             parts: [...attachments.map((a) => ({ inlineData: { mimeType: a.mime, data: a.data } })), { text: prompt }],
           },
         ],
-        config: { responseModalities: ['IMAGE'], abortSignal: AbortSignal.timeout(90_000) },
+        config: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspect }, abortSignal: AbortSignal.timeout(90_000) },
       })
       const part = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)
       if (part?.inlineData?.data) {
@@ -667,4 +668,96 @@ export async function adviseBrief(
       }))
       .filter((i) => i.title && i.prompt),
   }
+}
+
+export type VideoScript = {
+  title: string
+  caption: string
+  hashtags: string[]
+  scenes: { text: string; voice: string; visual: string; seconds: number }[]
+}
+
+// A short vertical video: hook in the first scene, one idea per scene, a
+// clear call to action at the end. On-screen text is short; the voice-over
+// carries the detail.
+export async function videoScript(
+  brandName: string,
+  brand: Brand | null,
+  input: { brief: string; scenes: number; language: PostOptions['language']; voice: boolean },
+): Promise<VideoScript> {
+  const system = [
+    'You write short social videos (Reels, Stories, TikTok) for one brand.',
+    `Write exactly ${input.scenes} scenes. Scene 1 is a hook that stops the scroll; the last scene is a clear call to action.`,
+    '"text": on-screen text, at most 7 words. ' + (input.voice ? '"voice": the voice-over line for the scene, natural spoken language, 6–18 words.' : '"voice": empty string.'),
+    '"visual": what the footage or image should show (a description for a photographer or an image generator; no text in the image).',
+    '"seconds": 2–5.',
+    'Also "title" (internal name), "caption" (the post text, ≤ 400 characters) and 3–6 "hashtags" without #.',
+    'Never invent prices, offers, dates or facts that are not in the brief or the brand details.',
+    brandContext(brandName, brand),
+    `Write text, voice and caption in ${input.language}.`,
+  ].join('\n\n')
+  const str = { type: 'string' }
+  const schema = {
+    type: 'object',
+    properties: {
+      title: str,
+      caption: str,
+      hashtags: { type: 'array', items: str },
+      scenes: {
+        type: 'array',
+        items: { type: 'object', properties: { text: str, voice: str, visual: str, seconds: { type: 'number' } }, required: ['text', 'voice', 'visual', 'seconds'] },
+      },
+    },
+    required: ['title', 'caption', 'hashtags', 'scenes'],
+  }
+  const out = await json<Partial<VideoScript>>(system, `Brief: ${input.brief}`, 6000, 90_000, schema)
+  const s = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n)
+  const scenes = (Array.isArray(out?.scenes) ? out.scenes : []).slice(0, 12).map((x) => ({
+    text: s(x?.text, 80),
+    voice: input.voice ? s(x?.voice, 300) : '',
+    visual: s(x?.visual, 400),
+    seconds: Math.min(6, Math.max(2, Number(x?.seconds) || 3)),
+  }))
+  if (scenes.length === 0) throw new Error('Empty video script')
+  return {
+    title: s(out?.title, 80) || 'AI video',
+    caption: s(out?.caption, 2000),
+    hashtags: (Array.isArray(out?.hashtags) ? out.hashtags : []).map((h) => String(h).replace(/[^\p{L}\p{N}_]/gu, '')).filter((h) => h && h.length <= 60).slice(0, 8),
+    scenes,
+  }
+}
+
+const TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts'
+
+// Spoken line as a WAV file (24 kHz mono 16-bit).
+export async function speak(text: string, voiceName: string): Promise<{ wav: Buffer; ms: number }> {
+  if (!client) throw new Error('AI is not configured')
+  const res = await client.models.generateContent({
+    model: TTS_MODEL,
+    contents: [{ role: 'user', parts: [{ text: `Read this naturally, like a friendly ad voice-over:\n${text}` }] }],
+    config: {
+      responseModalities: ['AUDIO'],
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+      abortSignal: AbortSignal.timeout(60_000),
+    },
+  })
+  const part = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)
+  if (!part?.inlineData?.data) throw new Error('No audio returned')
+  const pcm = Buffer.from(part.inlineData.data, 'base64')
+  const rate = Number(part.inlineData.mimeType?.match(/rate=(\d+)/)?.[1] ?? 24000)
+  const header = Buffer.alloc(44)
+  header.write('RIFF', 0)
+  header.writeUInt32LE(36 + pcm.length, 4)
+  header.write('WAVE', 8)
+  header.write('fmt ', 12)
+  header.writeUInt32LE(16, 16)
+  header.writeUInt16LE(1, 20)
+  header.writeUInt16LE(1, 22)
+  header.writeUInt32LE(rate, 24)
+  header.writeUInt32LE(rate * 2, 28)
+  header.writeUInt16LE(2, 32)
+  header.writeUInt16LE(16, 34)
+  header.write('data', 36)
+  header.writeUInt32LE(pcm.length, 40)
+  return { wav: Buffer.concat([header, pcm]), ms: Math.round((pcm.length / 2 / rate) * 1000) }
 }

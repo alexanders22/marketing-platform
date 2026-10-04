@@ -13,6 +13,8 @@ export const COST = {
   strategy: 5,
   reply: 1,
   advice: 1,
+  videoScript: 1,
+  voice: 1,
 } as const
 
 export type Charge = { amount: number; reason: CreditReason; note: string }

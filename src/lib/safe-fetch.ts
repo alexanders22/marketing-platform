@@ -99,8 +99,16 @@ function assertUrl(url: URL) {
 
 export async function safeFetchText(
   input: string,
-  { maxBytes = 1_500_000, timeoutMs = 8000, accept = 'text/html,*/*' } = {},
+  opts: { maxBytes?: number; timeoutMs?: number; accept?: string } = {},
 ): Promise<{ url: string; text: string }> {
+  const r = await safeFetchBytes(input, opts)
+  return { url: r.url, text: r.bytes.toString('utf8') }
+}
+
+export async function safeFetchBytes(
+  input: string,
+  { maxBytes = 1_500_000, timeoutMs = 8000, accept = 'text/html,*/*' } = {},
+): Promise<{ url: string; bytes: Buffer; contentType: string | null }> {
   let url = new URL(input)
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
@@ -119,8 +127,9 @@ export async function safeFetchText(
         continue
       }
       if (!res.ok) throw new Error(`The site answered ${res.status}`)
+      const contentType = res.headers.get('content-type')
       const reader = res.body?.getReader()
-      if (!reader) return { url: url.toString(), text: '' }
+      if (!reader) return { url: url.toString(), bytes: Buffer.alloc(0), contentType }
       const chunks: Uint8Array[] = []
       let size = 0
       while (true) {
@@ -133,7 +142,7 @@ export async function safeFetchText(
         }
         chunks.push(value)
       }
-      return { url: url.toString(), text: Buffer.concat(chunks).toString('utf8') }
+      return { url: url.toString(), bytes: Buffer.concat(chunks), contentType }
     }
     throw new Error('Too many redirects')
   } finally {

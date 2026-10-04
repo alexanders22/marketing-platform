@@ -181,10 +181,17 @@ export function parseSignedRequest(signed: string): { user_id: string; algorithm
 
 /* ─── Publishing ───────────────────────────────────────────────────────── */
 
-export type Outgoing = { text: string; imageUrls: string[] }
+// A post carries images or one video (videoUrl), never both.
+export type Outgoing = { text: string; imageUrls: string[]; videoUrl?: string }
 
-export async function publishToFacebook(pageId: string, token: string, { text, imageUrls }: Outgoing) {
+export async function publishToFacebook(pageId: string, token: string, { text, imageUrls, videoUrl }: Outgoing) {
   let id: string
+  if (videoUrl) {
+    // Facebook fetches the file itself; the result is a video id with its own permalink.
+    const r = await graph<{ id: string }>(`${pageId}/videos`, { token, method: 'POST', params: { file_url: videoUrl, description: text } })
+    const v = await graph<{ permalink_url?: string }>(r.id, { token, params: { fields: 'permalink_url' } }).catch(() => null)
+    return { id: r.id, permalink: v?.permalink_url ? new URL(v.permalink_url, 'https://www.facebook.com').toString() : `https://www.facebook.com/${r.id}` }
+  }
   if (imageUrls.length === 0) {
     id = (await graph<{ id: string }>(`${pageId}/feed`, { token, method: 'POST', params: { message: text } })).id
   } else if (imageUrls.length === 1) {
@@ -209,20 +216,26 @@ export async function publishToFacebook(pageId: string, token: string, { text, i
   return { id, permalink: post?.permalink_url ?? `https://www.facebook.com/${id}` }
 }
 
-async function waitForContainer(id: string, token: string) {
-  for (let i = 0; i < 20; i++) {
+async function waitForContainer(id: string, token: string, tries = 20, everyMs = 1500) {
+  for (let i = 0; i < tries; i++) {
     const s = await graph<{ status_code?: string; status?: string }>(id, { token, params: { fields: 'status_code,status' } })
     if (!s.status_code || s.status_code === 'FINISHED') return
     if (s.status_code === 'ERROR' || s.status_code === 'EXPIRED') throw new MetaError(`Instagram could not process the media: ${s.status ?? s.status_code}`)
-    await new Promise((r) => setTimeout(r, 1500))
+    await new Promise((r) => setTimeout(r, everyMs))
   }
   throw new MetaError('Instagram is still processing the media — try again in a minute')
 }
 
-export async function publishToInstagram(igId: string, token: string, { text, imageUrls }: Outgoing) {
-  if (imageUrls.length === 0) throw new MetaError('Instagram posts need at least one image')
+export async function publishToInstagram(igId: string, token: string, { text, imageUrls, videoUrl }: Outgoing) {
+  if (!videoUrl && imageUrls.length === 0) throw new MetaError('Instagram posts need an image or a video')
   let container: string
-  if (imageUrls.length === 1) {
+  if (videoUrl) {
+    // Videos go out as Reels (also shown in the feed). Processing takes a while.
+    container = (
+      await graph<{ id: string }>(`${igId}/media`, { token, method: 'POST', params: { media_type: 'REELS', video_url: videoUrl, caption: text, share_to_feed: true } })
+    ).id
+    await waitForContainer(container, token, 60, 5000)
+  } else if (imageUrls.length === 1) {
     container = (await graph<{ id: string }>(`${igId}/media`, { token, method: 'POST', params: { image_url: imageUrls[0], caption: text } })).id
   } else {
     const children: string[] = []

@@ -6,7 +6,8 @@ import { Modal } from '@/components/ui/Popover'
 import { fileToJpeg } from '@/lib/client-image'
 import { listMedia, uploadMedia } from '@/app/app/posts/actions'
 
-export type PickedMedia = { id: string; url: string }
+// Videos carry their poster frame for previews.
+export type PickedMedia = { id: string; url: string; kind?: 'image' | 'video'; poster?: string | null }
 
 // Upload new images or pick from everything this workspace already has
 // (AI images, Studio exports, earlier uploads).

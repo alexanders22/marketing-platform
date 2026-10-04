@@ -45,8 +45,10 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
   }
 
   // Only this workspace's media can be attached.
-  const owned = await prisma.media.count({ where: { id: { in: p.mediaIds }, workspaceId: workspace.id } })
-  if (owned !== p.mediaIds.length) return { error: 'Some images are not available' }
+  const owned = await prisma.media.findMany({ where: { id: { in: p.mediaIds }, workspaceId: workspace.id }, select: { kind: true } })
+  if (owned.length !== new Set(p.mediaIds).size) return { error: 'Some images are not available' }
+  if (owned.some((m) => m.kind === 'AUDIO')) return { error: 'Audio can not be posted on its own' }
+  if (owned.some((m) => m.kind === 'VIDEO') && p.mediaIds.length > 1) return { error: 'A post can have one video or several images — not both' }
 
   const existing = p.id
     ? await prisma.post.findFirst({ where: { id: p.id, workspaceId: workspace.id }, select: { status: true } })

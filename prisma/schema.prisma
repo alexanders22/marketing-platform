@@ -156,6 +156,7 @@ model Workspace {
   posts            Post[]
   campaigns        Campaign[]
   designs          Design[]
+  videos           Video[]
   bioPages         BioPage[]
   adCampaigns      AdCampaign[]
   aiSummaries      AiSummary[]
@@ -209,6 +210,7 @@ model HashtagLibrary {
 enum MediaKind {
   IMAGE
   VIDEO
+  AUDIO
 }
 
 // A generated or uploaded file. Bytes live on disk under STORAGE_DIR; the
@@ -222,6 +224,12 @@ model Media {
   path        String
   bytes       Int
   prompt      String?
+  // Pixels and length, when known (videos and audio).
+  width       Int?
+  height      Int?
+  durationMs  Int?
+  // Videos: a still frame for lists and previews.
+  posterId    String?
   createdAt   DateTime  @default(now())
 
   @@index([workspaceId, createdAt])
@@ -967,4 +975,32 @@ model BrandFact {
   createdAt   DateTime  @default(now())
 
   @@unique([workspaceId, question])
+}
+
+enum VideoStatus {
+  DRAFT
+  RENDERING
+  READY
+  FAILED
+}
+
+// Studio video: scenes (photo, clip or colour) with on-screen text, motion,
+// voice-over and music, rendered to MP4 with ffmpeg (src/lib/video-render.ts).
+model Video {
+  id            String      @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name          String
+  // 9:16, 4:5, 1:1 or 16:9.
+  format        String      @default("9:16")
+  data          Json
+  status        VideoStatus @default(DRAFT)
+  error         String?
+  // The rendered MP4 (Media kind VIDEO) once READY.
+  outputMediaId String?
+  renderedAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([workspaceId, updatedAt])
 }
