@@ -99,16 +99,23 @@ async function pages<T>(path: string, token: string, params: Record<string, stri
 
 const shift = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
 
-// Sync one ad account. First run reads 90 days; later runs re-read the last
+// How far back the first read goes. Accounts first read with a shorter
+// window (meta.historyDays) are backfilled once on their next sync.
+export const AD_HISTORY_DAYS = 365
+// Meta times out on long daily ranges; read history in chunks.
+const CHUNK_DAYS = 90
+
+// Sync one ad account. First run reads 12 months; later runs re-read the last
 // 3 days, because Meta keeps attributing results to recent days.
 export async function syncAdAccount(socialAccountId: string, now = new Date()) {
   const acc = await prisma.socialAccount.findUnique({ where: { id: socialAccountId } })
   if (!acc || acc.network !== 'META_ADS' || acc.status !== 'ACTIVE' || !acc.accessTokenEnc) return { campaigns: 0, days: 0 }
   const token = decrypt(acc.accessTokenEnc)
-  const meta = (acc.meta ?? {}) as { currency?: string; timeZone?: string }
+  const meta = (acc.meta ?? {}) as { currency?: string; timeZone?: string; historyDays?: number }
   const tz = meta.timeZone && isValidTimeZone(meta.timeZone) ? meta.timeZone : 'UTC'
   const until = dayIn(now, tz)
-  const since = shift(until, acc.syncedAt ? -3 : -89)
+  const backfill = !acc.syncedAt || (meta.historyDays ?? 90) < AD_HISTORY_DAYS
+  const since = shift(until, backfill ? -(AD_HISTORY_DAYS - 1) : -3)
 
   try {
     const raw = await pages<RawCampaign>(`${acc.externalId}/campaigns`, token, {
@@ -154,13 +161,19 @@ export async function syncAdAccount(socialAccountId: string, now = new Date()) {
       }
     }
 
-    const insights = await pages<RawInsight>(`${acc.externalId}/insights`, token, {
-      level: 'campaign',
-      time_increment: 1,
-      time_range: JSON.stringify({ since, until }),
-      fields: 'campaign_id,date_start,spend,impressions,reach,clicks,actions,action_values',
-      limit: 500,
-    })
+    const insights: RawInsight[] = []
+    for (let from = since; from <= until; from = shift(from, CHUNK_DAYS)) {
+      const to = [shift(from, CHUNK_DAYS - 1), until].sort()[0]
+      insights.push(
+        ...(await pages<RawInsight>(`${acc.externalId}/insights`, token, {
+          level: 'campaign',
+          time_increment: 1,
+          time_range: JSON.stringify({ since: from, until: to }),
+          fields: 'campaign_id,date_start,spend,impressions,reach,clicks,actions,action_values',
+          limit: 500,
+        })),
+      )
+    }
     let days = 0
     for (const r of insights) {
       const c = byExternal.get(r.campaign_id)
@@ -182,7 +195,10 @@ export async function syncAdAccount(socialAccountId: string, now = new Date()) {
       })
       days++
     }
-    await prisma.socialAccount.update({ where: { id: acc.id }, data: { syncedAt: now, lastError: null } })
+    await prisma.socialAccount.update({
+      where: { id: acc.id },
+      data: { syncedAt: now, lastError: null, ...(backfill ? { meta: { ...meta, historyDays: AD_HISTORY_DAYS } } : {}) },
+    })
     return { campaigns: raw.length, days }
   } catch (e) {
     const message = (e instanceof Error ? e.message : String(e)).slice(0, 500)

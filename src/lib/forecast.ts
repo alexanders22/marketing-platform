@@ -2,7 +2,7 @@ import 'server-only'
 import { prisma } from './prisma'
 import { resultLabel } from './meta-ads'
 
-// Forecasts come from the account's own last 90 days, never from invented
+// Forecasts come from the account's own ad history, never from invented
 // benchmarks. Without enough history there is no forecast — the plan says
 // so and the goals take over after the first week of delivery.
 
@@ -37,8 +37,14 @@ export type Benchmarks = {
   currency: string | null
 }
 
+// Recent results first: the last 90 days when the account ran ads then,
+// else the last 12 months.
 export async function benchmarks(workspaceId: string): Promise<Benchmarks | null> {
-  const since = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10)
+  return (await benchmarksSince(workspaceId, 90)) ?? (await benchmarksSince(workspaceId, 365))
+}
+
+async function benchmarksSince(workspaceId: string, daysBack: number): Promise<Benchmarks | null> {
+  const since = new Date(Date.now() - daysBack * 86_400_000).toISOString().slice(0, 10)
   const rows = await prisma.adInsightDay.findMany({
     where: { campaign: { workspaceId }, date: { gte: since }, spend: { gt: 0 } },
     include: { campaign: { select: { currency: true } } },

@@ -195,6 +195,10 @@ async function save(
 
 /* ─── Ads (creative level) ─────────────────────────────────────────────── */
 
+// Ad results over the last 12 months, like the post history.
+const today = () => new Date().toISOString().slice(0, 10)
+const yearAgo = () => new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10)
+
 type RawAd = {
   id: string
   name: string
@@ -212,7 +216,7 @@ export async function importAds(account: SocialAccount) {
   )
   let n = 0
   for await (const ad of pages<RawAd>(`${account.externalId}/ads`, token, {
-    fields: 'id,name,campaign_id,effective_status,creative{title,body,image_url,thumbnail_url,call_to_action_type},insights.date_preset(last_90d){spend,impressions,clicks,reach,actions}',
+    fields: `id,name,campaign_id,effective_status,creative{title,body,image_url,thumbnail_url,call_to_action_type},insights.time_range(${JSON.stringify({ since: yearAgo(), until: today() })}){spend,impressions,clicks,reach,actions}`,
     limit: 100,
   }, 500)) {
     const c = campaigns.get(ad.campaign_id)

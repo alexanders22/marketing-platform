@@ -106,9 +106,11 @@ export function startFakeMeta() {
       })
     if (path === '/act_1/insights') {
       const { since, until } = JSON.parse(params.time_range)
+      // Age from the account's today, not the chunk end: history is read in chunks.
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tbilisi' }).format(new Date())
       const rows = []
       for (let d = since; d <= until; d = new Date(Date.parse(`${d}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)) {
-        const age = Math.round((Date.parse(`${until}T00:00:00Z`) - Date.parse(`${d}T00:00:00Z`)) / 86_400_000)
+        const age = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${d}T00:00:00Z`)) / 86_400_000)
         const leads = age < 30 ? 4 : 2
         rows.push({
           campaign_id: 'cmp-leads', date_start: d, spend: '20.00', impressions: '3000', reach: '2500', clicks: '60',

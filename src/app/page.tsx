@@ -404,7 +404,7 @@ function Steps() {
       icon: BarChart3,
       tint: "bg-sky-400/15 text-sky-300",
       title: "Get your audit",
-      body: "We read the last 90 days of posts and ads and show what works, what wastes money and when to post.",
+      body: "We read the last 12 months of posts and ads and show what works, what wastes money and when to post.",
     },
     {
       icon: Sparkles,

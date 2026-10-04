@@ -28,16 +28,21 @@ test('empty dashboard points to Channels', async () => {
   await expect(page).toHaveURL(/\/app\/channels/)
 })
 
-test('connecting an ad account reads its campaigns and 90 days of results', async () => {
+test('connecting an ad account reads its campaigns and 12 months of results', async () => {
   await page.locator('a[href="/auth/meta"]').click()
   await page.waitForURL(/connected=3/)
   workspaceId = sql(`select "workspaceId" from "SocialAccount" where network='META_ADS' order by "createdAt" desc limit 1`)
-  await expect.poll(() => sql(`select count(*) from "AdInsightDay" i join "AdCampaign" c on c.id=i."campaignId" where c."workspaceId"='${workspaceId}'`), { timeout: 20_000 }).toBe('180')
+  await expect.poll(() => sql(`select count(*) from "AdInsightDay" i join "AdCampaign" c on c.id=i."campaignId" where c."workspaceId"='${workspaceId}'`), { timeout: 20_000 }).toBe('730')
   expect(sql(`select name||':'||status||':'||coalesce("dailyBudget"::text,'-')||':'||currency from "AdCampaign" where "workspaceId"='${workspaceId}' order by name`)).toBe(
     'Lead Gen — Tbilisi:ACTIVE:20:GEL\nSpring Awareness:PAUSED:-:GEL',
   )
-  // Both insight pages were read.
-  expect(meta.calls.filter((c) => c.path === '/act_1/insights').some((c) => c.params.after === 'p2')).toBe(true)
+  // Both insight pages were read, in chunks of at most 90 days.
+  const reads = meta.calls.filter((c) => c.path === '/act_1/insights')
+  expect(reads.some((c) => c.params.after === 'p2')).toBe(true)
+  for (const c of reads) {
+    const { since, until } = JSON.parse(c.params.time_range)
+    expect((Date.parse(until) - Date.parse(since)) / 86_400_000).toBeLessThan(90)
+  }
 })
 
 test('30-day KPIs: leads only from lead campaigns, deltas vs previous 30 days', async () => {
