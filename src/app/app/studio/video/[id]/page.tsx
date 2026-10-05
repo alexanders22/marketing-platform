@@ -24,6 +24,7 @@ export default async function VideoPage({ params }: PageProps<'/app/studio/video
       brand={{ name: workspace.name, colors: brand?.colors ?? [], logoUrl: logo }}
       paid={isPaid(account) || user.role === 'SUPER_ADMIN'}
       veo={user.role === 'SUPER_ADMIN' ? null : await veoAllowance(account)}
+      characters={await prisma.character.findMany({ where: { workspaceId: workspace.id }, orderBy: { createdAt: 'desc' }, select: { id: true, name: true } })}
       initialStatus={{
         status: v.status,
         error: v.error,

@@ -47,9 +47,10 @@ test('a customer adds a second company and switches between them', async () => {
   await customer.getByRole('list', { name: 'Companies' }).getByRole('button', { name: 'Arca Development' }).click()
   await expect(customer.getByRole('button', { name: 'Company: Arca Development' }).first()).toBeVisible()
 
-  // Starter includes 2 companies: the third is refused.
-  await addCompanyManually(customer, 'Arca Third')
-  await expect(customer.getByText('Your plan includes 2 companies. Upgrade to add more.')).toBeVisible()
+  // Starter includes 2 companies: the third is refused before the form.
+  await customer.goto('/onboarding/company')
+  await expect(customer.getByRole('heading', { name: 'Company limit reached' })).toBeVisible()
+  await expect(customer.getByText('Your plan includes 2 companies and you have 2. Upgrade to add more.')).toBeVisible()
   expect(sql(`select count(*) from "Workspace" where "accountId"='${accountId}'`)).toBe('2')
 })
 
@@ -82,7 +83,7 @@ test('super admin: find the company, edit the plan, book credits', async () => {
   await admin.getByLabel('Amount').fill('120')
   await admin.getByLabel('Credit type').selectOption('PURCHASE')
   const ref = `Bank transfer #${Date.now()}`
-  await admin.getByLabel('Note').fill(ref)
+  await admin.getByLabel('Note').last().fill(ref)
   await admin.getByRole('button', { name: 'Book credits' }).click()
   await expect(admin.getByText('+120 credits booked')).toBeVisible()
   expect(Number(sql(`select "creditBalance" from "Account" where id='${accountId}'`))).toBe(before + 120)
@@ -91,7 +92,7 @@ test('super admin: find the company, edit the plan, book credits', async () => {
 
   // Below zero is refused.
   await admin.getByLabel('Amount').fill(String(-(before + 1000)))
-  await admin.getByLabel('Note').fill('too much')
+  await admin.getByLabel('Note').last().fill('too much')
   await admin.getByRole('button', { name: 'Book credits' }).click()
   await expect(admin.getByText('The balance can not go below zero')).toBeVisible()
 

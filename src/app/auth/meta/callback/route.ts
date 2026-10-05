@@ -7,6 +7,7 @@ import { syncAdAccount } from '@/lib/meta-ads'
 import { prisma } from '@/lib/prisma'
 import { unseal } from '@/lib/signed'
 import { terminalUrl } from '@/lib/hosts'
+import { planLimits } from '@/lib/plans'
 
 // Meta sends the person back here. Every Page they picked becomes a FACEBOOK
 // account, its linked Instagram professional account an INSTAGRAM account,
@@ -20,6 +21,7 @@ const PARTNER_REASON: Record<string, string> = {
   'meta-state': 'expired',
   'meta-api': 'meta_error',
   'meta-empty': 'nothing_shared',
+  profiles: 'profile_limit',
 }
 
 export async function GET(req: NextRequest) {
@@ -111,8 +113,34 @@ export async function GET(req: NextRequest) {
     })),
   ]
 
+  // Social profiles (Pages and Instagram accounts) count against the plan,
+  // across all companies of the account; ad accounts don't. Profiles already
+  // connected are refreshed, new ones are added while there is room.
+  const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { account: { select: { id: true, plan: true } } } })
+  let skipped = 0
+  let allowed = rows
+  if (ws?.account) {
+    const limit = planLimits(ws.account.plan).profiles
+    const existing = await prisma.socialAccount.findMany({
+      where: { workspace: { accountId: ws.account.id }, network: { in: ['FACEBOOK', 'INSTAGRAM'] } },
+      select: { workspaceId: true, network: true, externalId: true },
+    })
+    const known = new Set(existing.filter((e) => e.workspaceId === workspaceId).map((e) => `${e.network}:${e.externalId}`))
+    let room = limit - existing.length
+    allowed = rows.filter((r) => {
+      if (r.network === 'META_ADS' || known.has(`${r.network}:${r.externalId}`)) return true
+      if (room > 0) {
+        room--
+        return true
+      }
+      skipped++
+      return false
+    })
+    if (allowed.length === 0) return back(`error=profiles`)
+  }
+
   const saved = await prisma.$transaction(
-    rows.map(({ token, ...r }) =>
+    allowed.map(({ token, ...r }) =>
       prisma.socialAccount.upsert({
         where: { workspaceId_network_externalId: { workspaceId, network: r.network, externalId: r.externalId } },
         create: { workspaceId, ...r, ...base, accessTokenEnc: encrypt(token) },
@@ -128,5 +156,5 @@ export async function GET(req: NextRequest) {
     }
     await refreshDossier(workspaceId).catch((e) => console.error('dossier failed', workspaceId, e instanceof Error ? e.message : e))
   })
-  return back(`connected=${rows.length}`)
+  return back(`connected=${allowed.length}${skipped && !partner ? `&skipped=${skipped}` : ''}`)
 }

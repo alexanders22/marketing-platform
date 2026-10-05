@@ -9,6 +9,9 @@ import { requireContext } from '@/lib/context'
 import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
 import { prisma } from '@/lib/prisma'
+import { TEMPLATE_PHOTO } from '@/lib/design'
+import { templatePhotos } from '@/lib/template-photos'
+import { VIDEO_TEMPLATES } from '@/lib/video-templates'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 import { emptyDoc, FORMATS, isFormat, MAX_SCENES, MOTIONS, newScene, POSITIONS, TEXT_STYLES, timeline, VOICES, type Format, type SceneMedia, type VideoDoc } from '@/lib/video'
 import { enqueueRender } from '@/lib/video-render'
@@ -65,6 +68,39 @@ export async function createVideo(format: string) {
   const f: Format = isFormat(format) ? format : '9:16'
   const v = await prisma.video.create({
     data: { workspaceId: workspace.id, name: `Untitled ${FORMATS[f].name}`, format: f, data: emptyDoc(brandColor(brand?.colors)) as unknown as Prisma.InputJsonValue },
+  })
+  revalidatePath('/app/studio')
+  return { id: v.id }
+}
+
+// A ready-made video: template photos become the workspace's media, scenes
+// keep their text and voice-over script (voices are generated in the editor).
+export async function createVideoFromTemplate(templateId: string, format: string) {
+  const { workspace, brand } = await requireContext()
+  const tpl = VIDEO_TEMPLATES.find((t) => t.id === templateId)
+  if (!tpl) return { error: 'Unknown template' }
+  const f: Format = isFormat(format) ? format : '9:16'
+  const photos = await templatePhotos(workspace.id, tpl.scenes.map((s) => `${TEMPLATE_PHOTO}${s.photo}`))
+  const bg = brandColor(brand?.colors)
+  const doc: VideoDoc = {
+    ...emptyDoc(bg),
+    transition: tpl.transition,
+    caption: tpl.caption,
+    scenes: tpl.scenes.map((sc) => {
+      const m = photos.get(`${TEMPLATE_PHOTO}${sc.photo}`)
+      return newScene(bg, {
+        media: m ? { id: m.id, kind: 'image', url: m.url, durationMs: null, posterUrl: null } : null,
+        duration: sc.seconds,
+        motion: sc.motion,
+        text: sc.text,
+        voice: sc.voice,
+        ...(sc.position && { position: sc.position }),
+        ...(sc.style && { style: sc.style }),
+      })
+    }),
+  }
+  const v = await prisma.video.create({
+    data: { workspaceId: workspace.id, name: tpl.name, format: f, data: doc as unknown as Prisma.InputJsonValue },
   })
   revalidatePath('/app/studio')
   return { id: v.id }
@@ -350,6 +386,7 @@ const ClipInput = z.object({
   imageId: z.string().max(40).nullable(),
   videoId: z.string().max(40).nullable(),
   sceneId: z.string().max(20).nullable(),
+  characterId: z.string().max(40).nullable().optional(),
 })
 
 // Starts a Veo clip. Credits are taken now and given back if it fails.
@@ -366,6 +403,14 @@ export async function startClip(raw: z.input<typeof ClipInput>): Promise<{ jobId
   }
   if (c.videoId && !(await prisma.video.findFirst({ where: { id: c.videoId, workspaceId: workspace.id }, select: { id: true } }))) return { error: 'Video not found' }
   if (c.imageId && !(await prisma.media.findFirst({ where: { id: c.imageId, workspaceId: workspace.id, kind: 'IMAGE' }, select: { id: true } }))) return { error: 'Photo not found' }
+  if (c.characterId) {
+    // Veo keeps a character only on Pro and Cinema, in 8-second clips, and
+    // not together with a first-frame photo.
+    if (!(await prisma.character.findFirst({ where: { id: c.characterId, workspaceId: workspace.id }, select: { id: true } }))) return { error: 'Character not found' }
+    if (c.quality === 'quick') return { error: 'Characters need Pro or Cinema quality' }
+    if (c.seconds !== 8) return { error: 'Clips with a character are 8 seconds' }
+    if (c.imageId) return { error: 'Use either a character or the scene photo' }
+  }
   const res = await beginClip(account.id, account.creditBalance, workspace.id, c)
   if (res.jobId) revalidatePath('/app', 'layout')
   return res
@@ -385,6 +430,7 @@ async function beginClip(accountId: string, balance: number, workspaceId: string
       sceneId: c.sceneId,
       prompt: c.prompt,
       imageId: c.imageId,
+      characterId: c.characterId ?? null,
       quality: c.quality,
       aspect: veoAspect(c.format),
       seconds: c.seconds,

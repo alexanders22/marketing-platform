@@ -1,7 +1,7 @@
 import 'server-only'
 import { writeFile, rm } from 'node:fs/promises'
 import path from 'node:path'
-import { GoogleGenAI, GenerateVideosOperation } from '@google/genai'
+import { GoogleGenAI, GenerateVideosOperation, VideoGenerationReferenceType } from '@google/genai'
 import type { ClipJob } from '@prisma/client'
 import { ffmpeg, posterFrame, probe } from './ffmpeg'
 import { ACTIVE_WORKSPACE } from './pause'
@@ -33,7 +33,7 @@ export const veoAspect = (format: string) => (format === '16:9' ? '16:9' : '9:16
 // outside production — it renders a coloured clip after a short wait.
 const isTest = (prompt: string) => process.env.NODE_ENV !== 'production' && prompt.startsWith('[test]')
 
-export async function startVeo(job: Pick<ClipJob, 'prompt' | 'quality' | 'aspect' | 'seconds' | 'imageId' | 'workspaceId'>): Promise<string> {
+export async function startVeo(job: Pick<ClipJob, 'prompt' | 'quality' | 'aspect' | 'seconds' | 'imageId' | 'workspaceId' | 'characterId'>): Promise<string> {
   if (isTest(job.prompt)) return `test:${Date.now()}:${job.prompt.includes('fail') ? 'fail' : 'ok'}`
   if (!client) throw new Error('AI video is not configured')
   const model = MODELS[job.quality as ClipQuality] ?? MODELS.quick
@@ -44,11 +44,34 @@ export async function startVeo(job: Pick<ClipJob, 'prompt' | 'quality' | 'aspect
     const { readFile } = await import('node:fs/promises')
     image = { imageBytes: (await readFile(mediaFile(m.path))).toString('base64'), mimeType: m.mime === 'image/png' ? 'image/png' : 'image/jpeg' }
   }
+  // A character: its photos go to Veo as reference images ("ingredients"),
+  // its name and look into the prompt.
+  let character = ''
+  let referenceImages: { image: { imageBytes: string; mimeType: string }; referenceType: VideoGenerationReferenceType }[] | undefined
+  if (job.characterId) {
+    const c = await prisma.character.findFirst({ where: { id: job.characterId, workspaceId: job.workspaceId } })
+    if (!c) throw new Error('The character is not available')
+    const photos = await prisma.media.findMany({ where: { id: { in: c.photoIds }, workspaceId: job.workspaceId, kind: 'IMAGE' } })
+    if (photos.length === 0) throw new Error('The character has no photos')
+    const { readFile } = await import('node:fs/promises')
+    referenceImages = await Promise.all(
+      photos.slice(0, 3).map(async (m) => ({
+        image: { imageBytes: (await readFile(mediaFile(m.path))).toString('base64'), mimeType: m.mime === 'image/png' ? 'image/png' : 'image/jpeg' },
+        referenceType: VideoGenerationReferenceType.ASSET,
+      })),
+    )
+    character = `The main character is ${c.name}${c.description ? ` (${c.description})` : ''}: keep their face, hair, body and clothes exactly as in the reference images.\n`
+  }
   const op = await client.models.generateVideos({
     model,
     // Not every Veo model takes a negative prompt: say it in the prompt.
-    source: { prompt: `${job.prompt}\nNo on-screen text, captions, logos or watermarks.`, ...(image ? { image } : {}) },
-    config: { aspectRatio: job.aspect, durationSeconds: job.seconds, numberOfVideos: 1 },
+    source: { prompt: `${character}${job.prompt}\nNo on-screen text, captions, logos or watermarks.`, ...(image ? { image } : {}) },
+    config: {
+      aspectRatio: job.aspect,
+      durationSeconds: job.seconds,
+      numberOfVideos: 1,
+      ...(referenceImages && { referenceImages, personGeneration: 'allow_adult' }),
+    },
   })
   if (!op.name) throw new Error('Veo did not start the clip')
   return op.name

@@ -21,8 +21,8 @@ test.beforeAll(async ({ browser }) => {
   page = await browser.newPage()
   const { email } = await newAccount(page, 'veo', 'Bloom Bakery')
   accountId = sql(`select m."accountId" from "AccountMember" m join "User" u on u.id=m."userId" where u.email='${email}'`)
-  // Veo is for paying customers: end the trial.
-  sql(`update "Account" set "trialEndsAt"=null, "creditBalance"="creditBalance"+100 where id='${accountId}'`)
+  // Veo is for paying customers: a paid month.
+  sql(`update "Account" set "trialEndsAt"=null, "paidUntil"=now() + interval '30 days', "creditBalance"="creditBalance"+100 where id='${accountId}'`)
   sql(`insert into "CreditEntry"(id,"accountId",amount,reason,note) values ('ce${Date.now()}','${accountId}',100,'GRANT','test top-up')`)
   await page.goto('/app/studio?tab=video')
   await page.getByRole('button', { name: 'New Reel / Story video' }).click()

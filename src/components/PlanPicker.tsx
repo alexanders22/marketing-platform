@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, CheckCircle2, Coins, Rocket, Share2, UserRound, Users, X } from 'lucide-react'
+import { Building2, CheckCircle2, Coins, Rocket, Share2, UserRound, Users, X, Code2 } from 'lucide-react'
 import { PLANS, TRIAL_DAYS, yearlyTotal, type PlanId } from '@/lib/plans'
 import { choosePlan } from '@/app/app/plan/actions'
 
@@ -128,6 +128,7 @@ export function PlanPicker({ current, after = '/app' }: { current?: PlanId | nul
                   <Row icon={Building2} label="Companies" value={p.companies} />
                   <Row icon={Share2} label="Social profiles" value={p.profiles} />
                   <Row icon={Coins} label="Credits" value={p.credits.toLocaleString()} />
+                  <Row icon={Code2} label="API & webhooks" value={p.id === 'AGENCY' ? 'Included' : '—'} />
                 </ul>
               </div>
             )

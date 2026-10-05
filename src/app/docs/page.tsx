@@ -309,6 +309,12 @@ export default async function DocsPage() {
               Call the API from your server only — never from a browser or a mobile app. Need a key, a second key or a rotation?{' '}
               <a href={CONTACT}>Write to us</a>.
             </p>
+            <p>
+              <b>Agency customers</b> create their own keys in the app under <i>Integrations → API</i> (open on every plan during the free
+              trial). Such a key acts for your account: your existing companies are addressed by the id shown there, and companies you create
+              with <code>POST /workspaces</code> belong to your account and count towards your plan&apos;s company limit. When the plan no
+              longer includes the API, requests answer <code>403 plan_required</code>.
+            </p>
           </Section>
 
           <Section id="errors" title="Errors">

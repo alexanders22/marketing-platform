@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ApiError, body, handler, json, requirePartner } from '@/lib/api'
+import { companyLimit } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { serializeWorkspace } from '@/lib/workspaces'
 
@@ -26,12 +27,28 @@ export const POST = handler(async (req) => {
       })
       if (other) throw new ApiError(409, 'single_workspace', 'This partner can have only one workspace')
     }
-    return tx.workspace.upsert({
-      where: { partnerId_externalId: { partnerId: partner.id, externalId: input.externalId } },
-      create: { partnerId: partner.id, externalId: input.externalId, name: input.name, locale: input.locale },
-      update: { name: input.name, ...(input.locale && { locale: input.locale }) },
+    const where = { partnerId_externalId: { partnerId: partner.id, externalId: input.externalId } }
+    const existing = await tx.workspace.findUnique({ where, select: { id: true } })
+    if (existing) {
+      return tx.workspace.update({ where, data: { name: input.name, ...(input.locale && { locale: input.locale }) }, include: { account: true } })
+    }
+    // A customer's own API: new companies belong to their account, within
+    // the plan's company limit.
+    let accountId: string | undefined
+    if (partner.ownerAccountId) {
+      const owner = await tx.account.findUniqueOrThrow({ where: { id: partner.ownerAccountId }, select: { plan: true } })
+      const limit = companyLimit(owner.plan)
+      if ((await tx.workspace.count({ where: { accountId: partner.ownerAccountId } })) >= limit) {
+        throw new ApiError(409, 'company_limit', `Your plan includes ${limit} companies`)
+      }
+      accountId = partner.ownerAccountId
+    }
+    const ws = await tx.workspace.create({
+      data: { partnerId: partner.id, externalId: input.externalId, name: input.name, locale: input.locale, accountId },
       include: { account: true },
     })
+    if (accountId) await tx.brandKit.create({ data: { workspaceId: ws.id } })
+    return ws
   })
   return json({ workspace: serializeWorkspace(ws) })
 })

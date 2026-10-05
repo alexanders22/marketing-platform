@@ -4,6 +4,7 @@ import { SiFacebook, SiGoogleads, SiInstagram, SiPinterest, SiTelegram, SiThread
 import { PageHeader } from '@/components/EmptyState'
 import { requireContext } from '@/lib/context'
 import { metaEnabled } from '@/lib/meta'
+import { planLimits } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { DisconnectButton } from './DisconnectButton'
 
@@ -33,10 +34,11 @@ const ERRORS: Record<string, string> = {
   'meta-state': 'The connection expired — please try again.',
   'meta-api': 'Facebook did not accept the connection. Please try again.',
   'meta-empty': 'No Pages or ad accounts were shared. Reconnect and pick at least one Page.',
+  profiles: 'Your plan has no room for more social profiles. Disconnect one or upgrade your plan.',
 }
 
 export default async function ChannelsPage({ searchParams }: PageProps<'/app/channels'>) {
-  const { workspace, role } = await requireContext()
+  const { workspace, role, account } = await requireContext()
   const q = await searchParams
   const accounts = await prisma.socialAccount.findMany({
     where: { workspaceId: workspace.id },
@@ -46,6 +48,9 @@ export default async function ChannelsPage({ searchParams }: PageProps<'/app/cha
   const canEdit = role !== 'EDITOR'
   const connected = typeof q.connected === 'string' ? Number(q.connected) : 0
   const error = typeof q.error === 'string' ? ERRORS[q.error] : undefined
+  const skipped = typeof q.skipped === 'string' ? Number(q.skipped) : 0
+  const limit = planLimits(account.plan).profiles
+  const profiles = await prisma.socialAccount.count({ where: { workspace: { accountId: account.id }, network: { in: ['FACEBOOK', 'INSTAGRAM'] } } })
 
   return (
     <>
@@ -57,6 +62,14 @@ export default async function ChannelsPage({ searchParams }: PageProps<'/app/cha
         </p>
       )}
       {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {skipped > 0 && (
+        <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {skipped} profile{skipped === 1 ? ' was' : 's were'} not added: your plan includes {limit} social profiles. Disconnect one or upgrade to add more.
+        </p>
+      )}
+      <p className="mb-4 text-sm text-zinc-500">
+        Social profiles: <b className="text-zinc-800 tabular-nums">{profiles}</b> of {limit} on your plan (all companies together; ad accounts don&apos;t count).
+      </p>
 
       <section className="rounded-2xl border border-zinc-200 p-5">
         <div className="flex flex-wrap items-center gap-4">

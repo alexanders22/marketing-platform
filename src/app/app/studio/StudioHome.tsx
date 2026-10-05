@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Copy, LayoutTemplate, Loader2, Search, Trash2 } from 'lucide-react'
 import { DesignPreview } from '@/components/DesignCanvas'
-import { palette, resizeDoc, SIZES, TEMPLATES, type DesignDoc } from '@/lib/design'
+import { palette, resizeDoc, SIZES, TEMPLATE_CATEGORIES, TEMPLATES, type DesignDoc, type TemplateCategory } from '@/lib/design'
 import { createDesign, deleteDesign, duplicateDesign } from './actions'
 
 type Design = { id: string; name: string; width: number; height: number; data: DesignDoc; preview: string | null; updatedAt: string }
@@ -27,6 +27,7 @@ export function StudioHome({
   const [size, setSize] = useState<string>(SIZES[0].id)
   const [busy, setBusy] = useState<string | null>(null)
   const [q, setQ] = useState('')
+  const [cat, setCat] = useState<TemplateCategory | 'all'>('all')
   const [, start] = useTransition()
   const pal = palette(colors)
   const sz = SIZES.find((s) => s.id === size)!
@@ -74,10 +75,26 @@ export function StudioHome({
         </div>
       </section>
 
-      <h2 className="mt-10 font-semibold">Templates</h2>
-      <p className="text-sm text-zinc-500">Click to start a new {sz.name.toLowerCase()} from a template.</p>
+      <div className="mt-10 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="font-semibold">Templates</h2>
+          <p className="text-sm text-zinc-500">Click to start a new {sz.name.toLowerCase()} from a template.</p>
+        </div>
+        <div role="group" aria-label="Template category" className="flex rounded-lg bg-zinc-100 p-1 text-sm">
+          {[{ id: 'all' as const, name: 'All' }, ...TEMPLATE_CATEGORIES].map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setCat(c.id)}
+              aria-pressed={cat === c.id}
+              className={`rounded-md px-3 py-1 font-medium ${cat === c.id ? 'bg-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900'}`}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-        {TEMPLATES.map((t) => {
+        {TEMPLATES.filter((t) => cat === 'all' || t.category === cat).map((t) => {
           const doc = resizeDoc(t.build(pal, brandName), { w: 1080, h: 1080 }, sz)
           return (
             <button key={t.id} onClick={() => create(t.id)} disabled={busy !== null} className="group text-left">

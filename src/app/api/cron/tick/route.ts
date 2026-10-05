@@ -2,6 +2,7 @@ import { after } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { cronSecret } from '@/lib/cron-secret'
 import { dispatchAlerts } from '@/lib/alerts'
+import { grantPlanCreditsDue } from '@/lib/billing'
 import { refreshDossiersDue } from '@/lib/dossier'
 import { checkAllGoals } from '@/lib/goals'
 import { syncInboxDue } from '@/lib/inbox'
@@ -17,6 +18,7 @@ import { publishDue, refreshInsights } from '@/lib/publisher'
 let lastInsights = 0
 let lastGoals = 0
 let lastDossiers = 0
+let lastPlanCredits = 0
 
 export async function POST(req: Request) {
   const given = Buffer.from(req.headers.get('x-khma-cron') ?? '')
@@ -54,6 +56,12 @@ export async function POST(req: Request) {
       await reviewsDue().catch((e) => console.error('reviews failed', e))
     })
   }
+  // A new monthly period of a paid plan brings its credits.
+  let planCredits = 0
+  if (Date.now() - lastPlanCredits > 60 * 60 * 1000) {
+    lastPlanCredits = Date.now()
+    planCredits = await grantPlanCreditsDue()
+  }
   const alerts = await dispatchAlerts()
-  return Response.json({ published, insights, ads, inbox, clips, goals, dossiers, alerts })
+  return Response.json({ published, insights, ads, inbox, clips, goals, dossiers, planCredits, alerts })
 }

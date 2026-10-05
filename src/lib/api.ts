@@ -3,6 +3,7 @@ import type { Partner, Workspace } from '@prisma/client'
 import { ZodError, type ZodType } from 'zod'
 import { prisma } from './prisma'
 import { sha256 } from './crypto'
+import { apiAllowed } from './plans'
 
 export class ApiError extends Error {
   constructor(
@@ -59,6 +60,16 @@ export async function requirePartner(req: Request): Promise<Partner> {
   })
   if (!apiKey || apiKey.revokedAt) throw new ApiError(401, 'unauthorized', 'Invalid API key')
   if (apiKey.partner.status !== 'ACTIVE') throw new ApiError(403, 'partner_suspended', 'Partner is suspended')
+  // A customer's own API access lives with their plan: Agency, or any plan
+  // during the free trial.
+  if (apiKey.partner.ownerAccountId) {
+    const owner = await prisma.account.findUnique({
+      where: { id: apiKey.partner.ownerAccountId },
+      select: { plan: true, trialEndsAt: true, paidUntil: true, pausedAt: true },
+    })
+    if (!owner || owner.pausedAt) throw new ApiError(403, 'account_paused', 'This account is paused')
+    if (!apiAllowed(owner)) throw new ApiError(403, 'plan_required', 'The API is part of the Agency plan')
+  }
 
   // Fire-and-forget; a failed timestamp must not fail the request.
   prisma.apiKey.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } }).catch(() => {})

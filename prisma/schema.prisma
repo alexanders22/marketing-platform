@@ -32,6 +32,10 @@ model Partner {
   revenueSharePct Float         @default(0)
   webhookUrl      String?
   webhookSecret   String?
+  // Set for an Agency customer's own API access: workspaces it creates belong
+  // to this account, and keys work only while the plan allows the API.
+  ownerAccountId  String?       @unique
+  ownerAccount    Account?      @relation("PartnerOwner", fields: [ownerAccountId], references: [id], onDelete: Cascade)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -81,12 +85,18 @@ model Account {
   // syncs or spends credits until it is resumed.
   pausedAt        DateTime?
   pausedReason    String?
+  // Paid through this date (booked by a super admin until card payments
+  // exist). Plan credits are granted each month while it is in the future.
+  paidUntil       DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  workspaces Workspace[]
-  credits    CreditEntry[]
-  members    AccountMember[]
+  workspaces  Workspace[]
+  credits     CreditEntry[]
+  members     AccountMember[]
+  invitations Invitation[]
+  // Self-serve API access (Agency plan): the account acts as its own partner.
+  apiPartner  Partner?     @relation("PartnerOwner")
 
   @@index([partnerId])
 }
@@ -162,6 +172,7 @@ model Workspace {
   designs          Design[]
   videos           Video[]
   clipJobs         ClipJob[]
+  characters       Character[]
   bioPages         BioPage[]
   adCampaigns      AdCampaign[]
   aiSummaries      AiSummary[]
@@ -530,6 +541,23 @@ model AccountMember {
   role      MemberRole @default(EDITOR)
 
   @@unique([accountId, userId])
+}
+
+// A teammate invited by email. The link (only its sha256 is stored) signs
+// them in and adds them to the account with the given role.
+model Invitation {
+  id          String     @id @default(cuid())
+  accountId   String
+  account     Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  email       String
+  role        MemberRole @default(EDITOR)
+  tokenHash   String     @unique
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@index([accountId, email])
 }
 
 // ─── Ads & analytics ─────────────────────────────────────────────────────────
@@ -1029,6 +1057,8 @@ model ClipJob {
   prompt      String
   // Photo to animate (image-to-video).
   imageId     String?
+  // Character to keep consistent (Veo reference images).
+  characterId String?
   quality     String
   aspect      String
   seconds     Int
@@ -1050,4 +1080,22 @@ model Setting {
   value     Json
   updatedAt DateTime @updatedAt
   updatedBy String?
+}
+
+// A person, mascot or product kept the same across AI clips: 1–3 photos sent
+// to Veo as reference images, plus a short description added to the prompt.
+model Character {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  description String    @default("")
+  // Media ids (IMAGE) of the reference photos.
+  photoIds    String[]
+  // The uploader confirmed they may use this person's likeness.
+  consentAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
 }

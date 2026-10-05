@@ -53,12 +53,34 @@ export const TRIAL_CREDITS = 50
 
 export const yearlyTotal = (monthly: number) => monthly * 10
 
-// How many companies an account may have; one until a plan is picked.
-export const companyLimit = (plan: string) => PLANS.find((p) => p.id === plan)?.companies ?? 1
+// What an account may have: the plan's numbers, or a single seat before a
+// plan is picked.
+export type Limits = { companies: number; users: number; profiles: number; api: boolean }
+export function planLimits(plan: string): Limits {
+  const p = PLANS.find((x) => x.id === plan)
+  return p ? { companies: p.companies, users: p.users, profiles: p.profiles, api: p.id === 'AGENCY' } : { companies: 1, users: 1, profiles: 2, api: false }
+}
+export const companyLimit = (plan: string) => planLimits(plan).companies
 
-// A paying customer: a plan picked and the free trial over. Premium features
-// (AI clips with Veo) need it.
-export const isPaid = (a: { plan: string; trialEndsAt: Date | null }, now = new Date()) =>
-  a.plan !== 'NONE' && !(a.trialEndsAt && a.trialEndsAt > now)
+// none: no plan picked · trial: free trial running · active: paid through
+// paidUntil · expired: trial over and not paid.
+export type BillingState = 'none' | 'trial' | 'active' | 'expired'
+type Billable = { plan: string; trialEndsAt: Date | null; paidUntil: Date | null }
+export function billingState(a: Billable, now = new Date()): BillingState {
+  if (a.plan === 'NONE') return 'none'
+  if (a.paidUntil && a.paidUntil > now) return 'active'
+  if (a.trialEndsAt && a.trialEndsAt > now) return 'trial'
+  return 'expired'
+}
+
+// A paying customer. Premium features (AI clips with Veo) need it — the end
+// of a trial alone is not a payment.
+export const isPaid = (a: Billable, now = new Date()) => billingState(a, now) === 'active'
+
+// The API is part of Agency; any plan may try it during the free trial.
+export const apiAllowed = (a: Billable, now = new Date()) => {
+  const state = billingState(a, now)
+  return state === 'trial' || (state === 'active' && planLimits(a.plan).api)
+}
 
 export const PAID_ONLY = 'AI video clips are part of paid plans. Your trial includes everything else — choose a plan to unlock them.'

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, Check, Clapperboard, Coins, Rocket, Sparkles, UserRound, Users } from "lucide-react";
+import { Building2, Check, Clapperboard, Code2, Coins, Rocket, Sparkles, UserRound, Users } from "lucide-react";
 import { DEFAULT_PRICING } from "@/lib/pricing";
 import { COPY, type Lang } from "./i18n";
 import { SIGNUP } from "./site";
@@ -41,6 +41,7 @@ const PLANS = [
     companies: 50,
     profiles: 100,
     credits: "5,000",
+    api: true,
   },
 ];
 
@@ -114,6 +115,7 @@ export function Pricing({ lang = "en" }: { lang?: Lang }) {
                 <Row icon={Sparkles} label={t.profiles} value={p.profiles} />
                 <Row icon={Coins} label={t.credits} value={p.credits} />
                 <Row icon={Clapperboard} label={t.veo} value={`${p.veo}s`} />
+                <Row icon={Code2} label={t.api} value={"api" in p && p.api ? "✓" : "—"} />
               </ul>
             </div>
           );

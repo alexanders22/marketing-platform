@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
-import { companyLimit } from '@/lib/plans'
+import { billingState, companyLimit } from '@/lib/plans'
 import {
   addMember,
   adjustCredits,
@@ -10,6 +10,7 @@ import {
   deleteWorkspace,
   openWorkspace,
   pauseAccount,
+  recordPayment,
   removeMember,
   renameWorkspace,
   resumeAccount,
@@ -118,6 +119,46 @@ export default async function AdminCompany({ params }: PageProps<'/admin/compani
               ))}
               {a.workspaces.length === 0 && <li className="text-sm text-zinc-500">No companies.</li>}
             </ul>
+          </section>
+
+          {/* Billing */}
+          <section className={card}>
+            <h2 className="font-semibold">
+              Billing{' '}
+              <span className="font-normal text-zinc-500">
+                ·{' '}
+                {{
+                  none: 'no plan',
+                  trial: `trial until ${a.trialEndsAt ? fmtDate(a.trialEndsAt) : '—'}`,
+                  active: `paid until ${a.paidUntil ? fmtDate(a.paidUntil) : '—'}`,
+                  expired: 'trial over, not paid',
+                }[billingState(a)]}
+              </span>
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              Book a payment received outside the app. It extends the paid period, ends the trial and grants this month&apos;s plan
+              credits; each new month brings the next batch.
+            </p>
+            <ActionForm action={recordPayment.bind(null, a.id)} submit="Record payment" className="mt-3">
+              <input type="hidden" name="key" value={randomUUID()} />
+              <div className="grid gap-3 sm:grid-cols-[100px_150px_1fr]">
+                <label className={label}>
+                  Periods
+                  <input name="periods" type="number" min={1} max={24} defaultValue={1} required className={input} />
+                </label>
+                <label className={label}>
+                  Cycle
+                  <select name="cycle" defaultValue={a.billingCycle} aria-label="Billing cycle" className={input}>
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="YEARLY">Yearly</option>
+                  </select>
+                </label>
+                <label className={label}>
+                  Note
+                  <input name="note" placeholder="e.g. bank transfer #123, 79 USD" required className={input} />
+                </label>
+              </div>
+            </ActionForm>
           </section>
 
           {/* Credits */}

@@ -1,3 +1,4 @@
+import { billingState } from '@/lib/plans'
 import type { ReactNode } from 'react'
 
 export const card = 'rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5'
@@ -39,11 +40,19 @@ export const REASON: Record<string, string> = {
   AI_BLOG: 'AI blog',
 }
 
-export function planStatus(a: { plan: string; trialEndsAt: Date | null; pausedAt: Date | null }) {
+export function planStatus(a: { plan: string; trialEndsAt: Date | null; paidUntil: Date | null; pausedAt: Date | null }) {
   if (a.pausedAt) return { label: 'Paused', tone: 'amber' as const }
-  if (a.plan === 'NONE') return { label: 'No plan', tone: 'zinc' as const }
-  if (a.trialEndsAt && a.trialEndsAt > new Date()) return { label: `${a.plan[0]}${a.plan.slice(1).toLowerCase()} trial`, tone: 'violet' as const }
-  return { label: `${a.plan[0]}${a.plan.slice(1).toLowerCase()}`, tone: 'green' as const }
+  const name = `${a.plan[0]}${a.plan.slice(1).toLowerCase()}`
+  switch (billingState(a)) {
+    case 'none':
+      return { label: 'No plan', tone: 'zinc' as const }
+    case 'trial':
+      return { label: `${name} trial`, tone: 'violet' as const }
+    case 'active':
+      return { label: name, tone: 'green' as const }
+    case 'expired':
+      return { label: `${name} · unpaid`, tone: 'red' as const }
+  }
 }
 
 // Outside components: render functions must stay pure.

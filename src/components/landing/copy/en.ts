@@ -300,6 +300,7 @@ export const en = {
     profiles: "Social & ad profiles",
     credits: "AI credits / month",
     veo: "AI clips (Veo) / month",
+    api: "API & webhooks",
     perks: ["AI credits refresh every month", "Add profiles and seats as you grow", "Change plan or cancel anytime"],
     moreTitle: "Need more than Agency?",
     moreBody: "Custom limits, white-label and revenue share for platforms that resell Loudpilot to their own customers.",

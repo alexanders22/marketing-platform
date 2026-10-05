@@ -70,6 +70,7 @@ export function VideoEditor({
   initialStatus,
   paid,
   veo,
+  characters = [],
 }: {
   video: { id: string; name: string; format: Format; doc: VideoDoc }
   brand: OverlayBrand
@@ -77,6 +78,8 @@ export function VideoEditor({
   // AI clips (Veo) are for paid plans, with seconds per month (null = no limit).
   paid: boolean
   veo: Allowance | null
+  // Characters kept the same across AI clips (Studio → Characters).
+  characters?: CharacterOption[]
 }) {
   const router = useRouter()
   const P = usePrices()
@@ -415,6 +418,7 @@ export function VideoEditor({
                 format={format}
                 paid={paid}
                 veo={veo}
+                characters={characters}
                 onStarted={(jobId) => patchScene(scene.id, { clipJobId: jobId })}
                 onError={setError}
                 onCharged={() => router.refresh()}
@@ -712,6 +716,7 @@ function ClipPanel({
   format,
   paid,
   veo,
+  characters,
   onStarted,
   onError,
   onCharged,
@@ -721,6 +726,7 @@ function ClipPanel({
   format: Format
   paid: boolean
   veo: Allowance | null
+  characters: CharacterOption[]
   onStarted: (jobId: string) => void
   onError: (e: string) => void
   onCharged: () => void
@@ -731,7 +737,17 @@ function ClipPanel({
   const [seconds, setSeconds] = useState<number>(4)
   const photo = scene.media?.kind === 'image' ? scene.media : null
   const [animate, setAnimate] = useState(Boolean(photo))
+  const [characterId, setCharacterId] = useState('')
   const [pending, start] = useTransition()
+  // Veo keeps a character only on Pro/Cinema, in 8-second clips, without a first frame.
+  const pickCharacter = (id: string) => {
+    setCharacterId(id)
+    if (id) {
+      setAnimate(false)
+      setSeconds(8)
+      if (quality === 'quick') setQuality('pro')
+    }
+  }
   const P = usePrices()
   const cost = P[clipAction(quality)] * seconds
 
@@ -766,9 +782,10 @@ function ClipPanel({
         quality,
         seconds,
         format,
-        imageId: animate && photo ? photo.id : null,
+        imageId: animate && photo && !characterId ? photo.id : null,
         videoId,
         sceneId: scene.id,
+        characterId: characterId || null,
       })
       if (res.error || !res.jobId) return onError(res.error ?? 'Could not start the clip')
       onStarted(res.jobId)
@@ -780,7 +797,21 @@ function ClipPanel({
       <p className="flex items-center gap-1.5 text-sm font-semibold">
         <Wand2 size={15} className="text-indigo-600" /> AI clip · Google Veo
       </p>
-      {photo && (
+      {characters.length > 0 && (
+        <label className="flex items-center gap-2 text-sm">
+          Character
+          <select value={characterId} onChange={(e) => pickCharacter(e.target.value)} aria-label="Character" className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm">
+            <option value="">None</option>
+            {characters.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {characterId && <p className="text-xs text-zinc-500">With a character: Pro or Cinema, 8 seconds. Describe what they do and where.</p>}
+      {photo && !characterId && (
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={animate} onChange={(e) => setAnimate(e.target.checked)} /> Animate this scene&apos;s photo
         </label>
@@ -799,8 +830,9 @@ function ClipPanel({
             role="radio"
             aria-checked={quality === q}
             onClick={() => setQuality(q)}
+            disabled={Boolean(characterId) && q === 'quick'}
             title={CLIP_QUALITIES[q].hint}
-            className={`rounded-lg px-2 py-1.5 text-xs font-medium ring-1 ${quality === q ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200 hover:bg-zinc-50'}`}
+            className={`rounded-lg px-2 py-1.5 text-xs font-medium ring-1 disabled:opacity-40 ${quality === q ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200 hover:bg-zinc-50'}`}
           >
             {CLIP_QUALITIES[q].label}
             <span className="block text-[10px] opacity-70">{P[clipAction(q)]} cr/s</span>
@@ -809,13 +841,21 @@ function ClipPanel({
       </div>
       <div role="radiogroup" aria-label="Clip length" className="flex gap-1">
         {CLIP_SECONDS.map((n) => (
-          <button key={n} role="radio" aria-checked={seconds === n} onClick={() => setSeconds(n)} className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ${seconds === n ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200 hover:bg-zinc-50'}`}>
+          <button key={n} role="radio" aria-checked={seconds === n} onClick={() => setSeconds(n)} disabled={Boolean(characterId) && n !== 8} className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 disabled:opacity-40 ${seconds === n ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200 hover:bg-zinc-50'}`}>
             {n}s
           </button>
         ))}
       </div>
       {format !== '9:16' && format !== '16:9' && <p className="text-xs text-zinc-500">Veo makes vertical clips; they are cropped to {format}.</p>}
       {veo && <VeoMeter veo={veo} need={seconds} />}
+      {!characterId && characters.length === 0 && (
+        <p className="text-xs text-zinc-500">
+          Want the same person in every clip?{' '}
+          <Link href="/app/studio/characters" className="underline">
+            Add a character
+          </Link>
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <button onClick={go} disabled={pending || prompt.trim().length < 3 || (veo !== null && veo.left < seconds)} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
           {pending ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />} Generate · {cost} credits
@@ -827,6 +867,8 @@ function ClipPanel({
     </div>
   )
 }
+
+export type CharacterOption = { id: string; name: string }
 
 // This month's AI clip seconds: how much is used and what this clip needs.
 export function VeoMeter({ veo, need }: { veo: Allowance; need: number }) {

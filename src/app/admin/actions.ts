@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import type { CreditReason, MemberRole } from '@prisma/client'
 import { logAdmin, requireSuperAdmin } from '@/lib/admin'
+import { bookPayment } from '@/lib/billing'
 import { WORKSPACE_COOKIE } from '@/lib/context'
 import { forgetPricing } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
@@ -91,6 +92,34 @@ export async function adjustCredits(accountId: string, _: AdminState, f: FormDat
 }
 class Done extends Error {}
 class Refused extends Error {}
+
+const PaymentForm = z.object({
+  periods: z.coerce.number().int().min(1, 'At least one period').max(24),
+  cycle: z.enum(['MONTHLY', 'YEARLY']),
+  note: z.string().min(1, 'Add a note: how it was paid').max(200),
+  key: z.string().min(8),
+})
+
+// A payment received outside the app (bank transfer, invoice): extends the
+// paid period and grants this month's plan credits. One booking per form key.
+export async function recordPayment(accountId: string, _: AdminState, f: FormData): Promise<AdminState> {
+  const admin = await requireSuperAdmin()
+  const parsed = PaymentForm.safeParse({ periods: text(f, 'periods'), cycle: text(f, 'cycle'), note: text(f, 'note'), key: text(f, 'key') })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  const { periods, cycle, note, key } = parsed.data
+  const account = await prisma.account.findUnique({ where: { id: accountId }, select: { plan: true } })
+  if (!account) return { error: 'Account not found' }
+  if (account.plan === 'NONE') return { error: 'Pick a plan for this account first' }
+  const booked = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'payment:' + key}))`
+    return tx.adminLog.findFirst({ where: { action: 'payment.record', details: { path: ['key'], equals: key } }, select: { id: true } })
+  })
+  if (booked) return { ok: 'Already booked' }
+  const { paidUntil, granted } = await bookPayment(accountId, periods, cycle)
+  await logAdmin(admin, 'payment.record', 'account', accountId, { key, periods, cycle, note, paidUntil: paidUntil.toISOString(), granted })
+  revalidatePath(`/admin/companies/${accountId}`)
+  return { ok: `Paid until ${paidUntil.toISOString().slice(0, 10)}${granted ? ` · +${granted} credits` : ''}` }
+}
 
 export async function pauseAccount(accountId: string, _: AdminState, f: FormData): Promise<AdminState> {
   const admin = await requireSuperAdmin()

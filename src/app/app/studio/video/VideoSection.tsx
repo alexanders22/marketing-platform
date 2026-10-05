@@ -6,7 +6,9 @@ import { useState, useTransition } from 'react'
 import { Clapperboard, Film, ImageIcon, Loader2, Palette, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Popover'
 import { CLIP_QUALITIES, FORMATS, type ClipQuality, type Format } from '@/lib/video'
-import { createVideo, createVideoWithAI, deleteVideo } from './actions'
+import { createVideo, createVideoFromTemplate, createVideoWithAI, deleteVideo } from './actions'
+import { templatePhotoUrl } from '@/lib/design'
+import { VIDEO_TEMPLATES } from '@/lib/video-templates'
 import { VideoMediaPicker, type LibraryItem } from './VideoMediaPicker'
 import { VeoMeter } from './[id]/VideoEditor'
 import { clipAction } from '@/lib/pricing'
@@ -26,6 +28,16 @@ export function VideoSection({ videos, paid, veo }: { videos: VideoCard[]; paid:
   const [busy, setBusy] = useState<string | null>(null)
   const [ai, setAi] = useState(false)
   const [, start] = useTransition()
+
+  const [tplFormat, setTplFormat] = useState<Format>('9:16')
+  const fromTemplate = (id: string) => {
+    setBusy(id)
+    start(async () => {
+      const res = await createVideoFromTemplate(id, tplFormat)
+      if ('id' in res && res.id) router.push(`/app/studio/video/${res.id}`)
+      else setBusy(null)
+    })
+  }
 
   const create = (f: Format) => {
     setBusy(f)
@@ -68,8 +80,51 @@ export function VideoSection({ videos, paid, veo }: { videos: VideoCard[]; paid:
         ))}
       </div>
 
+      <div className="mt-8 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">Templates · Real estate</h3>
+          <p className="text-sm text-zinc-500">Ready scenes, text and voice-over script — swap in your photos and numbers.</p>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-zinc-600">
+          Format
+          <select value={tplFormat} onChange={(e) => setTplFormat(e.target.value as Format)} aria-label="Template format" className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm">
+            {(Object.keys(FORMATS) as Format[]).map((f) => (
+              <option key={f} value={f}>
+                {FORMATS[f].name} ({f})
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" aria-label="Video templates">
+        {VIDEO_TEMPLATES.map((t) => {
+          const seconds = t.scenes.reduce((a, s) => a + s.seconds, 0)
+          return (
+            <li key={t.id}>
+              <button onClick={() => fromTemplate(t.id)} disabled={busy !== null} aria-label={`Use video template ${t.name}`} className="group block w-full text-left disabled:opacity-60">
+                <div className="relative aspect-[9/16] overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-zinc-200 transition group-hover:ring-zinc-400">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={templatePhotoUrl(t.scenes[0].photo)} alt="" className="h-full w-full object-cover opacity-90 transition group-hover:scale-105" />
+                  <span className="absolute inset-x-2 bottom-2 rounded-md bg-black/55 px-2 py-1 text-center text-xs font-bold text-white">{t.scenes[0].text.split('\n')[0]}</span>
+                  <span className="absolute top-1.5 left-1.5 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-700">
+                    {t.scenes.length} scenes · {Math.round(seconds)}s
+                  </span>
+                  {busy === t.id && (
+                    <span className="absolute inset-0 grid place-items-center bg-black/40 text-white">
+                      <Loader2 className="animate-spin" />
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1.5 truncate text-sm font-medium">{t.name}</p>
+                <p className="truncate text-xs text-zinc-500">{t.blurb}</p>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+
       {videos.length > 0 && (
-        <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6" aria-label="Your videos">
+        <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6" aria-label="Your videos">
           {videos.map((v) => (
             <li key={v.id} className="group relative">
               <Link href={`/app/studio/video/${v.id}`} className="block">

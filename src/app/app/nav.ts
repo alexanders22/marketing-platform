@@ -8,6 +8,7 @@ import {
   LineChart,
   Send,
   Target,
+  Users,
 } from 'lucide-react'
 
 // The app menu: a few sections in the sidebar, related pages as tabs inside
@@ -34,6 +35,7 @@ export const MAIN: Section[] = [
     tabs: [
       { label: 'Images', href: '/app/studio' },
       { label: 'Video', href: '/app/studio?tab=video' },
+      { label: 'Characters', href: '/app/studio/characters' },
       { label: 'Bio pages', href: '/app/bio' },
     ],
   },
@@ -63,12 +65,14 @@ export const MAIN: Section[] = [
 
 export const SETUP: Section[] = [
   { label: 'Channels', href: '/app/channels', icon: Send },
+  { label: 'Team', href: '/app/team', icon: Users },
   {
     label: 'Integrations',
     href: '/app/mcp',
     icon: Bot,
     tabs: [
       { label: 'AI assistants', href: '/app/mcp' },
+      { label: 'API', href: '/app/api' },
       { label: 'Workflows', href: '/app/workflows' },
     ],
   },

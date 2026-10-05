@@ -35,12 +35,14 @@ export async function switchCompany(workspaceId: string) {
 // A new company (brand) in the current account: own channels, brand kit and
 // dossier; credits and plan stay shared with the account.
 export async function addCompany(draft: BrandDraft): Promise<{ error?: string }> {
-  const { user, account, role, asAdmin } = await requireContext()
+  const { account, role, asAdmin } = await requireContext()
   if (role === 'EDITOR' && !asAdmin) return { error: 'Only owners and admins can add companies.' }
   const parsed = BrandInput.safeParse(draft)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const b = parsed.data
-  const limit = user.role === 'SUPER_ADMIN' ? Infinity : companyLimit(account.plan)
+  // The plan's limit applies to everyone's own account; only a super admin
+  // working in someone else's account (support) is not stopped by it.
+  const limit = asAdmin ? Infinity : companyLimit(account.plan)
 
   const created = await prisma.$transaction(async (tx) => {
     // Per-account lock: two quick submits can't both slip under the limit.
@@ -48,6 +50,9 @@ export async function addCompany(draft: BrandDraft): Promise<{ error?: string }>
     const count = await tx.workspace.count({ where: { accountId: account.id } })
     if (count >= limit) return null
     const ws = await tx.workspace.create({ data: { name: b.name, accountId: account.id, locale: 'en' } })
+    // With the API on, the new company is reachable through it by its id.
+    const api = await tx.partner.findUnique({ where: { ownerAccountId: account.id }, select: { id: true } })
+    if (api) await tx.workspace.update({ where: { id: ws.id }, data: { partnerId: api.id, externalId: ws.id } })
     await tx.brandKit.create({
       data: { workspaceId: ws.id, website: b.website, description: b.description, logoUrl: b.logoUrl, colors: b.colors, socialLinks: b.socialLinks },
     })

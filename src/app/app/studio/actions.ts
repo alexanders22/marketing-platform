@@ -6,6 +6,7 @@ import type { Prisma } from '@prisma/client'
 import { requireContext } from '@/lib/context'
 import { palette, SIZES, TEMPLATES, resizeDoc, uid, type DesignDoc } from '@/lib/design'
 import { prisma } from '@/lib/prisma'
+import { templatePhotos } from '@/lib/template-photos'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/)
@@ -81,6 +82,15 @@ export async function createDesign(sizeId: string, templateId: string) {
   const size = SIZES.find((s) => s.id === sizeId) ?? SIZES[0]
   const tpl = TEMPLATES.find((t) => t.id === templateId) ?? TEMPLATES[TEMPLATES.length - 1]
   const doc = resizeDoc(tpl.build(palette(brand?.colors ?? []), workspace.name), { w: 1080, h: 1080 }, size)
+  // Template photos become this workspace's own media.
+  const photos = await templatePhotos(workspace.id, doc.layers.flatMap((l) => (l.type === 'image' ? [l.mediaId] : [])))
+  for (const l of doc.layers) {
+    const m = l.type === 'image' ? photos.get(l.mediaId) : undefined
+    if (l.type === 'image' && m) {
+      l.mediaId = m.id
+      l.src = m.url
+    }
+  }
   const design = await prisma.design.create({
     data: {
       workspaceId: workspace.id,

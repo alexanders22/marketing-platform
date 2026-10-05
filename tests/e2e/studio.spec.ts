@@ -26,8 +26,19 @@ const SIZES: Record<string, [number, number]> = {
   'x-post': [1600, 900],
   youtube: [1280, 720],
 }
-const TEMPLATE_NAMES = ['Sale announcement', 'Quote', 'Product spotlight', 'Event invite', 'Tip of the day', 'Blank']
+const TEMPLATE_NAMES = [
+  'Sale announcement', 'Quote', 'Product spotlight', 'Event invite', 'Tip of the day', 'Blank',
+  'Just listed', 'Open house', 'Sold', 'New price', 'New development', 'Listing gallery', 'Meet the agent', 'Market update',
+]
 const TEMPLATE_LAYERS: Record<string, number> = {
+  'Just listed': 8,
+  'Open house': 6,
+  Sold: 6,
+  'New price': 7,
+  'New development': 7,
+  'Listing gallery': 5,
+  'Meet the agent': 5,
+  'Market update': 6,
   'Sale announcement': 6,
   Quote: 4,
   'Product spotlight': 4,
@@ -247,6 +258,11 @@ test.describe('gallery', () => {
           expect(l.y, `${l.name} top`).toBeLessThanOrEqual(h)
         }
         if (tpl === 'Sale announcement') expect(d.data.background).toBe('#123456')
+        // Template photos were copied into the workspace's own media.
+        for (const l of d.data.layers.filter((x) => x.type === 'image')) {
+          expect(l.mediaId as string).not.toMatch(/^tpl:/)
+          expect(sql(`select prompt from "Media" where id='${l.mediaId}'`)).toMatch(/^Template photo: real-estate\//)
+        }
         // Canvas fits the stage.
         const s = await scaleOf(page, w)
         expect(s).toBeGreaterThan(0.2)

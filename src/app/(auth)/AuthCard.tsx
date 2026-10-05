@@ -16,6 +16,7 @@ const ERRORS: Record<string, string> = {
   link: 'That sign-in link is invalid or has expired. Request a new one.',
   google: 'Google sign-in failed. Please try again.',
   blocked: 'This account is blocked. Contact info@loudpilot.app.',
+  invite: 'That invitation is invalid or has expired. Ask your teammate for a new one.',
 }
 
 export function AuthCard({ mode, googleEnabled, mailEnabled, error }: Props) {
