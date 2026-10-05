@@ -192,11 +192,14 @@ export async function dashboard(workspaceId: string, period: Period, now = new D
     cur.results = prev.results = 0
   }
 
+  const website = await websiteTotals(workspaceId, { from, to, prevFrom, prevTo })
+
   return {
     period,
     from,
     to,
     timeZone: tz,
+    website,
     currency,
     mixedCurrencies: currencies.size > 1,
     resultLabel: main?.[0] ?? 'Results',
@@ -213,6 +216,61 @@ export async function dashboard(workspaceId: string, period: Period, now = new D
 }
 
 export type Dashboard = Awaited<ReturnType<typeof dashboard>>
+
+type Site = { sessions: number; users: number; newUsers: number; engaged: number; keyEvents: number; revenue: number }
+
+// Google Analytics numbers for the period and the one before: totals, key
+// events by name and sessions by channel. Null when no property is connected.
+async function websiteTotals(workspaceId: string, r: { from: string; to: string; prevFrom: string; prevTo: string }) {
+  const properties = await prisma.socialAccount.findMany({
+    where: { workspaceId, network: 'GOOGLE_ANALYTICS', NOT: { externalId: { startsWith: 'pending:' } } },
+    select: { id: true, name: true, status: true, syncedAt: true, lastError: true },
+  })
+  if (properties.length === 0) return null
+  const days = await prisma.websiteDay.findMany({ where: { workspaceId, date: { gte: r.prevFrom, lte: r.to } } })
+  const zero = (): Site => ({ sessions: 0, users: 0, newUsers: 0, engaged: 0, keyEvents: 0, revenue: 0 })
+  const current = zero()
+  const previous = zero()
+  const events = new Map<string, { current: number; previous: number }>()
+  const channels = new Map<string, { sessions: number; keyEvents: number }>()
+  const series = new Map(daysBetween(r.from, r.to).map((d) => [d, { date: d, sessions: 0, keyEvents: 0 }]))
+  for (const d of days) {
+    const inPeriod = d.date >= r.from
+    const t = inPeriod ? current : previous
+    t.sessions += d.sessions
+    t.users += d.users
+    t.newUsers += d.newUsers
+    t.engaged += d.engaged
+    t.keyEvents += d.keyEvents
+    t.revenue += d.revenue
+    for (const [name, n] of Object.entries((d.events ?? {}) as Record<string, number>)) {
+      const e = events.get(name) ?? { current: 0, previous: 0 }
+      e[inPeriod ? 'current' : 'previous'] += n
+      events.set(name, e)
+    }
+    if (inPeriod) {
+      for (const c of (d.channels ?? []) as { channel: string; sessions: number; keyEvents: number }[]) {
+        const x = channels.get(c.channel) ?? { sessions: 0, keyEvents: 0 }
+        x.sessions += c.sessions
+        x.keyEvents += c.keyEvents
+        channels.set(c.channel, x)
+      }
+      const s = series.get(d.date)
+      if (s) {
+        s.sessions += d.sessions
+        s.keyEvents += d.keyEvents
+      }
+    }
+  }
+  return {
+    properties,
+    current,
+    previous,
+    events: [...events.entries()].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.current - a.current),
+    channels: [...channels.entries()].map(([channel, v]) => ({ channel, ...v })).sort((a, b) => b.sessions - a.sessions),
+    series: [...series.values()],
+  }
+}
 
 // Plain facts for the AI summary — no ids, nothing personal.
 export function summaryFacts(d: Dashboard) {
@@ -246,6 +304,23 @@ export function summaryFacts(d: Dashboard) {
         dailyBudget: r.dailyBudget,
       })),
     },
+    ...(d.website && {
+      website: {
+        visits: d.website.current.sessions,
+        previousVisits: d.website.previous.sessions,
+        users: d.website.current.users,
+        newUsers: d.website.current.newUsers,
+        keyEvents: d.website.current.keyEvents,
+        previousKeyEvents: d.website.previous.keyEvents,
+        keyEventsByName: d.website.events.slice(0, 8),
+        conversionRate: ratio(d.website.current.keyEvents, d.website.current.sessions),
+        // All ad spend over all key events: what one sign-up / lead / sale cost.
+        costPerKeyEvent: ratio(c.spend, d.website.current.keyEvents),
+        previousCostPerKeyEvent: ratio(p.spend, d.website.previous.keyEvents),
+        ...(d.website.current.revenue > 0 && { revenue: d.website.current.revenue, previousRevenue: d.website.previous.revenue }),
+        channels: d.website.channels.slice(0, 8),
+      },
+    }),
     organic: {
       posts: c.posts,
       previousPosts: p.posts,

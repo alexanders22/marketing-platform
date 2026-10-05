@@ -236,7 +236,7 @@ export async function refreshDossier(workspaceId: string, { profile = false, aud
   if (running.has(workspaceId)) return { skipped: true as const }
   running.add(workspaceId)
   try {
-    const accounts = await prisma.socialAccount.findMany({ where: { workspaceId, status: 'ACTIVE' } })
+    const accounts = await prisma.socialAccount.findMany({ where: { workspaceId, status: 'ACTIVE', network: { in: ['FACEBOOK', 'INSTAGRAM', 'META_ADS'] } } })
     let imported = 0
     for (const a of accounts) {
       try {
@@ -283,10 +283,12 @@ export async function refreshDossiersDue(limit = 5) {
 
 // A compact brief every AI feature adds to its prompt.
 export async function dossierBrief(workspaceId: string) {
-  const [profile, audit, facts] = await Promise.all([
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
+  const [profile, audit, facts, site] = await Promise.all([
     prisma.brandProfile.findUnique({ where: { workspaceId } }),
     prisma.brandAudit.findFirst({ where: { workspaceId }, orderBy: { createdAt: 'desc' } }),
     prisma.brandFact.findMany({ where: { workspaceId }, orderBy: { updatedAt: 'desc' }, take: 30 }),
+    prisma.websiteDay.findMany({ where: { workspaceId, date: { gte: since } } }),
   ])
   const p = profile?.data as CompanyProfile | undefined
   const a = audit?.data as BrandAuditData | undefined
@@ -306,9 +308,28 @@ export async function dossierBrief(workspaceId: string) {
     if (a.bestTimes) lines.push(`Best times: ${a.bestTimes}`)
     if (a.formats) lines.push(`Formats: ${a.formats}`)
   }
+  if (site.length) lines.push(websiteLine(site))
   // The owner's own answers win over anything guessed from the website.
   if (facts.length) lines.push(`The owner told us:\n${facts.map((f) => `- ${f.question} ${f.answer}`).join('\n')}`)
   return lines.join('\n')
+}
+
+// Last 30 days of the website (Google Analytics) in one line for prompts.
+function websiteLine(days: { sessions: number; newUsers: number; keyEvents: number; revenue: number; events: unknown; channels: unknown }[]) {
+  const sum = (k: 'sessions' | 'newUsers' | 'keyEvents' | 'revenue') => days.reduce((s, d) => s + d[k], 0)
+  const events = new Map<string, number>()
+  const channels = new Map<string, number>()
+  for (const d of days) {
+    for (const [k, v] of Object.entries((d.events ?? {}) as Record<string, number>)) events.set(k, (events.get(k) ?? 0) + v)
+    for (const c of (d.channels ?? []) as { channel: string; sessions: number }[]) channels.set(c.channel, (channels.get(c.channel) ?? 0) + c.sessions)
+  }
+  const top = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} ${Math.round(v)}`).join(', ')
+  return [
+    `Website, last 30 days (Google Analytics): ${sum('sessions')} visits, ${sum('newUsers')} new users, ${Math.round(sum('keyEvents'))} key events`,
+    events.size ? ` (${top(events)})` : '',
+    sum('revenue') > 0 ? `, revenue ${Math.round(sum('revenue'))}` : '',
+    channels.size ? `. Visits by channel: ${top(channels)}.` : '.',
+  ].join('')
 }
 
 // The brand as AI functions take it, with the dossier brief attached.

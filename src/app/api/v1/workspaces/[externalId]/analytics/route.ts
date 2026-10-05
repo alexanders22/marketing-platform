@@ -33,5 +33,14 @@ export const GET = handler(async (req, ctx: RouteContext<'/api/v1/workspaces/[ex
       ctr: c.ctr,
     })),
     topPosts: d.topPosts.map((p) => ({ postId: p.id, network: p.network.toLowerCase(), text: p.text, date: p.date, reach: p.reach, engagements: p.engagements, url: p.permalink })),
+    // Google Analytics, when a property is connected (else null).
+    website: d.website && {
+      properties: d.website.properties.map((x) => x.name),
+      current: d.website.current,
+      previous: d.website.previous,
+      keyEvents: d.website.events,
+      channels: d.website.channels,
+      daily: d.website.series,
+    },
   })
 })

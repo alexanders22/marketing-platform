@@ -525,6 +525,14 @@ export default async function DocsPage() {
                     },
                   ],
                   topPosts: [{ postId: 'cp1…', network: 'instagram', text: 'Pistachio week…', date: '2026-09-28', reach: 2400, engagements: 180, url: 'https://instagram.com/p/…' }],
+                  website: {
+                    properties: ['Bloom Bakery website'],
+                    current: { sessions: 1491, users: 1190, newUsers: 420, engaged: 840, keyEvents: 42, revenue: 0 },
+                    previous: { sessions: 1310, users: 1020, newUsers: 380, engaged: 700, keyEvents: 35, revenue: 0 },
+                    keyEvents: [{ name: 'sign_up', current: 28, previous: 22 }],
+                    channels: [{ channel: 'Paid Social', sessions: 931, keyEvents: 28 }],
+                    daily: [{ date: '2026-09-30', sessions: 112, keyEvents: 3 }],
+                  },
                 }}
               />
             </Endpoint>

@@ -175,6 +175,7 @@ model Workspace {
   characters       Character[]
   bioPages         BioPage[]
   adCampaigns      AdCampaign[]
+  websiteDays      WebsiteDay[]
   aiSummaries      AiSummary[]
   goals            Goal[]
   alerts           Alert[]
@@ -407,6 +408,8 @@ enum SocialNetwork {
   FACEBOOK
   INSTAGRAM
   META_ADS
+  // A Google Analytics 4 property: website visits and key events.
+  GOOGLE_ANALYTICS
   TIKTOK
   LINKEDIN
   YOUTUBE
@@ -448,6 +451,7 @@ model SocialAccount {
 
   deliveries  PostDelivery[]
   adCampaigns AdCampaign[]
+  websiteDays WebsiteDay[]
   // Ad accounts: when campaigns and insights were last read.
   syncedAt    DateTime?
   socialPosts SocialPost[]
@@ -1102,4 +1106,29 @@ model Character {
   updatedAt   DateTime  @updatedAt
 
   @@index([workspaceId])
+}
+
+// One day of a website from Google Analytics 4, in the property's time zone.
+model WebsiteDay {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // YYYY-MM-DD, like AdInsightDay.
+  date        String
+  sessions    Int           @default(0)
+  users       Int           @default(0)
+  newUsers    Int           @default(0)
+  engaged     Int           @default(0)
+  // Key events (GA4 conversions): sign-ups, leads, purchases…
+  keyEvents   Float         @default(0)
+  revenue     Float         @default(0)
+  // [{ channel, sessions, keyEvents }] and { eventName: count }.
+  channels    Json          @default("[]")
+  events      Json          @default("{}")
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([accountId, date])
+  @@index([workspaceId, date])
 }

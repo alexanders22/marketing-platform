@@ -7,6 +7,8 @@ import { metaEnabled } from '@/lib/meta'
 import { planLimits } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { DisconnectButton } from './DisconnectButton'
+import { GoogleAnalyticsSection } from './GoogleAnalytics'
+import { gaEnabled } from '@/lib/ga'
 
 export const metadata: Metadata = { title: 'Channels — Loudpilot' }
 
@@ -34,16 +36,23 @@ const ERRORS: Record<string, string> = {
   'meta-state': 'The connection expired — please try again.',
   'meta-api': 'Facebook did not accept the connection. Please try again.',
   'meta-empty': 'No Pages or ad accounts were shared. Reconnect and pick at least one Page.',
+  'ga-off': 'Google Analytics connections are not configured yet.',
+  'ga-denied': 'Connection cancelled on Google.',
+  'ga-state': 'The connection expired — please try again.',
+  'ga-api': 'Google did not accept the connection. Please try again.',
+  'ga-empty': 'This Google account has no Google Analytics 4 property. Sign in with the account that owns the website’s analytics.',
   profiles: 'Your plan has no room for more social profiles. Disconnect one or upgrade your plan.',
 }
 
 export default async function ChannelsPage({ searchParams }: PageProps<'/app/channels'>) {
   const { workspace, role, account } = await requireContext()
   const q = await searchParams
-  const accounts = await prisma.socialAccount.findMany({
+  const all = await prisma.socialAccount.findMany({
     where: { workspaceId: workspace.id },
     orderBy: [{ network: 'asc' }, { name: 'asc' }],
   })
+  const accounts = all.filter((a) => a.network in META)
+  const analytics = all.filter((a) => a.network === 'GOOGLE_ANALYTICS')
   const enabled = metaEnabled()
   const canEdit = role !== 'EDITOR'
   const connected = typeof q.connected === 'string' ? Number(q.connected) : 0
@@ -130,6 +139,22 @@ export default async function ChannelsPage({ searchParams }: PageProps<'/app/cha
           </ul>
         )}
       </section>
+
+      <GoogleAnalyticsSection
+        accounts={analytics.map((a) => ({
+          id: a.id,
+          name: a.name,
+          account: a.handle,
+          pending: a.externalId.startsWith('pending:'),
+          properties: (a.meta as { properties?: { id: string; name: string; account: string }[] } | null)?.properties ?? [],
+          status: a.status,
+          lastError: a.lastError,
+          syncedAt: a.syncedAt?.toISOString() ?? null,
+        }))}
+        enabled={gaEnabled()}
+        canEdit={canEdit}
+        pick={q.ga === 'pick'}
+      />
 
       <h2 className="mt-8 mb-3 text-sm font-semibold text-zinc-500">Coming next</h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">

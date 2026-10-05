@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowDownRight, ArrowUpRight, BarChart3, ExternalLink, Megaphone, Plug } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, BarChart3, ExternalLink, Globe, Megaphone, Plug } from 'lucide-react'
 import { SiFacebook, SiInstagram } from 'react-icons/si'
 import { DailyChart, Sparkline } from '@/components/charts'
 import { LocalTime } from '@/components/LocalTime'
@@ -96,7 +96,7 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
   const prevCpr = ratio(d.resultSpend.previous, p.results)
   const er = ratio(c.engagements, c.organicReach)
   const prevEr = ratio(p.engagements, p.organicReach)
-  const nothing = d.connected.ads === 0 && d.connected.organic === 0 && c.posts === 0
+  const nothing = d.connected.ads === 0 && d.connected.organic === 0 && c.posts === 0 && !d.website
 
   return (
     <div className="space-y-6">
@@ -225,6 +225,18 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
               </>
             )}
           </section>
+
+          {d.website ? (
+            <Website d={d} money={money} />
+          ) : (
+            <p className="rounded-xl border border-dashed border-zinc-300 p-5 text-sm text-zinc-500">
+              <Globe size={15} className="mr-1 inline text-zinc-400" />
+              See what ads bring to your website — visits, sign-ups, leads and the cost of each.{' '}
+              <Link href="/app/channels" className="font-medium text-zinc-900 underline">
+                Connect Google Analytics
+              </Link>
+            </p>
+          )}
 
           {d.campaigns.length > 0 && (
             <section>
@@ -367,5 +379,85 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
         </>
       )}
     </div>
+  )
+}
+
+// Google Analytics: visits and key events, and what each key event cost in ads.
+function Website({ d, money }: { d: Awaited<ReturnType<typeof dashboard>>; money: (v: number) => string }) {
+  const w = d.website!
+  const c = w.current
+  const p = w.previous
+  const cpk = ratio(d.current.spend, c.keyEvents)
+  const prevCpk = ratio(d.previous.spend, p.keyEvents)
+  const problem = w.properties.find((x) => x.status !== 'ACTIVE' || x.lastError)
+  return (
+    <section aria-labelledby="website-heading">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Globe size={16} className="text-zinc-500" />
+        <h2 id="website-heading" className="font-semibold">
+          Website
+        </h2>
+        <span className="text-xs text-zinc-500">
+          {w.properties.map((x) => x.name).join(' · ')} — Google Analytics
+        </span>
+      </div>
+      {problem && (
+        <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {problem.name}: {problem.status !== 'ACTIVE' ? 'needs reconnecting' : problem.lastError}{' '}
+          <Link href="/app/channels" className="font-medium underline">
+            Open Channels
+          </Link>
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <Kpi label="Visits" value={formatNumber(c.sessions)} delta={<Delta cur={c.sessions} prev={p.sessions} />} />
+        <Kpi label="New users" value={formatNumber(c.newUsers)} delta={<Delta cur={c.newUsers} prev={p.newUsers} />} />
+        <Kpi label="Key events" value={formatNumber(c.keyEvents)} delta={<Delta cur={c.keyEvents} prev={p.keyEvents} />} />
+        <Kpi label="Conversion rate" value={formatPercent(ratio(c.keyEvents, c.sessions), 1)} delta={<Delta cur={ratio(c.keyEvents, c.sessions)} prev={ratio(p.keyEvents, p.sessions)} />} />
+        {d.current.spend > 0 ? (
+          <Kpi label="Ad cost per key event" value={cpk === null ? '—' : money(cpk)} delta={<Delta cur={cpk} prev={prevCpk} lowerIsBetter />} />
+        ) : (
+          <Kpi label="Revenue" value={c.revenue > 0 ? money(c.revenue) : '—'} delta={<Delta cur={c.revenue} prev={p.revenue} />} />
+        )}
+      </div>
+      <div className="mt-3 rounded-xl border border-zinc-200 p-4">
+        <DailyChart label="Daily visits and key events" bar="Visits" line="Key events" data={w.series.map((s) => ({ date: s.date, bar: s.sessions, line: s.keyEvents }))} />
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl border border-zinc-200 p-4">
+          <p className="text-xs font-semibold tracking-wide text-zinc-500">KEY EVENTS</p>
+          {w.events.length === 0 ? (
+            <p className="mt-2 text-sm text-zinc-500">
+              No key events yet. Mark sign-ups, leads or purchases as key events in Google Analytics (Admin → Events) to count them here.
+            </p>
+          ) : (
+            <ul className="mt-2 space-y-1.5 text-sm">
+              {w.events.slice(0, 6).map((e) => (
+                <li key={e.name} className="flex items-center justify-between gap-3">
+                  <span className="truncate font-mono text-xs">{e.name}</span>
+                  <span className="flex items-center gap-2 tabular-nums">
+                    {formatNumber(e.current)} <Delta cur={e.current} prev={e.previous} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="rounded-xl border border-zinc-200 p-4">
+          <p className="text-xs font-semibold tracking-wide text-zinc-500">WHERE VISITS COME FROM</p>
+          <ul className="mt-2 space-y-1.5 text-sm">
+            {w.channels.slice(0, 6).map((ch) => (
+              <li key={ch.channel} className="flex items-center justify-between gap-3">
+                <span className="truncate">{ch.channel}</span>
+                <span className="text-zinc-500 tabular-nums">
+                  {formatNumber(ch.sessions)} visits · {formatNumber(ch.keyEvents)} key events
+                </span>
+              </li>
+            ))}
+            {w.channels.length === 0 && <li className="text-zinc-500">No visits in this period.</li>}
+          </ul>
+        </div>
+      </div>
+    </section>
   )
 }

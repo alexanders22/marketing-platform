@@ -6,6 +6,7 @@ import { grantPlanCreditsDue } from '@/lib/billing'
 import { refreshDossiersDue } from '@/lib/dossier'
 import { checkAllGoals } from '@/lib/goals'
 import { syncInboxDue } from '@/lib/inbox'
+import { syncWebsitesDue } from '@/lib/ga'
 import { advanceClipsDue } from '@/lib/veo'
 import { syncAdsDue } from '@/lib/meta-ads'
 import { reviewsDue } from '@/lib/weekly'
@@ -34,6 +35,8 @@ export async function POST(req: Request) {
     insights = await refreshInsights()
   }
   const ads = await syncAdsDue()
+  // Website numbers from Google Analytics, each property every 3 hours.
+  const website = await syncWebsitesDue()
   // Direct messages: each account every 2 minutes.
   const inbox = await syncInboxDue()
   // AI clips: finish the ones Veo is done with (also when nobody is watching).
@@ -63,5 +66,5 @@ export async function POST(req: Request) {
     planCredits = await grantPlanCreditsDue()
   }
   const alerts = await dispatchAlerts()
-  return Response.json({ published, insights, ads, inbox, clips, goals, dossiers, planCredits, alerts })
+  return Response.json({ published, insights, ads, website, inbox, clips, goals, dossiers, planCredits, alerts })
 }

@@ -47,6 +47,13 @@ export default function PrivacyPage() {
         campaigns, budgets and results, and messages, comments and leads sent to your pages. Access tokens are stored
         encrypted.
       </p>
+      <h3>Google Analytics</h3>
+      <p>
+        When you connect Google Analytics, we receive read-only access to the Google Analytics 4 properties you choose
+        (scope <code>analytics.readonly</code>) and store the access and refresh tokens encrypted. We read aggregated daily
+        reports only — visits, users, new users, engaged sessions, key events by name, revenue and visits by channel. We do
+        not receive data about individual visitors, and we cannot change your Analytics settings.
+      </p>
       <h3>Bio page visitors</h3>
       <p>
         For public bio pages we count views and which link was clicked. We do not store visitors&apos; IP addresses,
@@ -73,6 +80,14 @@ export default function PrivacyPage() {
         Data received from Meta, Google or other platforms is used only to provide Loudpilot features to the account that
         connected it. It is not used to build profiles of people, not sold, and not used to target ads outside your
         own campaigns.
+      </p>
+      <p>
+        Loudpilot&apos;s use and transfer of information received from Google APIs adheres to the{' '}
+        <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+        including the Limited Use requirements. Google Analytics data is shown to you, used to measure your marketing and,
+        when you use AI features, sent in summarised form to our AI provider to write your reports and plans; it is never
+        used to train AI models, and people at Loudpilot read it only with your permission, for security, or when the law
+        requires. Disconnecting Google Analytics in Channels deletes the tokens and the numbers we read.
       </p>
 
       <h2>3. Who processes data for us</h2>
