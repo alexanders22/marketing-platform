@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { ArrowLeft, FileText, Loader2, Zap } from 'lucide-react'
 import { createAiBlog } from '../actions'
+import { creditsLabel } from '@/lib/pricing'
+import { usePrices } from '@/components/Prices'
 
 const TONES = ['Professional', 'Friendly', 'Educational', 'Bold', 'Founder-led'] as const
 const LENGTHS = [
@@ -15,6 +17,7 @@ const LENGTHS = [
 const LANGS = ['English', 'Georgian', 'Russian'] as const
 
 export function AiBlogForm({ credits }: { credits: number }) {
+  const P = usePrices()
   const router = useRouter()
   const [topic, setTopic] = useState('')
   const [keywords, setKeywords] = useState('')
@@ -72,7 +75,7 @@ export function AiBlogForm({ credits }: { credits: number }) {
       {error && <p className="mt-5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="mt-8 flex items-center justify-between gap-3 border-t border-zinc-100 pt-5">
         <span className="inline-flex items-center gap-1 text-sm text-zinc-500">
-          <Zap size={14} className="text-amber-500" /> 3 credits · {credits.toLocaleString()} left
+          <Zap size={14} className="text-amber-500" /> {creditsLabel(P.blogArticle)} · {credits.toLocaleString()} left
         </span>
         <button
           onClick={submit}

@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Compass, Sparkles } from 'lucide-react'
 import { createPlan } from '../actions'
+import { creditsLabel } from '@/lib/pricing'
+import { usePrices } from '@/components/Prices'
 
 const OBJECTIVES = [
   { id: 'SALES', label: 'More sales' },
@@ -24,6 +26,7 @@ const field = 'w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outlin
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 export function PlanWizard({ offerings, currency, hasAds, hasDossier }: { offerings: string[]; currency: string | null; hasAds: boolean; hasDossier: boolean }) {
+  const P = usePrices()
   const router = useRouter()
   const [goal, setGoal] = useState('')
   const [objective, setObjective] = useState<(typeof OBJECTIVES)[number]['id']>('SALES')
@@ -147,7 +150,7 @@ export function PlanWizard({ offerings, currency, hasAds, hasDossier }: { offeri
         className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 px-5 py-3 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
       >
         <Sparkles size={16} className={pending ? 'animate-pulse' : ''} />
-        {pending ? 'Your strategist is working… about a minute' : 'Build my plan · 5 credits'}
+        {pending ? 'Your strategist is working… about a minute' : `Build my plan · ${creditsLabel(P.strategy)}`}
       </button>
     </div>
   )

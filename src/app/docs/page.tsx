@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { ArrowRight, BookOpen, KeyRound, Webhook, Zap } from 'lucide-react'
 import { Logo } from '@/components/landing/Logo'
 import { CONTACT } from '@/components/landing/site'
-import { COST } from '@/lib/credits'
+import { prices } from '@/lib/credits'
 import { METRICS, RISK_BAND, WINDOWS } from '@/lib/goal-metrics'
 import { TOOLS } from '@/lib/mcp/tools'
 import { CodeBlock } from './CodeBlock'
@@ -148,7 +148,8 @@ function Example({ method, path, body, response }: { method: 'GET' | 'POST' | 'D
 
 /* ─── Page ─────────────────────────────────────────────────────────────── */
 
-export default function DocsPage() {
+export default async function DocsPage() {
+  const COST = await prices()
   return (
     <div className="min-h-screen bg-white text-zinc-900 [color-scheme:light]">
       <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur">

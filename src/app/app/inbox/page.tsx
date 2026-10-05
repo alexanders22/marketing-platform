@@ -68,7 +68,7 @@ export default async function InboxPage({ searchParams }: PageProps<'/app/inbox'
   }
 
   return (
-    <div className="-m-5 grid min-h-[calc(100vh-1.5rem)] sm:-m-8 lg:grid-cols-[230px_320px_1fr]">
+    <div className="-m-5 grid min-h-[calc(100vh-1.5rem)] sm:-m-8 lg:min-h-[calc(100vh-4.5rem)] lg:grid-cols-[230px_320px_1fr]">
       <h1 className="sr-only">Inbox</h1>
       <section className="border-b border-zinc-200 p-3 lg:border-r lg:border-b-0">
         <div className="mb-2 flex items-center justify-between px-1">

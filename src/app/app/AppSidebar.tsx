@@ -40,6 +40,7 @@ import { FaLinkedinIn } from 'react-icons/fa6'
 import { SiFacebook, SiInstagram, SiX } from 'react-icons/si'
 import { logout } from '../(auth)/actions'
 import { switchCompany } from './companies/actions'
+import { CreditsBadge } from './CreditsBadge'
 
 const NAV = [
   { href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -85,13 +86,16 @@ export function AppSidebar(props: SidebarProps) {
     <>
       <div className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-zinc-200 bg-[#f4f3f1]/95 px-4 backdrop-blur lg:hidden">
         <span className="truncate font-semibold">{props.workspace}</span>
+        <span className="ml-auto">
+          <CreditsBadge credits={props.credits} planLabel={props.planLabel} compact />
+        </span>
         {props.alerts > 0 && (
-          <Link href="/app/alerts" className="relative ml-auto mr-1 p-2 text-zinc-700" aria-label={`${props.alerts} unread alerts`}>
+          <Link href="/app/alerts" className="relative mr-1 p-2 text-zinc-700" aria-label={`${props.alerts} unread alerts`}>
             <Bell size={19} />
             <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
           </Link>
         )}
-        <button onClick={() => setOpen(true)} aria-label="Open menu" className="p-2 text-zinc-700">
+        <button onClick={() => setOpen(true)} aria-label="Open menu" className={`p-2 text-zinc-700 ${props.alerts > 0 ? '' : 'ml-1'}`}>
           <Menu size={20} />
         </button>
       </div>

@@ -127,6 +127,10 @@ model CreditEntry {
   // Same key twice never books twice (retries, double clicks, webhook replays).
   idempotencyKey String?      @unique
   note           String?
+  // Spend: which priced action (src/lib/pricing.ts) and how many units
+  // (images, seconds of clip…) — for unit economics in the admin.
+  action         String?
+  units          Float?
   createdAt      DateTime     @default(now())
 
   @@index([accountId, createdAt])
@@ -1038,4 +1042,12 @@ model ClipJob {
 
   @@index([status, updatedAt])
   @@index([workspaceId, createdAt])
+}
+
+// App-wide settings edited by super admins (e.g. "pricing").
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
 }

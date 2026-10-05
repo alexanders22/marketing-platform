@@ -55,3 +55,10 @@ export const yearlyTotal = (monthly: number) => monthly * 10
 
 // How many companies an account may have; one until a plan is picked.
 export const companyLimit = (plan: string) => PLANS.find((p) => p.id === plan)?.companies ?? 1
+
+// A paying customer: a plan picked and the free trial over. Premium features
+// (AI clips with Veo) need it.
+export const isPaid = (a: { plan: string; trialEndsAt: Date | null }, now = new Date()) =>
+  a.plan !== 'NONE' && !(a.trialEndsAt && a.trialEndsAt > now)
+
+export const PAID_ONLY = 'AI video clips are part of paid plans. Your trial includes everything else — choose a plan to unlock them.'

@@ -7,6 +7,7 @@ import { ffmpeg, posterFrame, probe } from './ffmpeg'
 import { ACTIVE_WORKSPACE } from './pause'
 import { prisma } from './prisma'
 import { mediaFile, saveMediaFile, tempDir } from './storage'
+import { clipAction } from './pricing'
 import type { ClipQuality } from './video'
 
 // AI video clips with Google Veo 3.1 (Gemini API). Generation is a
@@ -99,7 +100,19 @@ async function refund(job: ClipJob, reason: string) {
     if (await tx.creditEntry.findUnique({ where: { idempotencyKey }, select: { id: true } })) return
     await tx.account.update({ where: { id: job.accountId }, data: { creditBalance: { increment: job.credits } } })
     await tx.creditEntry.create({
-      data: { accountId: job.accountId, workspaceId: job.workspaceId, amount: job.credits, reason: 'REFUND', note: `AI clip failed: ${reason}`.slice(0, 200), idempotencyKey, refType: 'clip', refId: job.id },
+      // Same action, negative units: unit economics count only clips that were made.
+      data: {
+        accountId: job.accountId,
+        workspaceId: job.workspaceId,
+        amount: job.credits,
+        reason: 'REFUND',
+        note: `AI clip failed: ${reason}`.slice(0, 200),
+        idempotencyKey,
+        refType: 'clip',
+        refId: job.id,
+        action: clipAction(job.quality as ClipQuality),
+        units: -job.seconds,
+      },
     })
   })
 }

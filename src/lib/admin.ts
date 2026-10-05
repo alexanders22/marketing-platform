@@ -15,7 +15,7 @@ export async function requireSuperAdmin() {
 export async function logAdmin(
   admin: { id: string; email: string },
   action: string,
-  targetType: 'account' | 'workspace' | 'user' | 'member',
+  targetType: 'account' | 'workspace' | 'user' | 'member' | 'setting',
   targetId: string,
   details?: Prisma.InputJsonValue,
 ) {

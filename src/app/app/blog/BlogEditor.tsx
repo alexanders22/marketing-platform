@@ -9,6 +9,8 @@ import { useIsClient } from '@/components/LocalTime'
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker'
 import { deletePost, savePost } from '../posts/actions'
 import { writeArticle } from './actions'
+import { creditsLabel } from '@/lib/pricing'
+import { usePrices } from '@/components/Prices'
 
 export type BlogDraft = {
   id?: string
@@ -30,6 +32,7 @@ const toLocalInput = (iso: string | null) => {
 }
 
 export function BlogEditor({ initial }: { initial: BlogDraft }) {
+  const P = usePrices()
   const router = useRouter()
   const [title, setTitle] = useState(initial.title)
   const [body, setBody] = useState(initial.content)
@@ -146,7 +149,7 @@ export function BlogEditor({ initial }: { initial: BlogDraft }) {
             className="mt-3 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
           >
             {writing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-            {writing ? 'Writing… up to a minute' : 'Write this article with AI · 3 credits'}
+            {writing ? 'Writing… up to a minute' : `Write this article with AI · ${creditsLabel(P.blogArticle)}`}
           </button>
         </div>
       )}

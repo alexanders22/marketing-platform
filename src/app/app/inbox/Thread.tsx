@@ -6,6 +6,8 @@ import { Loader2, Paperclip, RefreshCw, Send, Sparkles } from 'lucide-react'
 import { SiFacebook, SiInstagram } from 'react-icons/si'
 import { LocalTime, useIsClient } from '@/components/LocalTime'
 import { draftReply, openConversation, refreshInbox, reply } from './actions'
+import { creditsLabel } from '@/lib/pricing'
+import { usePrices } from '@/components/Prices'
 
 export function NetIcon({ network, size = 14 }: { network: string; size?: number }) {
   return network === 'INSTAGRAM' ? <SiInstagram size={size} color="#E4405F" aria-label="Instagram" /> : <SiFacebook size={size} color="#1877F2" aria-label="Messenger" />
@@ -53,6 +55,7 @@ export function Thread({
   messages: Msg[]
 }) {
   const router = useRouter()
+  const P = usePrices()
   const [text, setText] = useState('')
   const [error, setError] = useState<string>()
   const [sending, startSend] = useTransition()
@@ -155,7 +158,7 @@ export function Thread({
                 disabled={drafting || sending}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-800 hover:bg-violet-100 disabled:opacity-60"
               >
-                {drafting ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} Draft with AI · 1 credit
+                {drafting ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} Draft with AI · {creditsLabel(P.reply)}
               </button>
               <button
                 onClick={send}

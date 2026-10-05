@@ -5,12 +5,10 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { aiEnabled, generateImage, generatePost, LANGUAGES, LENGTHS, TONES } from '@/lib/ai'
 import { requireContext } from '@/lib/context'
-import { notEnough } from '@/lib/credits'
+import { charge, notEnough, prices } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 
-const TEXT_COST = 1
-const IMAGE_COST = 1
 const MAX_ATTACHMENT_B64 = 2_800_000 // ~2 MB per image after base64
 
 const Input = z.object({
@@ -46,6 +44,7 @@ export async function createPost(raw: z.input<typeof Input>): Promise<{ post?: C
   const input = parsed.data
 
   if (!aiEnabled()) return { error: 'AI generation is not connected yet.' }
+  const { postText: TEXT_COST, image: IMAGE_COST } = await prices()
   const maxCost = TEXT_COST + input.images * IMAGE_COST
   if (account.creditBalance < maxCost) {
     return { error: notEnough(maxCost, account.creditBalance) }
@@ -85,28 +84,10 @@ export async function createPost(raw: z.input<typeof Input>): Promise<{ post?: C
   // Charge only for what was delivered. The conditional update keeps the
   // balance from going negative if two generations race.
   const cost = TEXT_COST + media.length * IMAGE_COST
-  const charged = await prisma.$transaction(async (tx) => {
-    const res = await tx.account.updateMany({
-      where: { id: account.id, creditBalance: { gte: cost } },
-      data: { creditBalance: { decrement: cost } },
-    })
-    if (res.count === 0) return false
-    await tx.creditEntry.create({
-      data: { accountId: account.id, amount: -TEXT_COST, reason: 'AI_TEXT', workspaceId: workspace.id, note: 'Social post' },
-    })
-    if (media.length) {
-      await tx.creditEntry.create({
-        data: {
-          accountId: account.id,
-          amount: -media.length * IMAGE_COST,
-          reason: 'AI_IMAGE',
-          workspaceId: workspace.id,
-          note: `${media.length} post image${media.length > 1 ? 's' : ''}`,
-        },
-      })
-    }
-    return true
-  })
+  const charged = await charge(account.id, workspace.id, [
+    { amount: TEXT_COST, reason: 'AI_TEXT', note: 'Social post', action: 'postText', units: 1 },
+    { amount: media.length * IMAGE_COST, reason: 'AI_IMAGE', note: `${media.length} post image${media.length > 1 ? 's' : ''}`, action: 'image', units: media.length },
+  ])
   if (!charged) return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
 
   revalidatePath('/app', 'layout')

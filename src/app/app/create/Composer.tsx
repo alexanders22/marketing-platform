@@ -44,6 +44,8 @@ import { savePost } from '../posts/actions'
 import { createPost, type CreatedPost } from './actions'
 import { HashtagModal, type Library } from './HashtagModal'
 import { audienceLine, BriefAssistant } from '@/components/BriefAssistant'
+import { creditsLabel } from '@/lib/pricing'
+import { usePrices } from '@/components/Prices'
 
 type Tone = 'Professional' | 'Friendly' | 'Educational' | 'Bold' | 'Founder-led'
 type Length = 'Short' | 'Medium' | 'Long'
@@ -137,7 +139,8 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
   const recRef = useRef<SpeechRec | null>(null)
   const sugRef = useRef<HTMLDivElement>(null)
 
-  const cost = 1 + images
+  const P = usePrices()
+  const cost = P.postText + images * P.image
   const hashtagCount = libIds.length + (aiHashtags ? 1 : 0)
 
   useEffect(() => {
@@ -455,7 +458,7 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
               <div className="ml-auto flex items-center gap-1">
                 <span
                   className="mr-1 inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700"
-                  title={`${cost} credit${cost > 1 ? 's' : ''}: 1 for the text${images ? ` + ${images} for images` : ''}`}
+                  title={`${creditsLabel(cost)}: ${P.postText} for the text${images ? ` + ${images * P.image} for images` : ''}`}
                 >
                   <Zap size={13} /> {cost}
                 </span>

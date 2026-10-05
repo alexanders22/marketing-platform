@@ -1,23 +1,41 @@
 import 'server-only'
 import type { CreditReason, Prisma } from '@prisma/client'
 import { prisma } from './prisma'
+import { ACTION_KEYS, DEFAULT_PRICING, pricesOf, type Action, type Prices, type Pricing } from './pricing'
 
-// Credit prices in one place.
-export const COST = {
-  postText: 1,
-  image: 1,
-  campaignPost: 1,
-  blogArticle: 3,
-  blogOutline: 1,
-  summary: 1,
-  strategy: 5,
-  reply: 1,
-  advice: 1,
-  videoScript: 1,
-  voice: 1,
-} as const
+// Credit prices: defaults in src/lib/pricing.ts, overridden by super admins
+// (Setting "pricing"). Read through a short cache — every charge asks.
+let cached: { at: number; value: Pricing } | null = null
+const TTL_MS = 30_000
 
-export type Charge = { amount: number; reason: CreditReason; note: string }
+export async function getPricing(): Promise<Pricing> {
+  if (cached && Date.now() - cached.at < TTL_MS) return cached.value
+  const row = await prisma.setting.findUnique({ where: { key: 'pricing' } })
+  const saved = (row?.value ?? {}) as Partial<Pricing>
+  const value: Pricing = {
+    creditPriceUsd: typeof saved.creditPriceUsd === 'number' ? saved.creditPriceUsd : DEFAULT_PRICING.creditPriceUsd,
+    actions: Object.fromEntries(
+      ACTION_KEYS.map((k) => {
+        const a = saved.actions?.[k]
+        const d = DEFAULT_PRICING.actions[k]
+        return [k, { credits: Number.isFinite(a?.credits) ? a!.credits : d.credits, costUsd: Number.isFinite(a?.costUsd) ? a!.costUsd : d.costUsd }]
+      }),
+    ) as Pricing['actions'],
+  }
+  cached = { at: Date.now(), value }
+  return value
+}
+
+export const forgetPricing = () => {
+  cached = null
+}
+
+// Credits per unit for each action.
+export async function prices(): Promise<Prices> {
+  return pricesOf(await getPricing())
+}
+
+export type Charge = { amount: number; reason: CreditReason; note: string; action?: Action; units?: number }
 
 // Debits several line items atomically. Returns false (and charges nothing)
 // if the balance cannot cover the total — the conditional update stops two
@@ -43,7 +61,7 @@ export async function charge(
       if (res.count === 0) throw new Abort()
       for (const i of items.filter((x) => x.amount > 0)) {
         await tx.creditEntry.create({
-          data: { accountId, workspaceId, amount: -i.amount, reason: i.reason, note: i.note },
+          data: { accountId, workspaceId, amount: -i.amount, reason: i.reason, note: i.note, action: i.action ?? null, units: i.units ?? null },
         })
       }
       return true

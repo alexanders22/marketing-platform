@@ -6,13 +6,15 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { aiEnabled, generateImage, LANGUAGES, speak, videoScript } from '@/lib/ai'
 import { requireContext } from '@/lib/context'
-import { charge, COST, notEnough } from '@/lib/credits'
+import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
 import { prisma } from '@/lib/prisma'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 import { emptyDoc, FORMATS, isFormat, MAX_SCENES, MOTIONS, newScene, POSITIONS, TEXT_STYLES, timeline, VOICES, type Format, type SceneMedia, type VideoDoc } from '@/lib/video'
 import { enqueueRender } from '@/lib/video-render'
-import { advanceClip, CLIP_QUALITIES, CLIP_SECONDS, clipCredits, startVeo, veoAspect, veoEnabled, type ClipQuality } from '@/lib/veo'
+import { advanceClip, CLIP_QUALITIES, CLIP_SECONDS, startVeo, veoAspect, veoEnabled, type ClipQuality } from '@/lib/veo'
+import { isPaid, PAID_ONLY } from '@/lib/plans'
+import { clipAction } from '@/lib/pricing'
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/)
 const SceneSchema = z.object({
@@ -84,6 +86,7 @@ export async function saveVideo(id: string, input: { name: string; format: strin
 // Voice-over for every scene whose line has no audio yet. 1 credit per run.
 export async function generateVoices(id: string): Promise<{ doc?: VideoDoc; error?: string }> {
   const { account, workspace } = await requireContext()
+  const COST = await prices()
   const video = await prisma.video.findFirst({ where: { id, workspaceId: workspace.id } })
   if (!video) return { error: 'Video not found' }
   if (!aiEnabled()) return { error: 'AI is not connected yet.' }
@@ -102,7 +105,7 @@ export async function generateVoices(id: string): Promise<{ doc?: VideoDoc; erro
     console.error('voice-over failed', e)
     return { error: 'The voice-over could not be generated. Try again.' }
   }
-  const ok = await charge(account.id, workspace.id, [{ amount: COST.voice, reason: 'AI_VIDEO', note: 'Video voice-over' }])
+  const ok = await charge(account.id, workspace.id, [{ amount: COST.voice, reason: 'AI_VIDEO', note: 'Video voice-over', action: 'voice', units: 1 }])
   if (!ok) return { error: notEnough(COST.voice, 0) }
   await prisma.video.update({ where: { id }, data: { data: doc as unknown as Prisma.InputJsonValue } })
   revalidatePath('/app', 'layout')
@@ -208,7 +211,8 @@ const AiInput = z.object({
 // Script → scenes with text and voice lines → visuals (your photos and clips
 // in order, AI images, or brand colours) → voice-over. Opens in the editor.
 export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{ id?: string; error?: string }> {
-  const { account, workspace, brand } = await requireContext()
+  const { account, workspace, brand, user } = await requireContext()
+  const COST = await prices()
   const parsed = AiInput.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const input = parsed.data
@@ -220,8 +224,9 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     COST.videoScript +
     (input.voice ? COST.voice : 0) +
     (input.visuals === 'ai' ? input.scenes * COST.image : 0) +
-    (input.visuals === 'veo' ? input.scenes * clipCredits(clipQuality, 4) : 0)
+    (input.visuals === 'veo' ? input.scenes * COST[clipAction(clipQuality)] * 4 : 0)
   if (input.visuals === 'veo' && !veoEnabled()) return { error: 'AI video is not connected yet.' }
+  if (input.visuals === 'veo' && !isPaid(account) && user.role !== 'SUPER_ADMIN') return { error: PAID_ONLY }
   if (account.creditBalance < max) return { error: notEnough(max, account.creditBalance) }
 
   const known = await withDossier(brand, workspace.id)
@@ -292,9 +297,9 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
 
   const drawn = images.filter(Boolean).length
   const ok = await charge(account.id, workspace.id, [
-    { amount: COST.videoScript, reason: 'AI_VIDEO', note: 'Video script' },
-    { amount: voiced ? COST.voice : 0, reason: 'AI_VIDEO', note: 'Video voice-over' },
-    { amount: drawn * COST.image, reason: 'AI_IMAGE', note: `${drawn} video scene image${drawn === 1 ? '' : 's'}` },
+    { amount: COST.videoScript, reason: 'AI_VIDEO', note: 'Video script', action: 'videoScript', units: 1 },
+    { amount: voiced ? COST.voice : 0, reason: 'AI_VIDEO', note: 'Video voice-over', action: 'voice', units: 1 },
+    { amount: drawn * COST.image, reason: 'AI_IMAGE', note: `${drawn} video scene image${drawn === 1 ? '' : 's'}`, action: 'image', units: drawn },
   ])
   if (!ok) return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
 
@@ -321,7 +326,7 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
       if (res.jobId) {
         sc.clipJobId = res.jobId
         sc.duration = Math.max(sc.duration, 4)
-        balance -= clipCredits(clipQuality, 4)
+        balance -= COST[clipAction(clipQuality)] * 4
       }
     }
     await prisma.video.update({ where: { id: v.id }, data: { data: doc as unknown as Prisma.InputJsonValue } })
@@ -344,11 +349,12 @@ const ClipInput = z.object({
 
 // Starts a Veo clip. Credits are taken now and given back if it fails.
 export async function startClip(raw: z.input<typeof ClipInput>): Promise<{ jobId?: string; error?: string }> {
-  const { account, workspace } = await requireContext()
+  const { account, workspace, user } = await requireContext()
   const parsed = ClipInput.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const c = parsed.data
   if (!veoEnabled() && !c.prompt.startsWith('[test]')) return { error: 'AI video is not connected yet.' }
+  if (!isPaid(account) && user.role !== 'SUPER_ADMIN') return { error: PAID_ONLY }
   if (c.videoId && !(await prisma.video.findFirst({ where: { id: c.videoId, workspaceId: workspace.id }, select: { id: true } }))) return { error: 'Video not found' }
   if (c.imageId && !(await prisma.media.findFirst({ where: { id: c.imageId, workspaceId: workspace.id, kind: 'IMAGE' }, select: { id: true } }))) return { error: 'Photo not found' }
   const res = await beginClip(account.id, account.creditBalance, workspace.id, c)
@@ -359,7 +365,7 @@ export async function startClip(raw: z.input<typeof ClipInput>): Promise<{ jobId
 async function beginClip(accountId: string, balance: number, workspaceId: string, c: z.output<typeof ClipInput>): Promise<{ jobId?: string; error?: string }> {
   const account = { id: accountId, creditBalance: balance }
   const workspace = { id: workspaceId }
-  const credits = clipCredits(c.quality, c.seconds)
+  const credits = (await prices())[clipAction(c.quality)] * c.seconds
   if (account.creditBalance < credits) return { error: notEnough(credits, account.creditBalance) }
 
   const job = await prisma.clipJob.create({
@@ -376,7 +382,7 @@ async function beginClip(accountId: string, balance: number, workspaceId: string
       credits,
     },
   })
-  const ok = await charge(account.id, workspace.id, [{ amount: credits, reason: 'AI_VIDEO', note: `AI clip · ${CLIP_QUALITIES[c.quality].label} · ${c.seconds}s` }])
+  const ok = await charge(account.id, workspace.id, [{ amount: credits, reason: 'AI_VIDEO', note: `AI clip · ${CLIP_QUALITIES[c.quality].label} · ${c.seconds}s`, action: clipAction(c.quality), units: c.seconds }])
   if (!ok) {
     await prisma.clipJob.delete({ where: { id: job.id } })
     return { error: notEnough(credits, 0) }
@@ -391,7 +397,18 @@ async function beginClip(accountId: string, balance: number, workspaceId: string
     await prisma.$transaction([
       prisma.account.update({ where: { id: account.id }, data: { creditBalance: { increment: credits } } }),
       prisma.creditEntry.create({
-        data: { accountId: account.id, workspaceId: workspace.id, amount: credits, reason: 'REFUND', note: 'AI clip could not start', idempotencyKey: `clip-refund:${job.id}`, refType: 'clip', refId: job.id },
+        data: {
+          accountId: account.id,
+          workspaceId: workspace.id,
+          amount: credits,
+          reason: 'REFUND',
+          note: 'AI clip could not start',
+          idempotencyKey: `clip-refund:${job.id}`,
+          refType: 'clip',
+          refId: job.id,
+          action: clipAction(c.quality),
+          units: -c.seconds,
+        },
       }),
       prisma.clipJob.update({ where: { id: job.id }, data: { status: 'FAILED', error: message.slice(0, 500) } }),
     ])

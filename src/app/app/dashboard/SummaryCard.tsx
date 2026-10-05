@@ -6,6 +6,8 @@ import { AlertTriangle, ArrowRight, CheckCircle2, RefreshCw, Sparkles } from 'lu
 import type { PerformanceSummary } from '@/lib/ai'
 import { LocalTime } from '@/components/LocalTime'
 import { generateSummary } from './actions'
+import { creditsLabel } from '@/lib/pricing'
+import { usePrices } from '@/components/Prices'
 
 export function SummaryCard({
   period,
@@ -16,6 +18,7 @@ export function SummaryCard({
   initial: PerformanceSummary | null
   createdAt: string | null
 }) {
+  const P = usePrices()
   const router = useRouter()
   const [summary, setSummary] = useState(initial)
   const [at, setAt] = useState(createdAt)
@@ -50,7 +53,7 @@ export function SummaryCard({
           className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
         >
           <RefreshCw size={13} className={pending ? 'animate-spin' : ''} />
-          {pending ? 'Reading your results…' : summary ? 'Refresh · 1 credit' : `Summarise last ${period} days · 1 credit`}
+          {pending ? 'Reading your results…' : summary ? `Refresh · ${creditsLabel(P.summary)}` : `Summarise last ${period} days · ${creditsLabel(P.summary)}`}
         </button>
       </div>
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

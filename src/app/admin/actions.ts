@@ -7,7 +7,9 @@ import { z } from 'zod'
 import type { CreditReason, MemberRole } from '@prisma/client'
 import { logAdmin, requireSuperAdmin } from '@/lib/admin'
 import { WORKSPACE_COOKIE } from '@/lib/context'
+import { forgetPricing } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
+import { ACTION_KEYS, type Pricing } from '@/lib/pricing'
 
 export type AdminState = { ok?: string; error?: string } | undefined
 
@@ -251,4 +253,33 @@ export async function deleteUser(userId: string, _: AdminState, f: FormData): Pr
   await prisma.user.delete({ where: { id: userId } })
   await logAdmin(admin, 'user.delete', 'user', userId, { email: user.email })
   redirect('/admin/users?deleted=1')
+}
+
+/* ─── Pricing ──────────────────────────────────────────────────────────── */
+
+// Credits per action and provider cost; applies to new charges at once.
+export async function savePricing(input: Pricing): Promise<AdminState> {
+  const admin = await requireSuperAdmin()
+  const price = Number(input.creditPriceUsd)
+  if (!Number.isFinite(price) || price <= 0 || price > 100) return { error: 'Credit price must be between $0 and $100' }
+  const actions = {} as Pricing['actions']
+  for (const k of ACTION_KEYS) {
+    const a = input.actions?.[k]
+    const credits = Number(a?.credits)
+    const costUsd = Number(a?.costUsd)
+    if (!Number.isInteger(credits) || credits < 0 || credits > 10_000) return { error: `Credits for ${k} must be a whole number from 0` }
+    if (!Number.isFinite(costUsd) || costUsd < 0 || costUsd > 1000) return { error: `Cost for ${k} must be from $0` }
+    actions[k] = { credits, costUsd }
+  }
+  const value: Pricing = { creditPriceUsd: price, actions }
+  await prisma.setting.upsert({
+    where: { key: 'pricing' },
+    create: { key: 'pricing', value, updatedBy: admin.email },
+    update: { value, updatedBy: admin.email },
+  })
+  forgetPricing()
+  await logAdmin(admin, 'pricing.update', 'setting', 'pricing', value)
+  revalidatePath('/admin/pricing')
+  revalidatePath('/app', 'layout')
+  return { ok: 'Saved — new prices apply to the next charge' }
 }

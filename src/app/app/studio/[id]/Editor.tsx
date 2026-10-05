@@ -406,7 +406,7 @@ export function Editor({
   }
 
   return (
-    <div className="-m-5 flex flex-col sm:-m-8 lg:h-[calc(100vh-1.5rem)]">
+    <div className="-m-5 flex flex-col sm:-m-8 lg:h-[calc(100vh-4.5rem)]">
       {/* Top bar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-4 py-2.5">
         <Link href="/app/studio" className="grid h-9 w-9 place-items-center rounded-lg hover:bg-zinc-100" aria-label="Back to Studio">

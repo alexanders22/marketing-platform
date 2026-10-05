@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { adviseBrief, aiEnabled, LANGUAGES, type BriefAdvice } from '@/lib/ai'
 import { dashboard, summaryFacts } from '@/lib/analytics'
 import { requireContext } from '@/lib/context'
-import { charge, COST, notEnough } from '@/lib/credits'
+import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
 import { prisma } from '@/lib/prisma'
 
@@ -16,6 +16,7 @@ export async function getAdvice(input: {
   language?: string
 }): Promise<{ advice?: BriefAdvice; error?: string }> {
   const { account, workspace, brand } = await requireContext()
+  const COST = await prices()
   if (!aiEnabled()) return { error: 'AI is not connected yet.' }
   if (account.creditBalance < COST.advice) return { error: notEnough(COST.advice, account.creditBalance) }
   const language = LANGUAGES.find((l) => l === input.language) ?? 'English'
@@ -36,7 +37,7 @@ export async function getAdvice(input: {
     console.error('adviseBrief failed', e)
     return { error: 'The AI could not prepare suggestions. Try again.' }
   }
-  const ok = await charge(account.id, workspace.id, [{ amount: COST.advice, reason: 'AI_TEXT', note: 'Marketing suggestions' }])
+  const ok = await charge(account.id, workspace.id, [{ amount: COST.advice, reason: 'AI_TEXT', note: 'Marketing suggestions', action: 'advice', units: 1 }])
   if (!ok) return { error: notEnough(COST.advice, 0) }
   revalidatePath('/app', 'layout')
   return { advice }

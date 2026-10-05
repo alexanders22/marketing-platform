@@ -4,7 +4,7 @@ import type { Caller } from '../access-tokens'
 import { LANGUAGES, LENGTHS, TONES, aiEnabled, generatePost, type BrandAuditData, type CompanyProfile } from '../ai'
 import { dashboard, type Period } from '../analytics'
 import { alertJson, channelJson, goalJson, recommendationJson } from '../api-serialize'
-import { COST, balanceOf, charge, notEnough } from '../credits'
+import { balanceOf, charge, notEnough, prices } from '../credits'
 import { withDossier } from '../dossier'
 import { createGoalFor } from '../goal-input'
 import { METRICS } from '../goal-metrics'
@@ -183,7 +183,7 @@ export const TOOLS = [
   tool({
     name: 'write_post_with_ai',
     title: 'Write a post with Loudpilot AI',
-    description: `Loudpilot writes an on-brand caption and hashtags using the company dossier (what worked, what to avoid) and saves it as a Planner draft. Costs ${COST.postText} credit.`,
+    description: `Loudpilot writes an on-brand caption and hashtags using the company dossier (what worked, what to avoid) and saves it as a Planner draft. Costs credits (see Plan & credits).`,
     input: z.object({
       brief: z.string().min(3).max(2000).describe('What the post is about'),
       tone: z.enum(TONES).default('Friendly'),
@@ -196,6 +196,7 @@ export const TOOLS = [
     run: async (c, a) => {
       if (!aiEnabled()) throw new ToolError('AI is not configured on this server.')
       const have = await balanceOf(c.account.id)
+      const COST = await prices()
       if (have < COST.postText) throw new ToolError(notEnough(COST.postText, have))
       const text = await generatePost(c.workspace.name, await withDossier(c.brand, c.workspace.id), {
         prompt: a.brief,
@@ -205,7 +206,7 @@ export const TOOLS = [
         aiHashtags: true,
         attachments: [],
       })
-      const ok = await charge(c.account.id, c.workspace.id, [{ amount: COST.postText, reason: 'AI_TEXT', note: 'Post caption (MCP)' }])
+      const ok = await charge(c.account.id, c.workspace.id, [{ amount: COST.postText, reason: 'AI_TEXT', note: 'Post caption (MCP)', action: 'postText', units: 1 }])
       if (!ok) throw new ToolError(notEnough(COST.postText, await balanceOf(c.account.id)))
       const post = await prisma.post.create({
         data: {
@@ -347,7 +348,7 @@ export const TOOLS = [
   tool({
     name: 'create_plan',
     title: 'Ask the strategist',
-    description: `The Loudpilot strategist turns a business goal into a plan (audiences, budget, ad campaigns with forecasts from the account's own history, two weeks of posts, goals) using the company dossier. Takes about a minute. Costs ${COST.strategy} credits.`,
+    description: `The Loudpilot strategist turns a business goal into a plan (audiences, budget, ad campaigns with forecasts from the account's own history, two weeks of posts, goals) using the company dossier. Takes about a minute. Costs credits (see Plan & credits).`,
     input: z.object({
       goal: z.string().min(10).max(1000).describe('The goal in the owner’s words'),
       objective: z.enum(OBJECTIVES.map((o) => o.id) as [string, ...string[]]),
@@ -365,13 +366,14 @@ export const TOOLS = [
       if (a.endsOn < a.startsOn) throw new ToolError('endsOn is before startsOn')
       if (!isValidTimeZone(a.timeZone)) throw new ToolError('Unknown time zone')
       const have = await balanceOf(c.account.id)
+      const COST = await prices()
       if (have < COST.strategy) throw new ToolError(notEnough(COST.strategy, have))
       const plan = await buildPlan(
         c.workspace.id,
         { ...a, budget: a.budget ?? null, objective: a.objective as Parameters<typeof buildPlan>[1]['objective'] },
         c.user.id,
       )
-      const ok = await charge(c.account.id, c.workspace.id, [{ amount: COST.strategy, reason: 'AI_TEXT', note: `Strategy plan (MCP): ${plan.title.slice(0, 80)}` }])
+      const ok = await charge(c.account.id, c.workspace.id, [{ amount: COST.strategy, reason: 'AI_TEXT', note: `Strategy plan (MCP): ${plan.title.slice(0, 80)}`, action: 'strategy', units: 1 }])
       if (!ok) {
         await prisma.strategyPlan.delete({ where: { id: plan.id } })
         throw new ToolError(notEnough(COST.strategy, await balanceOf(c.account.id)))

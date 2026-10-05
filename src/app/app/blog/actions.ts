@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { aiEnabled, generateBlogArticle, LANGUAGES, LENGTHS, TONES } from '@/lib/ai'
 import { requireContext } from '@/lib/context'
-import { balanceOf, charge, COST, notEnough } from '@/lib/credits'
+import { balanceOf, charge, notEnough, prices } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 
 const AiBlog = z.object({
@@ -18,6 +18,7 @@ const AiBlog = z.object({
 
 export async function createAiBlog(raw: z.input<typeof AiBlog>): Promise<{ id?: string; error?: string }> {
   const { account, workspace, brand, user } = await requireContext()
+  const COST = await prices()
   const parsed = AiBlog.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   if (!aiEnabled()) return { error: 'AI generation is not connected yet.' }
@@ -35,7 +36,7 @@ export async function createAiBlog(raw: z.input<typeof AiBlog>): Promise<{ id?: 
     console.error('blog generation failed', e)
     return { error: 'The AI could not write this article. Please try again.' }
   }
-  if (!(await charge(account.id, workspace.id, [{ amount: COST.blogArticle, reason: 'AI_BLOG', note: 'Blog article' }]))) {
+  if (!(await charge(account.id, workspace.id, [{ amount: COST.blogArticle, reason: 'AI_BLOG', note: 'Blog article', action: 'blogArticle', units: 1 }]))) {
     return { error: notEnough(COST.blogArticle, await balanceOf(account.id)) }
   }
   const post = await prisma.post.create({
@@ -56,6 +57,7 @@ export async function createAiBlog(raw: z.input<typeof AiBlog>): Promise<{ id?: 
 // Writes the full article for a blog-campaign item that is still an outline.
 export async function writeArticle(postId: string): Promise<{ error?: string }> {
   const { account, workspace, brand } = await requireContext()
+  const COST = await prices()
   const post = await prisma.post.findFirst({
     where: { id: postId, workspaceId: workspace.id, kind: 'BLOG' },
     include: { campaign: true },
@@ -85,7 +87,7 @@ export async function writeArticle(postId: string): Promise<{ error?: string }> 
   const ok = await charge(
     account.id,
     workspace.id,
-    [{ amount: COST.blogArticle, reason: 'AI_BLOG', note: `Article: ${post.title}` }],
+    [{ amount: COST.blogArticle, reason: 'AI_BLOG', note: `Article: ${post.title}`, action: 'blogArticle', units: 1 }],
     async (tx) => {
       const res = await tx.post.updateMany({ where: { id: post.id, content: '' }, data: { content: article.body, aiGenerated: true } })
       alreadyWritten = res.count === 0

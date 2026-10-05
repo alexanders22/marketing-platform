@@ -8,6 +8,8 @@ import { ChannelIcons } from '@/components/channels'
 import { LocalTime } from '@/components/LocalTime'
 import { writeArticle } from '../../blog/actions'
 import { deleteCampaign, regenerateCampaignPost } from '../actions'
+import { creditsLabel } from '@/lib/pricing'
+import { usePrices } from '@/components/Prices'
 
 type Campaign = { id: string; kind: 'SOCIAL' | 'BLOG'; name: string; brief: string; startsOn: string; endsOn: string; tone: string; language: string }
 type Item = {
@@ -26,6 +28,7 @@ const day = (iso: string) => <LocalTime iso={iso} options={{ weekday: 'short', d
 const time = (iso: string) => <LocalTime iso={iso} options={{ hour: '2-digit', minute: '2-digit' }} />
 
 export function CampaignView({ campaign: c, posts }: { campaign: Campaign; posts: Item[] }) {
+  const P = usePrices()
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string>()
@@ -94,7 +97,7 @@ export function CampaignView({ campaign: c, posts }: { campaign: Campaign; posts
                       onClick={() => run(p.id, () => regenerateCampaignPost(p.id))}
                       disabled={busy !== null}
                       className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-50"
-                      title="Rewrite with a new angle · 1 credit"
+                      title={`Rewrite with a new angle · ${creditsLabel(P.campaignPost)}`}
                     >
                       {busy === p.id ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Rewrite
                     </button>
@@ -120,7 +123,7 @@ export function CampaignView({ campaign: c, posts }: { campaign: Campaign; posts
                       className="mt-3 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                     >
                       {busy === p.id ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                      {busy === p.id ? 'Writing…' : 'Write article · 3 credits'}
+                      {busy === p.id ? 'Writing…' : `Write article · ${creditsLabel(P.blogArticle)}`}
                     </button>
                   </>
                 )

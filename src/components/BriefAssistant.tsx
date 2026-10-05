@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react'
 import { Check, Compass, Lightbulb, Loader2, MapPin, RotateCcw, Sparkles, Users } from 'lucide-react'
 import type { BriefAdvice } from '@/lib/ai'
 import { getAdvice, saveAnswers } from '@/app/app/brief/actions'
+import { creditsLabel } from '@/lib/pricing'
+import { usePrices } from '@/components/Prices'
 
 export type Idea = BriefAdvice['ideas'][number]
 export type Audience = BriefAdvice['audiences'][number]
@@ -22,6 +24,7 @@ export function BriefAssistant({
   onUse: (idea: Idea, audience: Audience | null) => void
   defaultOpen?: boolean
 }) {
+  const P = usePrices()
   const [open, setOpen] = useState(defaultOpen)
   const [goal, setGoal] = useState('')
   const [advice, setAdvice] = useState<BriefAdvice>()
@@ -109,7 +112,7 @@ export function BriefAssistant({
             className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
           >
             {pending ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-            {pending ? 'Thinking…' : 'Suggest · 1 credit'}
+            {pending ? 'Thinking…' : `Suggest · ${creditsLabel(P.advice)}`}
           </button>
         </div>
       )}
@@ -167,7 +170,7 @@ export function BriefAssistant({
                   disabled={pending || answered.length === 0}
                   className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-40"
                 >
-                  Save answers & suggest again · 1 credit
+                  Save answers & suggest again · {creditsLabel(P.advice)}
                 </button>
                 <button
                   type="button"

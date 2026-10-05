@@ -3,6 +3,9 @@ import { requireContext } from '@/lib/context'
 import { PLANS } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { AppSidebar } from './AppSidebar'
+import { CreditsBadge } from './CreditsBadge'
+import { prices } from '@/lib/credits'
+import { PricesProvider } from '@/components/Prices'
 
 export const metadata: Metadata = { title: 'Loudpilot' }
 
@@ -19,12 +22,14 @@ function planLabel(plan: string, trialEndsAt: Date | null) {
 // Light app shell (the marketing site stays dark).
 export default async function AppLayout({ children }: LayoutProps<'/app'>) {
   const { user, account, workspace, brand, role, companies, asAdmin } = await requireContext()
-  const [alerts, recommendations, inbox] = await Promise.all([
+  const [alerts, recommendations, inbox, creditPrices] = await Promise.all([
     prisma.alert.count({ where: { workspaceId: workspace.id, readAt: null } }),
     prisma.recommendation.count({ where: { workspaceId: workspace.id, status: 'OPEN' } }),
     prisma.conversation.count({ where: { workspaceId: workspace.id, unread: { gt: 0 } } }),
+    prices(),
   ])
   return (
+    <PricesProvider prices={creditPrices}>
     <div className="min-h-screen bg-[#f4f3f1] text-zinc-900 lg:flex [color-scheme:light]">
       <AppSidebar
         workspace={workspace.name}
@@ -41,7 +46,10 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
         superAdmin={user.role === 'SUPER_ADMIN'}
       />
       <main className="min-w-0 flex-1 p-2 lg:py-3 lg:pr-3 lg:pl-0">
-        <div className="min-h-[calc(100vh-1.5rem)] rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 sm:p-8">
+        <header className="mb-2 hidden items-center justify-end gap-2 lg:flex">
+          <CreditsBadge credits={account.creditBalance} planLabel={planLabel(account.plan, account.trialEndsAt)} />
+        </header>
+        <div className="min-h-[calc(100vh-1.5rem)] rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 sm:p-8 lg:min-h-[calc(100vh-4.5rem)]">
           {(asAdmin || account.pausedAt) && (
             <div className="-mt-1 mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-900 ring-1 ring-amber-200">
               <span>
@@ -57,5 +65,6 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
         </div>
       </main>
     </div>
+    </PricesProvider>
   )
 }

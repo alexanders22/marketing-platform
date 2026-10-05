@@ -7,6 +7,7 @@ import { ArrowLeft, FileText, Loader2, Target, Zap } from 'lucide-react'
 import { ChannelPicker, type Network } from '@/components/channels'
 import { createBlogCampaign, createSocialCampaign } from '../actions'
 import { audienceLine, BriefAssistant } from '@/components/BriefAssistant'
+import { usePrices } from '@/components/Prices'
 
 const TONES = ['Professional', 'Friendly', 'Educational', 'Bold', 'Founder-led'] as const
 const LANGS = ['English', 'Georgian', 'Russian'] as const
@@ -21,6 +22,7 @@ const tomorrow = () => localDay(1)
 const input = 'w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100'
 
 export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; credits: number }) {
+  const P = usePrices()
   const router = useRouter()
   const [name, setName] = useState('')
   const [brief, setBrief] = useState('')
@@ -37,7 +39,7 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
   const [pending, start] = useTransition()
 
   const total = kind === 'blog' ? count : weeks * perWeek
-  const cost = total // 1 credit per post / per article outline
+  const cost = total * (kind === 'blog' ? P.blogOutline : P.campaignPost)
 
   const submit = () =>
     start(async () => {

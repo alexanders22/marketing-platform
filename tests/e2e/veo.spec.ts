@@ -21,6 +21,9 @@ test.beforeAll(async ({ browser }) => {
   page = await browser.newPage()
   const { email } = await newAccount(page, 'veo', 'Bloom Bakery')
   accountId = sql(`select m."accountId" from "AccountMember" m join "User" u on u.id=m."userId" where u.email='${email}'`)
+  // Veo is for paying customers: end the trial.
+  sql(`update "Account" set "trialEndsAt"=null, "creditBalance"="creditBalance"+100 where id='${accountId}'`)
+  sql(`insert into "CreditEntry"(id,"accountId",amount,reason,note) values ('ce${Date.now()}','${accountId}',100,'GRANT','test top-up')`)
   await page.goto('/app/studio?tab=video')
   await page.getByRole('button', { name: 'New Reel / Story video' }).click()
   await page.waitForURL(/\/app\/studio\/video\//)
@@ -43,6 +46,8 @@ test('generate a clip for a scene: charged, pending, then it arrives', async () 
   await expect(page.getByLabel('AI clip generating')).toHaveCount(0)
   await expect.poll(() => sql(`select data->'scenes'->0->'media'->>'kind' from "Video" where id='${videoId}'`), { timeout: 10_000 }).toBe('video')
   expect(sql(`select status||':'||credits||':'||quality||':'||aspect from "ClipJob" where "videoId"='${videoId}'`)).toBe('DONE:4:quick:9:16')
+  // The ledger knows what was bought: for the admin's unit economics.
+  expect(sql(`select action||':'||units from "CreditEntry" where "accountId"='${accountId}' and action is not null order by "createdAt" desc limit 1`)).toBe('clipQuick:4')
   expect(sql(`select m.kind||':'||(m."posterId" is not null) from "ClipJob" j join "Media" m on m.id=j."mediaId" where j."videoId"='${videoId}'`)).toBe('VIDEO:true')
 })
 
@@ -77,6 +82,20 @@ test('render with the clip and its own sound', async () => {
   const r = spawnSync(FF, ['-hide_banner', '-i', path.resolve('storage', out), '-t', '3', '-af', 'volumedetect', '-f', 'null', '-'], { encoding: 'utf8' })
   const mean = Number(r.stderr.match(/mean_volume: (-?[\d.]+) dB/)?.[1] ?? -91)
   expect(mean).toBeGreaterThan(-60)
+})
+
+test('trial accounts see Veo locked and cannot start a clip', async ({ browser }) => {
+  const trial = await browser.newPage()
+  await newAccount(trial, 'veo-trial')
+  await trial.goto('/app/studio?tab=video')
+  await trial.getByRole('button', { name: 'New Reel / Story video' }).click()
+  await trial.waitForURL(/\/app\/studio\/video\//)
+  await expect(trial.getByText('AI clips with Google Veo are part of paid plans.')).toBeVisible()
+  await expect(trial.getByRole('button', { name: 'Generate clip with AI' })).toHaveCount(0)
+  await trial.goto('/app/studio?tab=video')
+  await trial.getByRole('button', { name: 'Create video with AI' }).click()
+  await expect(trial.getByRole('button', { name: 'AI clips (Veo)' })).toBeDisabled()
+  await trial.close()
 })
 
 test('another workspace cannot read the clip job', async ({ browser }) => {

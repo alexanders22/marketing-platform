@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Clapperboard, Film, ImageIcon, Loader2, Palette, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Popover'
-import { CLIP_QUALITIES, clipCredits, FORMATS, type ClipQuality, type Format } from '@/lib/video'
+import { CLIP_QUALITIES, FORMATS, type ClipQuality, type Format } from '@/lib/video'
 import { createVideo, createVideoWithAI, deleteVideo } from './actions'
 import { VideoMediaPicker, type LibraryItem } from './VideoMediaPicker'
+import { clipAction } from '@/lib/pricing'
+import { usePrices } from '@/components/Prices'
 
 export type VideoCard = { id: string; name: string; format: string; status: string; poster: string | null; seconds: number; updatedAt: string }
 
@@ -18,7 +20,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   FAILED: { label: 'Failed', cls: 'bg-red-50 text-red-700' },
 }
 
-export function VideoSection({ videos }: { videos: VideoCard[] }) {
+export function VideoSection({ videos, paid }: { videos: VideoCard[]; paid: boolean }) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [ai, setAi] = useState(false)
@@ -91,12 +93,12 @@ export function VideoSection({ videos }: { videos: VideoCard[] }) {
           ))}
         </ul>
       )}
-      {ai && <AiVideoModal onClose={() => setAi(false)} />}
+      {ai && <AiVideoModal paid={paid} onClose={() => setAi(false)} />}
     </section>
   )
 }
 
-function AiVideoModal({ onClose }: { onClose: () => void }) {
+function AiVideoModal({ onClose, paid }: { onClose: () => void; paid: boolean }) {
   const router = useRouter()
   const [brief, setBrief] = useState('')
   const [format, setFormat] = useState<Format>('9:16')
@@ -109,7 +111,8 @@ function AiVideoModal({ onClose }: { onClose: () => void }) {
   const [language, setLanguage] = useState('English')
   const [error, setError] = useState<string>()
   const [pending, start] = useTransition()
-  const cost = 1 + (voice ? 1 : 0) + (visuals === 'ai' ? scenes : 0) + (visuals === 'veo' ? scenes * clipCredits(clipQuality, 4) : 0)
+  const P = usePrices()
+  const cost = P.videoScript + (voice ? P.voice : 0) + (visuals === 'ai' ? scenes * P.image : 0) + (visuals === 'veo' ? scenes * P[clipAction(clipQuality)] * 4 : 0)
 
   const go = () =>
     start(async () => {
@@ -157,7 +160,7 @@ function AiVideoModal({ onClose }: { onClose: () => void }) {
             {(
               [
                 ['library', ImageIcon, 'My photos & clips'],
-                ['ai', Sparkles, `AI images · ${scenes} cr`],
+                ['ai', Sparkles, `AI images · ${scenes * P.image} cr`],
                 ['veo', Clapperboard, 'AI clips (Veo)'],
                 ['none', Palette, 'Brand colours'],
               ] as const
@@ -165,13 +168,23 @@ function AiVideoModal({ onClose }: { onClose: () => void }) {
               <button
                 key={v}
                 onClick={() => setVisuals(v)}
+                disabled={v === 'veo' && !paid}
+                title={v === 'veo' && !paid ? 'Paid plans only' : undefined}
                 aria-pressed={visuals === v}
-                className={`flex flex-col items-center gap-1 rounded-xl p-2.5 text-xs font-medium ring-1 ${visuals === v ? 'bg-zinc-900 text-white ring-zinc-900' : 'ring-zinc-200 hover:bg-zinc-50'}`}
+                className={`flex flex-col items-center gap-1 rounded-xl p-2.5 text-xs font-medium ring-1 disabled:cursor-not-allowed disabled:opacity-40 ${visuals === v ? 'bg-zinc-900 text-white ring-zinc-900' : 'ring-zinc-200 hover:bg-zinc-50'}`}
               >
                 <Icon size={16} /> {l}
               </button>
             ))}
           </div>
+          {!paid && (
+            <p className="mt-2 text-xs text-zinc-500">
+              AI clips (Veo) are part of paid plans.{' '}
+              <Link href="/app/plan" className="font-medium text-indigo-600 underline">
+                Choose a plan
+              </Link>
+            </p>
+          )}
           {visuals === 'veo' && (
             <div className="mt-2 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-900">
               <p>A real moving 4-second clip for every scene, made by Google Veo. They arrive in the editor within a few minutes.</p>
@@ -184,7 +197,7 @@ function AiVideoModal({ onClose }: { onClose: () => void }) {
                     onClick={() => setClipQuality(q)}
                     className={`rounded-lg px-2.5 py-1 font-medium ring-1 ${clipQuality === q ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200'}`}
                   >
-                    {CLIP_QUALITIES[q].label} · {clipCredits(q, 4) * scenes} cr
+                    {CLIP_QUALITIES[q].label} · {P[clipAction(q)] * 4 * scenes} cr
                   </button>
                 ))}
               </div>

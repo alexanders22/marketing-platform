@@ -13,6 +13,7 @@ import {
   Film,
   ImageIcon,
   Loader2,
+  Lock,
   Mic,
   Music,
   Pause,
@@ -28,7 +29,6 @@ import { drawEndCard, drawOverlay, toPngBase64, type OverlayBrand } from '@/lib/
 import {
   CLIP_QUALITIES,
   CLIP_SECONDS,
-  clipCredits,
   FORMATS,
   MAX_SCENES,
   MOTIONS,
@@ -46,6 +46,8 @@ import {
 } from '@/lib/video'
 import { clipStatus, generateVoices, renderVideo, saveVideo, startClip, videoStatus, videoToPost } from '../actions'
 import { VideoMediaPicker, type LibraryItem } from '../VideoMediaPicker'
+import { clipAction, creditsLabel } from '@/lib/pricing'
+import { usePrices } from '@/components/Prices'
 
 type Status = { status: 'DRAFT' | 'RENDERING' | 'READY' | 'FAILED'; error: string | null; output: { url: string; poster: string | null } | null }
 
@@ -64,12 +66,16 @@ export function VideoEditor({
   video,
   brand,
   initialStatus,
+  paid,
 }: {
   video: { id: string; name: string; format: Format; doc: VideoDoc }
   brand: OverlayBrand
   initialStatus: Status
+  // AI clips (Veo) are for paid plans.
+  paid: boolean
 }) {
   const router = useRouter()
+  const P = usePrices()
   const [name, setName] = useState(video.name)
   const [format, setFormat] = useState<Format>(video.format)
   const [doc, setDoc] = useState<VideoDoc>(video.doc)
@@ -241,7 +247,7 @@ export function VideoEditor({
   }
 
   return (
-    <div className="-m-5 flex min-h-[calc(100vh-1.5rem)] flex-col sm:-m-8">
+    <div className="-m-5 flex min-h-[calc(100vh-1.5rem)] flex-col sm:-m-8 lg:min-h-[calc(100vh-4.5rem)]">
       <PreviewStyles />
       <header className="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-4 py-3">
         <Link href="/app/studio" className="grid h-9 w-9 place-items-center rounded-lg bg-zinc-100 hover:bg-zinc-200" aria-label="Back to Studio">
@@ -261,7 +267,7 @@ export function VideoEditor({
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {needVoice && (
             <button onClick={makeVoices} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-800 hover:bg-violet-100 disabled:opacity-60">
-              {busy && busyWhat === 'voice' ? <Loader2 size={15} className="animate-spin" /> : <Mic size={15} />} Generate voice-over · 1 credit
+              {busy && busyWhat === 'voice' ? <Loader2 size={15} className="animate-spin" /> : <Mic size={15} />} Generate voice-over · {creditsLabel(P.voice)}
             </button>
           )}
           <button
@@ -403,6 +409,7 @@ export function VideoEditor({
                 scene={scene}
                 videoId={video.id}
                 format={format}
+                paid={paid}
                 onStarted={(jobId) => patchScene(scene.id, { clipJobId: jobId })}
                 onError={setError}
                 onCharged={() => router.refresh()}
@@ -698,6 +705,7 @@ function ClipPanel({
   scene,
   videoId,
   format,
+  paid,
   onStarted,
   onError,
   onCharged,
@@ -705,6 +713,7 @@ function ClipPanel({
   scene: Scene
   videoId: string
   format: Format
+  paid: boolean
   onStarted: (jobId: string) => void
   onError: (e: string) => void
   onCharged: () => void
@@ -716,12 +725,23 @@ function ClipPanel({
   const photo = scene.media?.kind === 'image' ? scene.media : null
   const [animate, setAnimate] = useState(Boolean(photo))
   const [pending, start] = useTransition()
-  const cost = clipCredits(quality, seconds)
+  const P = usePrices()
+  const cost = P[clipAction(quality)] * seconds
 
   if (scene.clipJobId) {
     return (
       <p className="flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
         <Loader2 size={15} className="animate-spin" /> Generating the AI clip — usually under 2 minutes. You can keep editing.
+      </p>
+    )
+  }
+  if (!paid) {
+    return (
+      <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-600 ring-1 ring-zinc-200">
+        <Lock size={13} className="mr-1 inline" /> AI clips with Google Veo are part of paid plans.{' '}
+        <Link href="/app/plan" className="font-medium text-indigo-600 underline">
+          Choose a plan
+        </Link>
       </p>
     )
   }
@@ -776,7 +796,7 @@ function ClipPanel({
             className={`rounded-lg px-2 py-1.5 text-xs font-medium ring-1 ${quality === q ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200 hover:bg-zinc-50'}`}
           >
             {CLIP_QUALITIES[q].label}
-            <span className="block text-[10px] opacity-70">{CLIP_QUALITIES[q].perSecond} cr/s</span>
+            <span className="block text-[10px] opacity-70">{P[clipAction(q)]} cr/s</span>
           </button>
         ))}
       </div>

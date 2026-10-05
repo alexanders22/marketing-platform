@@ -12,7 +12,7 @@ import {
   type PlannedPost,
 } from '@/lib/ai'
 import { requireContext } from '@/lib/context'
-import { balanceOf, charge, COST, notEnough } from '@/lib/credits'
+import { balanceOf, charge, notEnough, prices } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 import { BATCH, chunks, pairWithDates, slots, startsInPast } from '@/lib/campaign-plan'
 import { dayIn, isValidTimeZone } from '@/lib/time'
@@ -44,6 +44,7 @@ const Blog = Base.extend({
 
 export async function createSocialCampaign(raw: z.input<typeof Social>): Promise<{ id?: string; error?: string }> {
   const { account, workspace, brand, user } = await requireContext()
+  const COST = await prices()
   const parsed = Social.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const c = parsed.data
@@ -74,7 +75,7 @@ export async function createSocialCampaign(raw: z.input<typeof Social>): Promise
   }
   if (made.length === 0) return { error: 'The AI could not plan this campaign. Please try again.' }
 
-  if (!(await charge(account.id, workspace.id, [{ amount: made.length * COST.campaignPost, reason: 'AI_TEXT', note: `Campaign: ${c.name}` }]))) {
+  if (!(await charge(account.id, workspace.id, [{ amount: made.length * COST.campaignPost, reason: 'AI_TEXT', note: `Campaign: ${c.name}`, action: 'campaignPost', units: made.length }]))) {
     return { error: notEnough(made.length, await balanceOf(account.id)) }
   }
 
@@ -111,6 +112,7 @@ export async function createSocialCampaign(raw: z.input<typeof Social>): Promise
 
 export async function createBlogCampaign(raw: z.input<typeof Blog>): Promise<{ id?: string; error?: string }> {
   const { account, workspace, brand, user } = await requireContext()
+  const COST = await prices()
   const parsed = Blog.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const c = parsed.data
@@ -129,7 +131,7 @@ export async function createBlogCampaign(raw: z.input<typeof Blog>): Promise<{ i
     console.error('blog plan failed', e)
     return { error: 'The AI could not plan this series. Please try again.' }
   }
-  if (!(await charge(account.id, workspace.id, [{ amount: outlines.length * COST.blogOutline, reason: 'AI_BLOG', note: `Blog series: ${c.name}` }]))) {
+  if (!(await charge(account.id, workspace.id, [{ amount: outlines.length * COST.blogOutline, reason: 'AI_BLOG', note: `Blog series: ${c.name}`, action: 'blogOutline', units: outlines.length }]))) {
     return { error: notEnough(outlines.length, await balanceOf(account.id)) }
   }
 
@@ -167,6 +169,7 @@ export async function createBlogCampaign(raw: z.input<typeof Blog>): Promise<{ i
 // Rewrites one social post of a campaign with a fresh angle.
 export async function regenerateCampaignPost(postId: string): Promise<{ error?: string }> {
   const { account, workspace, brand } = await requireContext()
+  const COST = await prices()
   const post = await prisma.post.findFirst({
     where: { id: postId, workspaceId: workspace.id, kind: 'SOCIAL', campaignId: { not: null } },
     include: { campaign: { include: { posts: { select: { id: true, title: true } } } } },
@@ -189,7 +192,7 @@ export async function regenerateCampaignPost(postId: string): Promise<{ error?: 
     console.error('regenerate failed', e)
     return { error: 'The AI could not rewrite this post. Please try again.' }
   }
-  if (!(await charge(account.id, workspace.id, [{ amount: COST.campaignPost, reason: 'AI_TEXT', note: `Rewrite: ${c.name}` }]))) {
+  if (!(await charge(account.id, workspace.id, [{ amount: COST.campaignPost, reason: 'AI_TEXT', note: `Rewrite: ${c.name}`, action: 'campaignPost', units: 1 }]))) {
     return { error: notEnough(COST.campaignPost, await balanceOf(account.id)) }
   }
   await prisma.post.update({

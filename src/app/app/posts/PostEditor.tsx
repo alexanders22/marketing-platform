@@ -10,6 +10,8 @@ import { useIsClient } from '@/components/LocalTime'
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker'
 import { designFromMedia } from '../studio/actions'
 import { deletePost, generatePostImages, publishNow, savePost } from './actions'
+import { creditsLabel } from '@/lib/pricing'
+import { usePrices } from '@/components/Prices'
 
 export type PostDraft = {
   id?: string
@@ -73,6 +75,7 @@ export function PostEditor({
   defaultWhen?: string
 }) {
   const router = useRouter()
+  const P = usePrices()
   const [content, setContent] = useState(initial.content)
   const [tags, setTags] = useState(initial.hashtags.map((t) => `#${t}`).join(' '))
   const [media, setMedia] = useState(initial.media)
@@ -350,7 +353,7 @@ export function PostEditor({
                     className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-60"
                   >
                     {generating ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                    {generating ? 'Drawing…' : `Generate · ${aiCount} credit${aiCount > 1 ? 's' : ''}`}
+                    {generating ? 'Drawing…' : `Generate · ${creditsLabel(aiCount * P.image)}`}
                   </button>
                 </div>
               </div>

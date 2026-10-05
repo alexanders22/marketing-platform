@@ -6,7 +6,7 @@ import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 import { publishPostNow, targetsFor } from '@/lib/publisher'
 import { aiEnabled, generateImage } from '@/lib/ai'
-import { charge, COST, notEnough } from '@/lib/credits'
+import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 
@@ -159,6 +159,7 @@ export async function listMedia(): Promise<{ id: string; url: string }[]> {
 // delivered image costs COST.image; failed ones are free.
 export async function generatePostImages(input: { prompt: string; caption: string; count: number }): Promise<{ images?: { id: string; url: string }[]; error?: string }> {
   const { account, workspace, brand } = await requireContext()
+  const COST = await prices()
   const prompt = input.prompt.trim().slice(0, 1000)
   const count = Math.min(4, Math.max(1, Math.floor(input.count) || 1))
   if (!prompt && !input.caption.trim()) return { error: 'Describe the image or write the post text first' }
@@ -178,7 +179,7 @@ export async function generatePostImages(input: { prompt: string; caption: strin
   results.forEach((r) => r.status === 'rejected' && console.error('generatePostImages failed', r.reason))
   if (media.length === 0) return { error: 'The AI could not draw this. Try a different description.' }
   const ok = await charge(account.id, workspace.id, [
-    { amount: media.length * COST.image, reason: 'AI_IMAGE', note: `${media.length} post image${media.length > 1 ? 's' : ''}` },
+    { amount: media.length * COST.image, reason: 'AI_IMAGE', note: `${media.length} post image${media.length > 1 ? 's' : ''}`, action: 'image', units: media.length },
   ])
   if (!ok) return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
   revalidatePath('/app', 'layout')

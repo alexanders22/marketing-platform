@@ -5,13 +5,14 @@ import type { DesignDoc } from '@/lib/design'
 import { prisma } from '@/lib/prisma'
 import { mediaUrl } from '@/lib/storage'
 import { StudioHome } from './StudioHome'
+import { isPaid } from '@/lib/plans'
 import { timeline, type VideoDoc } from '@/lib/video'
 import { VideoSection } from './video/VideoSection'
 
 export const metadata: Metadata = { title: 'Studio — Loudpilot' }
 
 export default async function StudioPage({ searchParams }: PageProps<'/app/studio'>) {
-  const { workspace, brand } = await requireContext()
+  const { workspace, brand, account, user } = await requireContext()
   const designs = await prisma.design.findMany({
     where: { workspaceId: workspace.id },
     orderBy: { updatedAt: 'desc' },
@@ -66,6 +67,7 @@ export default async function StudioPage({ searchParams }: PageProps<'/app/studi
       )}
       {tab === 'video' && (
         <VideoSection
+          paid={isPaid(account) || user.role === 'SUPER_ADMIN'}
           videos={videos.map((v) => ({
             id: v.id,
             name: v.name,

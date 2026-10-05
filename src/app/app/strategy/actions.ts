@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { aiEnabled } from '@/lib/ai'
 import { requireContext } from '@/lib/context'
-import { COST, balanceOf, charge, notEnough } from '@/lib/credits'
+import { balanceOf, charge, notEnough, prices } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 import { OBJECTIVES, applyGoals, applyPosts, buildPlan, setAdLaunched } from '@/lib/strategist'
 import { isValidTimeZone } from '@/lib/time'
@@ -26,6 +26,7 @@ const Input = z
 
 export async function createPlan(raw: z.input<typeof Input>): Promise<{ id?: string; error?: string }> {
   const { workspace, account, user, role } = await requireContext()
+  const COST = await prices()
   if (role === 'EDITOR') return { error: 'Only owners and admins can create plans' }
   const parsed = Input.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
@@ -42,7 +43,7 @@ export async function createPlan(raw: z.input<typeof Input>): Promise<{ id?: str
   }
   // Charged once the plan exists; if the balance moved meanwhile, the plan
   // is removed again.
-  const ok = await charge(account.id, workspace.id, [{ amount: COST.strategy, reason: 'AI_TEXT', note: `Strategy plan: ${plan.title.slice(0, 80)}` }])
+  const ok = await charge(account.id, workspace.id, [{ amount: COST.strategy, reason: 'AI_TEXT', note: `Strategy plan: ${plan.title.slice(0, 80)}`, action: 'strategy', units: 1 }])
   if (!ok) {
     await prisma.strategyPlan.delete({ where: { id: plan.id } })
     return { error: notEnough(COST.strategy, await balanceOf(account.id)) }
