@@ -4,7 +4,9 @@ import { notFound } from "next/navigation";
 import { ArrowRight, Check } from "lucide-react";
 import { Header } from "@/components/landing/Header";
 import { Footer } from "@/components/landing/Footer";
-import { CONTACT, FEATURES, featureHref } from "@/components/landing/site";
+import { HtmlLang } from "@/components/landing/HtmlLang";
+import { alternates, COPY, localePath, type Lang } from "@/components/landing/i18n";
+import { CONTACT, FEATURES, featureHref, featuresFor } from "@/components/landing/site";
 
 export const dynamicParams = false;
 
@@ -12,23 +14,33 @@ export function generateStaticParams() {
   return FEATURES.map((f) => ({ slug: f.slug }));
 }
 
-const find = (slug: string) => FEATURES.find((f) => f.slug === slug);
+export function featureMetadata(lang: Lang, slug: string): Metadata {
+  const f = featuresFor(lang).find((x) => x.slug === slug);
+  if (!f) return { title: "Not found" };
+  return { title: `${f.title} — Loudpilot`, description: f.short, alternates: alternates(`/features/${slug}`) };
+}
 
 export async function generateMetadata({ params }: PageProps<"/features/[slug]">): Promise<Metadata> {
-  const f = find((await params).slug);
-  if (!f) return { title: "Not found" };
-  return { title: `${f.title} — Loudpilot`, description: f.short };
+  return featureMetadata("en", (await params).slug);
 }
 
 export default async function FeaturePage({ params }: PageProps<"/features/[slug]">) {
-  const f = find((await params).slug);
+  return <FeatureView lang="en" slug={(await params).slug} />;
+}
+
+// One feature page, in any landing language.
+export function FeatureView({ lang, slug }: { lang: Lang; slug: string }) {
+  const all = featuresFor(lang);
+  const f = all.find((x) => x.slug === slug);
   if (!f) notFound();
+  const t = COPY[lang];
   const soon = f.status === "soon";
-  const others = FEATURES.filter((x) => x.slug !== f.slug);
+  const others = all.filter((x) => x.slug !== f.slug);
 
   return (
     <div className="overflow-x-clip">
-      <Header />
+      {lang !== "en" && <HtmlLang lang={lang} />}
+      <Header lang={lang} />
       <main>
         <section className="relative">
           <div className="glow pointer-events-none absolute inset-0" />
@@ -41,12 +53,12 @@ export default async function FeaturePage({ params }: PageProps<"/features/[slug
               {f.title}
               {soon && (
                 <span className="rounded-full bg-zinc-700/60 px-2 py-0.5 text-[11px] font-semibold text-zinc-300 uppercase">
-                  Coming soon
+                  {t.badges.comingSoon}
                 </span>
               )}
               {f.status === "new" && (
                 <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 uppercase">
-                  New
+                  {t.badges.new}
                 </span>
               )}
             </p>
@@ -57,21 +69,21 @@ export default async function FeaturePage({ params }: PageProps<"/features/[slug
                 href={soon || f.slug === "api" ? CONTACT : "/signup"}
                 className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200"
               >
-                {soon ? "Get early access" : f.slug === "api" ? "Talk to us" : "Start free"} <ArrowRight size={16} />
+                {soon ? t.featurePage.earlyAccess : f.slug === "api" ? t.featurePage.talk : t.featurePage.start} <ArrowRight size={16} />
               </a>
               {f.slug === "api" && (
                 <Link
                   href="/docs"
                   className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-white/5"
                 >
-                  Read the docs
+                  {t.featurePage.docs}
                 </Link>
               )}
               <Link
-                href="/#pricing"
+                href={localePath(lang, "/#pricing")}
                 className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-white/5"
               >
-                See pricing
+                {t.featurePage.pricing}
               </Link>
             </div>
           </div>
@@ -93,12 +105,12 @@ export default async function FeaturePage({ params }: PageProps<"/features/[slug
 
         <section className="border-t border-white/5 bg-zinc-900/30 py-20">
           <div className="mx-auto max-w-5xl px-4 sm:px-6">
-            <h2 className="text-2xl font-semibold tracking-tight">More in Loudpilot</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">{t.featurePage.more}</h2>
             <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {others.map((o) => (
                 <Link
                   key={o.slug}
-                  href={featureHref(o.slug)}
+                  href={featureHref(o.slug, lang)}
                   className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4 transition hover:-translate-y-0.5 hover:border-white/20"
                 >
                   <span className={`grid h-8 w-8 place-items-center rounded-lg ${o.tint}`}>
@@ -112,7 +124,7 @@ export default async function FeaturePage({ params }: PageProps<"/features/[slug
           </div>
         </section>
       </main>
-      <Footer />
+      <Footer lang={lang} />
     </div>
   );
 }

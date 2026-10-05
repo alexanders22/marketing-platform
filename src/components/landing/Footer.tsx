@@ -1,38 +1,42 @@
 import Link from "next/link";
 import { Logo } from "./Logo";
-import { CONTACT, FEATURES, SUPPORT, featureHref } from "./site";
+import { COPY, localePath, type Lang } from "./i18n";
+import { CONTACT, SUPPORT, featureHref, featuresFor } from "./site";
 
-export function Footer() {
+export function Footer({ lang = "en" }: { lang?: Lang }) {
+  const t = COPY[lang].footer;
   // Only links that lead somewhere.
   const cols: { title: string; links: { label: string; href: string }[] }[] = [
     {
-      title: "Features",
-      links: FEATURES.filter((f) => f.status !== "soon").map((f) => ({ label: f.title, href: featureHref(f.slug) })),
+      title: t.features,
+      links: featuresFor(lang)
+        .filter((f) => f.status !== "soon")
+        .map((f) => ({ label: f.title, href: featureHref(f.slug, lang) })),
     },
     {
-      title: "Product",
+      title: t.product,
       links: [
-        { label: "How it works", href: "/#how" },
-        { label: "Ads & analytics", href: featureHref("ads") },
-        { label: "API documentation", href: "/docs" },
-        { label: "Pricing", href: "/#pricing" },
+        { label: t.howItWorks, href: localePath(lang, "/#how") },
+        { label: t.adsAnalytics, href: featureHref("ads", lang) },
+        { label: t.apiDocs, href: "/docs" },
+        { label: t.pricing, href: localePath(lang, "/#pricing") },
       ],
     },
     {
-      title: "Company",
+      title: t.company,
       links: [
-        { label: "Contact sales", href: CONTACT },
-        { label: "Support", href: SUPPORT },
-        { label: "Log in", href: "/login" },
-        { label: "Start free", href: "/signup" },
+        { label: t.contactSales, href: CONTACT },
+        { label: t.support, href: SUPPORT },
+        { label: t.login, href: "/login" },
+        { label: t.startFree, href: "/signup" },
       ],
     },
     {
-      title: "Legal",
+      title: t.legal,
       links: [
-        { label: "Terms of Service", href: "/terms" },
-        { label: "Privacy Policy", href: "/privacy" },
-        { label: "Data deletion", href: "/data-deletion" },
+        { label: t.terms, href: "/terms" },
+        { label: t.privacy, href: "/privacy" },
+        { label: t.deletion, href: "/data-deletion" },
       ],
     },
   ];
@@ -41,7 +45,7 @@ export function Footer() {
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 sm:grid-cols-2 md:grid-cols-[1.4fr_repeat(4,1fr)]">
         <div>
           <Logo />
-          <p className="mt-3 max-w-xs text-sm text-zinc-400">AI marketing: content, ads and analytics in one place.</p>
+          <p className="mt-3 max-w-xs text-sm text-zinc-400">{t.tagline}</p>
         </div>
         {cols.map((c) => (
           <div key={c.title}>
@@ -65,7 +69,9 @@ export function Footer() {
         ))}
       </div>
       <div className="mx-auto flex max-w-6xl flex-col justify-between gap-2 border-t border-white/5 px-4 py-6 text-xs text-zinc-500 sm:flex-row sm:px-6">
-        <span>© {new Date().getFullYear()} Loudpilot. All rights reserved.</span>
+        <span>
+          © {new Date().getFullYear()} Loudpilot. {t.rights}
+        </span>
       </div>
     </footer>
   );

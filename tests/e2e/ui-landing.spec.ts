@@ -45,7 +45,7 @@ test('landing: header mega menu opens panels and links to real pages', async ({ 
   const nav = page.locator('header nav[aria-label="Main"]')
   await nav.getByRole('button', { name: 'Features', exact: true }).hover()
   const features = page.locator('#menu-features a')
-  await expect(features).toHaveCount(8)
+  await expect(features).toHaveCount(9)
   const hrefs = await features.evaluateAll((as) => as.map((a) => a.getAttribute('href')!))
   for (const h of hrefs) {
     expect(h).toMatch(/^\/features\/[a-z]+$/)
@@ -153,9 +153,10 @@ test.describe('landing mobile', () => {
     expect(problems).toEqual([])
   })
 
-  test('landing: no element wider than the 320px viewport', async ({ page }) => {
+  for (const path of ['/', '/ka', '/ru'])
+  test(`landing ${path}: no element wider than the 320px viewport`, async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 })
-    await page.goto('/')
+    await page.goto(path)
     const wide = await page.evaluate(() => {
       const iw = window.innerWidth
       const out: string[] = []
