@@ -49,14 +49,33 @@ test('AI: audiences, questions and ideas; an idea fills the composer; answers ar
   await page.getByLabel('What do you want to achieve').fill('More cake orders for weekends')
   await page.getByRole('button', { name: /Suggest · 1 credit/ }).click()
   const box = page.getByRole('region', { name: 'Loudpilot suggestions' })
-  await expect(box.getByText('WHO TO REACH', { exact: true })).toBeVisible({ timeout: 120_000 })
+  const interview = box.getByRole('group', { name: 'Questions' })
+  await expect(interview.or(box.getByText('WHO TO REACH', { exact: true }))).toBeVisible({ timeout: 120_000 })
   console.log('ADVICE', await box.innerText())
 
-  const answers = box.getByLabel(/^Answer: /)
-  if ((await answers.count()) > 0) {
-    await answers.first().fill('Mostly parents in Vake and Saburtalo ordering birthday cakes')
-    await box.getByRole('button', { name: 'Just save' }).click()
-    await expect(box.getByText(/Saved to the dossier/)).toBeVisible()
+  let charged = 1
+  if (await interview.isVisible()) {
+    // One question at a time, at most 10, with progress, back and skip.
+    const total = Number((await interview.getByText(/^QUESTION 1 OF \d+$/).innerText()).split(' ').pop())
+    expect(total).toBeGreaterThan(0)
+    expect(total).toBeLessThanOrEqual(10)
+    await interview.getByLabel(/^Answer: /).fill('Mostly parents in Vake and Saburtalo ordering birthday cakes')
+    if (total > 1) {
+      await interview.getByRole('button', { name: 'Next' }).click()
+      await expect(interview.getByText(`QUESTION 2 OF ${total}`)).toBeVisible()
+      await interview.getByRole('button', { name: 'Back' }).click()
+      await expect(interview.getByLabel(/^Answer: /)).toHaveValue('Mostly parents in Vake and Saburtalo ordering birthday cakes')
+      await interview.getByRole('button', { name: 'Next' }).click()
+      await interview.getByRole('button', { name: 'Skip' }).click()
+      await interview.getByRole('button', { name: 'Enough questions — show ideas with my answers' }).click()
+    } else {
+      await interview.getByRole('button', { name: /Finish/ }).click()
+    }
+    charged = 2
+    await expect(box.getByText('WHO TO REACH', { exact: true })).toBeVisible({ timeout: 120_000 })
+    // The final ideas ask nothing more.
+    await expect(interview).toHaveCount(0)
+    await expect(box.getByText(/Your answers are saved to the dossier/)).toBeVisible()
     expect(Number(sql(`select count(*) from "BrandFact" where "workspaceId"='${ws}'`))).toBe(1)
   }
 
@@ -64,7 +83,7 @@ test('AI: audiences, questions and ideas; an idea fills the composer; answers ar
   const prompt = page.locator('textarea').first()
   await expect(prompt).not.toHaveValue('')
   console.log('PROMPT', await prompt.inputValue())
-  expect(Number(sql(`select -sum(amount) from "CreditEntry" e join "Workspace" w on w."accountId"=e."accountId" where w.id='${ws}' and e.note='Marketing suggestions'`))).toBe(1)
+  expect(Number(sql(`select -sum(amount) from "CreditEntry" e join "Workspace" w on w."accountId"=e."accountId" where w.id='${ws}' and e.note='Marketing suggestions'`))).toBe(charged)
 })
 
 test('AI: switching the language translates the suggestions, answers stay', async () => {
@@ -75,7 +94,10 @@ test('AI: switching the language translates the suggestions, answers stay', asyn
   await page.getByLabel('What do you want to achieve').fill('More cake orders for weekends')
   await page.getByRole('button', { name: /Suggest · 1 credit/ }).click()
   const box = page.getByRole('region', { name: 'Loudpilot suggestions' })
-  await expect(box.getByText('WHO TO REACH', { exact: true })).toBeVisible({ timeout: 120_000 })
+  const interview = box.getByRole('group', { name: 'Questions' })
+  await expect(interview.or(box.getByText('WHO TO REACH', { exact: true }))).toBeVisible({ timeout: 120_000 })
+  if (await interview.isVisible()) await interview.getByRole('button', { name: 'Skip the questions — show ideas now' }).click()
+  await expect(box.getByText('WHO TO REACH', { exact: true })).toBeVisible()
   const ideaEn = await box.locator('li p.text-sm.font-semibold').first().innerText()
   await box.getByLabel('Suggestions language').selectOption('Russian')
   await expect(box.getByText(/Translating to Russian/)).toBeVisible()

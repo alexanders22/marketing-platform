@@ -129,6 +129,10 @@ const shape = (p: Partial<ShapeLayer> & Pick<ShapeLayer, 'x' | 'y' | 'w' | 'h' |
 // workspace's media, so saved designs only point at the workspace's files.
 export const TEMPLATE_PHOTO = 'tpl:'
 export const templatePhotoUrl = (ref: string) => `/templates/${ref}.jpg`
+// Photos that ship with the templates, offered in pickers.
+export const TEMPLATE_PHOTO_LIBRARY = [
+  { category: 'Real estate', refs: ['real-estate/exterior', 'real-estate/living', 'real-estate/kitchen', 'real-estate/bedroom', 'real-estate/terrace', 'real-estate/villa', 'real-estate/agent'] },
+] as const
 export const isTemplatePhoto = (id: string) => id.startsWith(TEMPLATE_PHOTO) && /^tpl:[a-z-]+\/[a-z-]+$/.test(id)
 
 const photo = (ref: string, p: Partial<ImageLayer> & Pick<ImageLayer, 'x' | 'y' | 'w' | 'h'>): ImageLayer => ({

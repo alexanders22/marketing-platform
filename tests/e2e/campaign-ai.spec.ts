@@ -1,6 +1,14 @@
 import { expect, test, type Page } from '@playwright/test'
 import { newAccount, sql } from './helpers'
 
+// Social campaigns ask about pictures first: answer, then create.
+async function submitCampaign(page: Page, pictures: 'No pictures' | 'AI-generated' | 'Choose photos' = 'No pictures') {
+  await page.getByRole('main').getByRole('button', { name: 'Create campaign' }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'Pictures for your posts' })
+  await dialog.getByRole('radio', { name: pictures }).click()
+  await dialog.getByRole('button', { name: /^(Create campaign|Planning… up to a minute)$/ }).click()
+}
+
 // Real Gemini generations (cost money): 2 small social campaigns, 1 rewrite,
 // 1 blog series of 2 outlines, 1 "Write article". Post-generation checks are
 // mostly soft so a single run reports everything without re-generating.
@@ -46,7 +54,7 @@ test('social campaign: create (Tbilisi time), DB rows, credits, planner, rewrite
   await page.getByTitle('LinkedIn').click() // on
   await page.getByRole('main').locator('button', { hasText: /^Bold$/ }).click()
   await expect(page.getByText(/3 posts · 3 credits · 50 left/)).toBeVisible()
-  await page.getByRole('button', { name: 'Create campaign' }).click()
+  await submitCampaign(page)
   await expect(page.getByRole('button', { name: /Planning… up to a minute/ })).toBeVisible()
   await page.waitForURL(campaignUrl, { timeout: 180_000 })
   const id = page.url().split('/').pop()!
@@ -135,7 +143,7 @@ test('race: credits drop while the AI is generating → nothing saved, nothing c
 
   const sent = page.waitForRequest((r) => r.method() === 'POST' && !!r.headers()['next-action'])
   const t0 = Date.now()
-  await page.getByRole('button', { name: 'Create campaign' }).click()
+  await submitCampaign(page)
   await sent
   await page.waitForTimeout(1_000) // past requireContext + credit pre-check, inside the AI call
   sql(`update "Account" set "creditBalance"=1 where id='${acc}'`)

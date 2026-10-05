@@ -23,7 +23,17 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   FAILED: { label: 'Failed', cls: 'bg-red-50 text-red-700' },
 }
 
-export function VideoSection({ videos, paid, veo }: { videos: VideoCard[]; paid: boolean; veo: { used: number; limit: number; left: number } | null }) {
+export function VideoSection({
+  videos,
+  paid,
+  veo,
+  characters = [],
+}: {
+  videos: VideoCard[]
+  paid: boolean
+  veo: { used: number; limit: number; left: number } | null
+  characters?: { id: string; name: string }[]
+}) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [ai, setAi] = useState(false)
@@ -149,18 +159,33 @@ export function VideoSection({ videos, paid, veo }: { videos: VideoCard[]; paid:
           ))}
         </ul>
       )}
-      {ai && <AiVideoModal paid={paid} veo={veo} onClose={() => setAi(false)} />}
+      {ai && <AiVideoModal paid={paid} veo={veo} characters={characters} onClose={() => setAi(false)} />}
     </section>
   )
 }
 
-function AiVideoModal({ onClose, paid, veo }: { onClose: () => void; paid: boolean; veo: { used: number; limit: number; left: number } | null }) {
+function AiVideoModal({
+  onClose,
+  paid,
+  veo,
+  characters,
+}: {
+  onClose: () => void
+  paid: boolean
+  veo: { used: number; limit: number; left: number } | null
+  characters: { id: string; name: string }[]
+}) {
   const router = useRouter()
   const [brief, setBrief] = useState('')
   const [format, setFormat] = useState<Format>('9:16')
   const [scenes, setScenes] = useState(5)
   const [visuals, setVisuals] = useState<'library' | 'ai' | 'veo' | 'none'>('library')
   const [clipQuality, setClipQuality] = useState<ClipQuality>('quick')
+  const [veoMode, setVeoMode] = useState<'text' | 'photos' | 'character'>('text')
+  const [characterId, setCharacterId] = useState(characters[0]?.id ?? '')
+  // Veo keeps a character only on Pro/Cinema, in 8-second clips.
+  const clipSeconds = veoMode === 'character' ? 8 : 4
+  const quality: ClipQuality = veoMode === 'character' && clipQuality === 'quick' ? 'pro' : clipQuality
   const [media, setMedia] = useState<LibraryItem[]>([])
   const [picking, setPicking] = useState(false)
   const [voice, setVoice] = useState(true)
@@ -168,12 +193,23 @@ function AiVideoModal({ onClose, paid, veo }: { onClose: () => void; paid: boole
   const [error, setError] = useState<string>()
   const [pending, start] = useTransition()
   const P = usePrices()
-  const cost = P.videoScript + (voice ? P.voice : 0) + (visuals === 'ai' ? scenes * P.image : 0) + (visuals === 'veo' ? scenes * P[clipAction(clipQuality)] * 4 : 0)
+  const cost = P.videoScript + (voice ? P.voice : 0) + (visuals === 'ai' ? scenes * P.image : 0) + (visuals === 'veo' ? scenes * P[clipAction(quality)] * clipSeconds : 0)
 
   const go = () =>
     start(async () => {
       setError(undefined)
-      const res = await createVideoWithAI({ brief, format, scenes, visuals, clipQuality, mediaIds: media.map((m) => m.id), voice, language })
+      const res = await createVideoWithAI({
+        brief,
+        format,
+        scenes,
+        visuals,
+        clipQuality: quality,
+        veoMode,
+        characterId: veoMode === 'character' ? characterId : null,
+        mediaIds: media.map((m) => m.id),
+        voice,
+        language,
+      })
       if (res.error || !res.id) return setError(res.error)
       router.push(`/app/studio/video/${res.id}`)
     })
@@ -243,10 +279,65 @@ function AiVideoModal({ onClose, paid, veo }: { onClose: () => void; paid: boole
           )}
           {visuals === 'veo' && (
             <div className="mt-2 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-900">
-              <p>A real moving 4-second clip for every scene, made by Google Veo. They arrive in the editor within a few minutes.</p>
+              <p>A real moving {clipSeconds}-second clip for every scene, made by Google Veo. They arrive in the editor within a few minutes.</p>
+              <div role="radiogroup" aria-label="Clip source" className="mt-2 grid grid-cols-3 gap-1">
+                {(
+                  [
+                    ['text', 'From the script'],
+                    ['photos', 'Animate my photos'],
+                    ['character', 'With a character'],
+                  ] as const
+                ).map(([m, l]) => (
+                  <button
+                    key={m}
+                    role="radio"
+                    aria-checked={veoMode === m}
+                    onClick={() => setVeoMode(m)}
+                    className={`rounded-lg px-2 py-1.5 font-medium ring-1 ${veoMode === m ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200'}`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+              {veoMode === 'photos' && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {media
+                    .filter((m) => m.kind === 'image')
+                    .map((m) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={m.id} src={m.url} alt="" className="h-12 w-12 rounded-lg object-cover ring-1 ring-zinc-200" />
+                    ))}
+                  <button onClick={() => setPicking(true)} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 font-medium hover:bg-zinc-50">
+                    {media.length ? 'Change photos' : 'Pick photos to animate'}
+                  </button>
+                  <span>Each photo becomes a moving clip, in order.</span>
+                </div>
+              )}
+              {veoMode === 'character' &&
+                (characters.length ? (
+                  <label className="mt-2 flex items-center gap-2">
+                    Character
+                    <select value={characterId} onChange={(e) => setCharacterId(e.target.value)} aria-label="Character" className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs">
+                      {characters.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    <span>Same person in every scene · Pro or Cinema, 8 s per clip.</span>
+                  </label>
+                ) : (
+                  <p className="mt-2">
+                    No characters yet.{' '}
+                    <Link href="/app/studio/characters" className="font-medium underline">
+                      Add one from your photos
+                    </Link>{' '}
+                    — then the same person appears in every clip.
+                  </p>
+                ))}
               {veo && (
                 <div className="mt-2">
-                  <VeoMeter veo={veo} need={scenes * 4} />
+                  <VeoMeter veo={veo} need={scenes * clipSeconds} />
                 </div>
               )}
               <div role="radiogroup" aria-label="Clip quality" className="mt-2 flex gap-1">
@@ -254,11 +345,12 @@ function AiVideoModal({ onClose, paid, veo }: { onClose: () => void; paid: boole
                   <button
                     key={q}
                     role="radio"
-                    aria-checked={clipQuality === q}
+                    aria-checked={quality === q}
                     onClick={() => setClipQuality(q)}
-                    className={`rounded-lg px-2.5 py-1 font-medium ring-1 ${clipQuality === q ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200'}`}
+                    disabled={veoMode === 'character' && q === 'quick'}
+                    className={`rounded-lg px-2.5 py-1 font-medium ring-1 disabled:opacity-40 ${quality === q ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200'}`}
                   >
-                    {CLIP_QUALITIES[q].label} · {P[clipAction(q)] * 4 * scenes} cr
+                    {CLIP_QUALITIES[q].label} · {P[clipAction(q)] * clipSeconds * scenes} cr
                   </button>
                 ))}
               </div>
@@ -297,7 +389,13 @@ function AiVideoModal({ onClose, paid, veo }: { onClose: () => void; paid: boole
           </button>
           <button
             onClick={go}
-            disabled={pending || brief.trim().length < 3 || (visuals === 'veo' && veo !== null && veo.left < scenes * 4)}
+            disabled={
+              pending ||
+              brief.trim().length < 3 ||
+              (visuals === 'veo' && veo !== null && veo.left < scenes * clipSeconds) ||
+              (visuals === 'veo' && veoMode === 'photos' && !media.some((m) => m.kind === 'image')) ||
+              (visuals === 'veo' && veoMode === 'character' && !characterId)
+            }
             className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             {pending ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}

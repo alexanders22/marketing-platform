@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
-import { Check, Compass, Lightbulb, Loader2, MapPin, RotateCcw, Sparkles, Users } from 'lucide-react'
+import { ArrowLeft, Check, Compass, Lightbulb, Loader2, MapPin, RotateCcw, Sparkles, Users } from 'lucide-react'
 import type { BriefAdvice } from '@/lib/ai'
 import { getAdvice, saveAnswers, translateAdvice } from '@/app/app/brief/actions'
 import { creditsLabel } from '@/lib/pricing'
@@ -38,7 +38,20 @@ export function BriefAssistant({
   const [used, setUsed] = useState<number | null>(null)
   const [error, setError] = useState<string>()
   const [saved, setSaved] = useState(false)
+  // The interview: one question at a time, then the final suggestions.
+  const [step, setStep] = useState(0)
+  const [done, setDone] = useState(false)
   const [pending, start] = useTransition()
+
+  const show = (a: BriefAdvice) => {
+    setAdvice(a)
+    setAdviceLang(lang)
+    setAnswers({})
+    setStep(0)
+    setDone(a.questions.length === 0)
+    setAudience(a.audiences.length ? 0 : null)
+    setUsed(null)
+  }
 
   const ask = () =>
     start(async () => {
@@ -46,11 +59,7 @@ export function BriefAssistant({
       setSaved(false)
       const res = await getAdvice({ kind, goal, language: lang })
       if (res.error || !res.advice) return setError(res.error)
-      setAdvice(res.advice)
-      setAdviceLang(lang)
-      setAnswers({})
-      setAudience(res.advice.audiences.length ? 0 : null)
-      setUsed(null)
+      show(res.advice)
     })
 
   // Switching language keeps the suggestions and answers — just translated.
@@ -76,19 +85,20 @@ export function BriefAssistant({
 
   const answered = advice ? advice.questions.flatMap((q, i) => (answers[i]?.trim() ? [{ question: q.question, answer: answers[i].trim() }] : [])) : []
 
-  const saveAndRefine = (again: boolean) =>
+  // Answers are kept in the dossier; with answers the ideas are written
+  // again from them (no new questions), without — the first ideas stay.
+  const finish = () =>
     start(async () => {
       setError(undefined)
+      if (answered.length === 0) return setDone(true)
       await saveAnswers(answered)
       setSaved(true)
-      if (!again) return
-      const res = await getAdvice({ kind, goal, language: lang })
-      if (res.error || !res.advice) return setError(res.error)
-      setAdvice(res.advice)
-      setAdviceLang(lang)
-      setAnswers({})
-      setAudience(res.advice.audiences.length ? 0 : null)
-      setUsed(null)
+      const res = await getAdvice({ kind, goal, language: lang, final: true })
+      if (res.error || !res.advice) {
+        setDone(true)
+        return setError(res.error)
+      }
+      show(res.advice)
     })
 
   if (!open) {
@@ -180,63 +190,87 @@ export function BriefAssistant({
             </div>
           )}
 
-          {advice.questions.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold tracking-wide text-zinc-500">A FEW QUESTIONS — ANSWER WHAT YOU CAN</p>
-              <ul className="mt-2 space-y-3">
-                {advice.questions.map((q, i) => (
-                  <li key={q.question} className="rounded-xl bg-white p-3 ring-1 ring-zinc-200">
-                    <p className="text-sm font-medium">{q.question}</p>
-                    {q.why && <p className="text-xs text-zinc-500">{q.why}</p>}
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {q.options.map((o) => (
-                        <button
-                          type="button"
-                          key={o}
-                          onClick={() => setAnswers((a) => ({ ...a, [i]: o }))}
-                          className={`rounded-full px-2.5 py-1 text-xs ring-1 ${answers[i] === o ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-zinc-50 text-zinc-700 ring-zinc-200 hover:bg-zinc-100'}`}
-                        >
-                          {o}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      value={answers[i] ?? ''}
-                      onChange={(e) => setAnswers((a) => ({ ...a, [i]: e.target.value }))}
-                      placeholder="Or write your answer"
-                      aria-label={`Answer: ${q.question}`}
-                      className="mt-2 w-full rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:border-indigo-400"
-                    />
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => saveAndRefine(true)}
-                  disabled={pending || answered.length === 0}
-                  className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-40"
-                >
-                  Save answers & suggest again · {creditsLabel(P.advice)}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => saveAndRefine(false)}
-                  disabled={pending || answered.length === 0}
-                  className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-white disabled:opacity-40"
-                >
-                  Just save
-                </button>
-                {saved && (
-                  <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
-                    <Check size={13} /> Saved to the dossier — Loudpilot won&apos;t ask again
+          {!done && advice.questions.length > 0 && (() => {
+            const total = advice.questions.length
+            const q = advice.questions[step]
+            const last = step === total - 1
+            return (
+              <div className="rounded-xl bg-white p-4 ring-1 ring-zinc-200" role="group" aria-label="Questions">
+                <div className="flex items-center justify-between text-xs text-zinc-500">
+                  <span className="font-semibold tracking-wide">
+                    QUESTION {step + 1} OF {total}
                   </span>
-                )}
+                  <span>{answered.length} answered</span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-label="Questions progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={step + 1}>
+                  <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${((step + 1) / total) * 100}%` }} />
+                </div>
+                <p className="mt-4 font-medium">{q.question}</p>
+                {q.why && <p className="text-xs text-zinc-500">{q.why}</p>}
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {q.options.map((o) => (
+                    <button
+                      type="button"
+                      key={o}
+                      onClick={() => setAnswers((a) => ({ ...a, [step]: o }))}
+                      className={`rounded-full px-3 py-1.5 text-sm ring-1 ${answers[step] === o ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-zinc-50 text-zinc-700 ring-zinc-200 hover:bg-zinc-100'}`}
+                    >
+                      {o}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  value={answers[step] ?? ''}
+                  onChange={(e) => setAnswers((a) => ({ ...a, [step]: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && answers[step]?.trim() && (e.preventDefault(), last ? finish() : setStep(step + 1))}
+                  placeholder="Or write your answer"
+                  aria-label={`Answer: ${q.question}`}
+                  className="mt-3 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStep(step - 1)}
+                    disabled={step === 0 || pending}
+                    className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-30"
+                  >
+                    <ArrowLeft size={14} /> Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAnswers((a) => ({ ...a, [step]: '' }))
+                      if (last) finish()
+                      else setStep(step + 1)
+                    }}
+                    disabled={pending}
+                    className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100"
+                  >
+                    Skip
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => (last ? finish() : setStep(step + 1))}
+                    disabled={pending || (!last && !answers[step]?.trim())}
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-1.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-40"
+                  >
+                    {pending && <Loader2 size={14} className="animate-spin" />}
+                    {last ? (answered.length > 0 ? `Finish · ${creditsLabel(P.advice)}` : 'Show ideas') : 'Next'}
+                  </button>
+                </div>
+                <button type="button" onClick={finish} disabled={pending} className="mt-3 text-xs text-zinc-500 underline hover:text-zinc-900">
+                  {answered.length > 0 ? 'Enough questions — show ideas with my answers' : 'Skip the questions — show ideas now'}
+                </button>
               </div>
-            </div>
+            )
+          })()}
+          {saved && done && (
+            <p className="inline-flex items-center gap-1 text-xs text-emerald-700">
+              <Check size={13} /> Your answers are saved to the dossier — Loudpilot won&apos;t ask again
+            </p>
           )}
 
-          {advice.audiences.length > 0 && (
+          {done && advice.audiences.length > 0 && (
             <div>
               <p className="text-xs font-semibold tracking-wide text-zinc-500">WHO TO REACH</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -265,7 +299,7 @@ export function BriefAssistant({
             </div>
           )}
 
-          {advice.ideas.length > 0 && (
+          {done && advice.ideas.length > 0 && (
             <div>
               <p className="text-xs font-semibold tracking-wide text-zinc-500">IDEAS</p>
               <ul className="mt-2 space-y-2">

@@ -1,6 +1,14 @@
 import { expect, test, type Page } from '@playwright/test'
 import { newAccount, sql } from './helpers'
 
+// Social campaigns ask about pictures first: answer, then create.
+async function submitCampaign(page: Page, pictures: 'No pictures' | 'AI-generated' | 'Choose photos' = 'No pictures') {
+  await page.getByRole('main').getByRole('button', { name: 'Create campaign' }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'Pictures for your posts' })
+  await dialog.getByRole('radio', { name: pictures }).click()
+  await dialog.getByRole('button', { name: /^(Create campaign|Planning… up to a minute)$/ }).click()
+}
+
 // Campaign wizard checks that never reach the AI (validation, steppers, cost
 // summary, credit gate). Every server call here returns before generation.
 
@@ -114,7 +122,7 @@ test('not enough credits: social + blog refused before AI, nothing created, noth
   await page.getByPlaceholder('Summer sale').fill('QA too expensive')
   await page.locator('textarea').fill('A campaign that costs more credits than we have.')
   const t0 = Date.now()
-  await page.getByRole('button', { name: 'Create campaign' }).click()
+  await submitCampaign(page)
   await expect(page.getByText('This needs 6 credits and you have 3. Choose a plan to get more.')).toBeVisible()
   expect(Date.now() - t0).toBeLessThan(5_000) // refused before generation
   await expect(page).toHaveURL(/\/app\/campaigns\/new/)
@@ -141,12 +149,12 @@ test('server validation: empty start date and empty time give readable errors (n
   await page.getByPlaceholder('Summer sale').fill('QA validation')
   await page.locator('textarea').fill('A brief that is long enough to pass.')
   await page.locator('input[type=date]').fill('')
-  await page.getByRole('button', { name: 'Create campaign' }).click()
+  await submitCampaign(page)
   await expect(page.getByText('Pick a start date')).toBeVisible()
 
   await page.locator('input[type=date]').fill('2026-12-01')
   await page.locator('input[type=time]').fill('')
-  await page.getByRole('button', { name: 'Create campaign' }).click()
+  await submitCampaign(page)
   const err = page.locator('p.bg-red-50')
   await expect(err).not.toHaveText('Pick a start date')
   await expect(err).toBeVisible()
@@ -165,7 +173,7 @@ test('start date in the past is rejected', async ({ page }) => {
   await page.getByPlaceholder('Summer sale').fill('QA past date')
   await page.locator('textarea').fill('A brief that is long enough to pass.')
   await page.locator('input[type=date]').fill('2024-01-01')
-  await page.getByRole('button', { name: 'Create campaign' }).click()
+  await submitCampaign(page)
   const err = page.locator('p.bg-red-50')
   await expect(err).toBeVisible()
   // Actual: the server accepts the past date and only fails on credits.

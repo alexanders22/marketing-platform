@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
-import { ArrowLeft, CalendarRange, FileText, Loader2, Pencil, RefreshCw, Sparkles, Target, Trash2 } from 'lucide-react'
+import { useEffect, useState, useTransition } from 'react'
+import { ArrowLeft, CalendarRange, FileText, ImagePlus, Loader2, Pencil, RefreshCw, Sparkles, Target, Trash2 } from 'lucide-react'
 import { ChannelIcons } from '@/components/channels'
 import { LocalTime } from '@/components/LocalTime'
 import { writeArticle } from '../../blog/actions'
-import { deleteCampaign, regenerateCampaignPost } from '../actions'
+import { addCampaignImages, deleteCampaign, regenerateCampaignPost } from '../actions'
+import { CampaignImagesModal, type ImagesChoice } from '../CampaignImages'
 import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
 
@@ -27,7 +28,19 @@ type Item = {
 const day = (iso: string) => <LocalTime iso={iso} options={{ weekday: 'short', day: 'numeric', month: 'short' }} />
 const time = (iso: string) => <LocalTime iso={iso} options={{ hour: '2-digit', minute: '2-digit' }} />
 
-export function CampaignView({ campaign: c, posts }: { campaign: Campaign; posts: Item[] }) {
+export type ImageProgress = { generating: boolean; done: number; total: number }
+
+export function CampaignView({
+  campaign: c,
+  posts,
+  images,
+  imagesError,
+}: {
+  campaign: Campaign
+  posts: Item[]
+  images: ImageProgress
+  imagesError?: string
+}) {
   const P = usePrices()
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
@@ -35,6 +48,27 @@ export function CampaignView({ campaign: c, posts }: { campaign: Campaign; posts
   const [, start] = useTransition()
   const isBlog = c.kind === 'BLOG'
   const written = posts.filter((p) => p.content.trim()).length
+  const bare = posts.filter((p) => !p.image).length
+  const [pics, setPics] = useState(false)
+  const [picsError, setPicsError] = useState<string | undefined>(imagesError)
+  const [picsBusy, startPics] = useTransition()
+
+  // AI pictures arrive in the background: refresh until they are all in.
+  useEffect(() => {
+    if (!images.generating) return
+    const t = setInterval(() => router.refresh(), 4000)
+    return () => clearInterval(t)
+  }, [images.generating, router])
+
+  const addPictures = (choice: ImagesChoice) =>
+    startPics(async () => {
+      if (!choice) return setPics(false)
+      setPicsError(undefined)
+      const res = await addCampaignImages(c.id, choice)
+      if (res.error) return setPicsError(res.error)
+      setPics(false)
+      router.refresh()
+    })
 
   const run = (id: string, fn: () => Promise<{ error?: string }>) => {
     setBusy(id)
@@ -78,6 +112,40 @@ export function CampaignView({ campaign: c, posts }: { campaign: Campaign; posts
       </div>
 
       <p className="mb-6 rounded-xl bg-zinc-50 p-4 text-sm whitespace-pre-wrap text-zinc-700">{c.brief}</p>
+
+      {!isBlog && images.generating && (
+        <div className="mb-6 rounded-xl bg-indigo-50 p-4 text-sm text-indigo-900 ring-1 ring-indigo-200" role="status">
+          <p className="flex items-center gap-2 font-medium">
+            <Loader2 size={15} className="animate-spin" /> Making pictures for the posts · {images.done} of {images.total}
+          </p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white">
+            <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${images.total ? (images.done / images.total) * 100 : 0}%` }} />
+          </div>
+        </div>
+      )}
+      {!isBlog && !images.generating && bare > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-zinc-300 p-4 text-sm">
+          <ImagePlus size={18} className="text-zinc-500" />
+          <span className="mr-auto">
+            {bare} post{bare === 1 ? '' : 's'} without a picture.
+            {picsError && !pics && <span className="ml-2 text-red-600">{picsError}</span>}
+          </span>
+          <button onClick={() => setPics(true)} className="rounded-lg bg-zinc-900 px-3 py-1.5 font-semibold text-white hover:bg-zinc-800">
+            Add pictures
+          </button>
+        </div>
+      )}
+      {pics && (
+        <CampaignImagesModal
+          posts={bare}
+          confirm="Add pictures"
+          busy={picsBusy}
+          error={picsError}
+          allowNone={false}
+          onConfirm={addPictures}
+          onClose={() => setPics(false)}
+        />
+      )}
       {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <ol className="relative space-y-4 border-l-2 border-zinc-100 pl-6">

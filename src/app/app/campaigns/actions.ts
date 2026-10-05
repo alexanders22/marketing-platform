@@ -2,6 +2,7 @@
 
 import { withDossier } from '@/lib/dossier'
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { z } from 'zod'
 import {
   aiEnabled,
@@ -17,6 +18,9 @@ import { prisma } from '@/lib/prisma'
 import { BATCH, chunks, pairWithDates, slots, startsInPast } from '@/lib/campaign-plan'
 import { dayIn, isValidTimeZone } from '@/lib/time'
 import { aiError } from '@/lib/ai-health'
+import { generateCampaignImages } from '@/lib/campaign-images'
+import { IMAGE_STYLE_IDS, type ImageStyle } from '@/lib/image-styles'
+import { templatePhotos } from '@/lib/template-photos'
 
 const NETWORKS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST'] as const
 
@@ -214,4 +218,51 @@ export async function deleteCampaign(id: string, withPosts: boolean) {
   ])
   revalidatePath('/app', 'layout')
   return {}
+}
+
+const Images = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('ai'),
+    // null: each post's own text is the brief.
+    prompt: z.string().trim().max(1000).nullable(),
+    style: z.enum(IMAGE_STYLE_IDS as [ImageStyle, ...ImageStyle[]]),
+  }),
+  // Photos from the library (media ids) or the templates ("tpl:…"), used in order.
+  z.object({ mode: z.literal('photos'), photoIds: z.array(z.string().max(60)).min(1, 'Pick at least one photo').max(30) }),
+])
+
+// Pictures for the campaign's posts that have none: AI images made in the
+// background (charged per image), or chosen photos spread over the posts.
+export async function addCampaignImages(campaignId: string, raw: z.input<typeof Images>): Promise<{ error?: string; started?: number }> {
+  const { account, workspace } = await requireContext()
+  const parsed = Images.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  const opt = parsed.data
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: campaignId, workspaceId: workspace.id },
+    include: { posts: { where: { mediaIds: { isEmpty: true } }, orderBy: { scheduledAt: 'asc' }, select: { id: true } } },
+  })
+  if (!campaign) return { error: 'Campaign not found' }
+  const posts = campaign.posts
+  if (posts.length === 0) return { error: 'Every post already has a picture' }
+
+  if (opt.mode === 'photos') {
+    const tpl = await templatePhotos(workspace.id, opt.photoIds)
+    const own = await prisma.media.findMany({ where: { id: { in: opt.photoIds }, workspaceId: workspace.id, kind: 'IMAGE' }, select: { id: true } })
+    const ids = opt.photoIds.map((id) => tpl.get(id)?.id ?? own.find((m) => m.id === id)?.id).filter((x): x is string => Boolean(x))
+    if (ids.length === 0) return { error: 'The photos are not available' }
+    await prisma.$transaction(posts.map((p, i) => prisma.post.update({ where: { id: p.id }, data: { mediaIds: [ids[i % ids.length]] } })))
+    revalidatePath(`/app/campaigns/${campaign.id}`)
+    return { started: 0 }
+  }
+
+  if (!aiEnabled()) return { error: 'AI generation is not connected yet.' }
+  if (campaign.imageStatus === 'GENERATING' && Date.now() - campaign.updatedAt.getTime() < 30 * 60_000) return { error: 'Images are already being made' }
+  const COST = await prices()
+  const need = posts.length * COST.image
+  if (account.creditBalance < need) return { error: notEnough(need, account.creditBalance) }
+  await prisma.campaign.update({ where: { id: campaign.id }, data: { imageStatus: 'GENERATING', imagesDone: 0, imagesTotal: posts.length } })
+  after(() => generateCampaignImages(campaign.id, { prompt: opt.prompt || null, style: opt.style }).catch((e) => console.error('campaign images failed', e)))
+  revalidatePath(`/app/campaigns/${campaign.id}`)
+  return { started: posts.length }
 }

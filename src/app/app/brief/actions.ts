@@ -15,6 +15,8 @@ export async function getAdvice(input: {
   kind: 'post' | 'campaign'
   goal: string
   language?: string
+  // After the interview: ideas from the answers, no more questions.
+  final?: boolean
 }): Promise<{ advice?: BriefAdvice; error?: string }> {
   const { account, workspace, brand } = await requireContext()
   const COST = await prices()
@@ -33,6 +35,7 @@ export async function getAdvice(input: {
       goal: input.goal.slice(0, 1000),
       performance,
       language,
+      final: input.final === true,
     })
   } catch (e) {
     console.error('adviseBrief failed', e)

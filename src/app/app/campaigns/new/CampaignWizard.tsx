@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { ArrowLeft, FileText, Loader2, Target, Zap } from 'lucide-react'
 import { ChannelPicker, type Network } from '@/components/channels'
-import { createBlogCampaign, createSocialCampaign } from '../actions'
+import { addCampaignImages, createBlogCampaign, createSocialCampaign } from '../actions'
+import { CampaignImagesModal, type ImagesChoice } from '../CampaignImages'
 import { audienceLine, BriefAssistant } from '@/components/BriefAssistant'
 import { usePrices } from '@/components/Prices'
 
@@ -36,12 +37,14 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
   const [language, setLanguage] = useState<(typeof LANGS)[number]>('English')
   const [channels, setChannels] = useState<Network[]>(['FACEBOOK', 'INSTAGRAM'])
   const [error, setError] = useState<string>()
+  // Social campaigns ask about pictures before they are written.
+  const [askImages, setAskImages] = useState(false)
   const [pending, start] = useTransition()
 
   const total = kind === 'blog' ? count : weeks * perWeek
   const cost = total * (kind === 'blog' ? P.blogOutline : P.campaignPost)
 
-  const submit = () =>
+  const submit = (images: ImagesChoice = null) =>
     start(async () => {
       setError(undefined)
       const base = { name, brief, startsOn, time, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, tone, language }
@@ -49,8 +52,15 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
         kind === 'blog'
           ? await createBlogCampaign({ ...base, count, perWeek })
           : await createSocialCampaign({ ...base, weeks, postsPerWeek: perWeek, channels })
-      if (res.error) setError(res.error)
-      else router.push(`/app/campaigns/${res.id}`)
+      if (res.error || !res.id) {
+        // Back to the form: most errors are about its fields.
+        setAskImages(false)
+        return setError(res.error)
+      }
+      // The posts exist: pictures follow (AI ones in the background). A
+      // problem with them still opens the campaign, where they can be added.
+      const pics = images ? await addCampaignImages(res.id, images) : null
+      router.push(`/app/campaigns/${res.id}${pics?.error ? `?images=${encodeURIComponent(pics.error)}` : ''}`)
     })
 
   return (
@@ -139,7 +149,7 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
           {total} {kind === 'blog' ? 'article outlines' : 'posts'} · {cost} credit{cost === 1 ? '' : 's'} · {credits.toLocaleString()} left
         </span>
         <button
-          onClick={submit}
+          onClick={() => (kind === 'social' ? setAskImages(true) : submit())}
           disabled={pending || !name.trim() || brief.trim().length < 10}
           className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-40"
         >
@@ -147,6 +157,15 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
           {pending ? 'Planning… up to a minute' : kind === 'blog' ? 'Plan the series' : 'Create campaign'}
         </button>
       </div>
+      {askImages && (
+        <CampaignImagesModal
+          posts={total}
+          confirm={pending ? 'Planning… up to a minute' : 'Create campaign'}
+          busy={pending}
+          onConfirm={(choice) => submit(choice)}
+          onClose={() => setAskImages(false)}
+        />
+      )}
     </div>
   )
 }

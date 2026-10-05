@@ -343,6 +343,10 @@ model Campaign {
   tone         String
   language     String
   status       CampaignStatus @default(DRAFT)
+  // AI images for the posts, made in the background: GENERATING → DONE.
+  imageStatus  String?
+  imagesDone   Int            @default(0)
+  imagesTotal  Int            @default(0)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 

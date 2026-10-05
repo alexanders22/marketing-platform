@@ -241,6 +241,10 @@ const AiInput = z.object({
   scenes: z.number().int().min(3).max(8),
   visuals: z.enum(['library', 'ai', 'veo', 'none']),
   clipQuality: z.enum(Object.keys(CLIP_QUALITIES) as [ClipQuality, ...ClipQuality[]]).optional(),
+  // Veo clips: from a description, by animating the picked photos, or with
+  // a character kept the same in every scene.
+  veoMode: z.enum(['text', 'photos', 'character']).optional(),
+  characterId: z.string().max(40).nullable().optional(),
   mediaIds: z.array(z.string().max(40)).max(20),
   voice: z.boolean(),
   language: z.string(),
@@ -257,17 +261,32 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
   if (!aiEnabled()) return { error: 'AI is not connected yet.' }
   const format: Format = isFormat(input.format) ? input.format : '9:16'
   const language = LANGUAGES.find((l) => l === input.language) ?? 'English'
-  const clipQuality: ClipQuality = input.clipQuality ?? 'quick'
+  const veoMode = input.visuals === 'veo' ? (input.veoMode ?? 'text') : null
+  // Veo keeps a character only on Pro/Cinema and in 8-second clips.
+  const clipQuality: ClipQuality = veoMode === 'character' && (input.clipQuality ?? 'quick') === 'quick' ? 'pro' : (input.clipQuality ?? 'quick')
+  const clipSeconds = veoMode === 'character' ? 8 : 4
+  const character =
+    veoMode === 'character' && input.characterId
+      ? await prisma.character.findFirst({ where: { id: input.characterId, workspaceId: workspace.id }, select: { id: true } })
+      : null
+  if (veoMode === 'character' && !character) return { error: 'Pick a character' }
+  const photos =
+    veoMode === 'photos'
+      ? (await prisma.media.findMany({ where: { id: { in: input.mediaIds }, workspaceId: workspace.id, kind: 'IMAGE' } })).sort(
+          (a, b) => input.mediaIds.indexOf(a.id) - input.mediaIds.indexOf(b.id),
+        )
+      : []
+  if (veoMode === 'photos' && photos.length === 0) return { error: 'Pick the photos to animate' }
   const max =
     COST.videoScript +
     (input.voice ? COST.voice : 0) +
     (input.visuals === 'ai' ? input.scenes * COST.image : 0) +
-    (input.visuals === 'veo' ? input.scenes * COST[clipAction(clipQuality)] * 4 : 0)
-  if (input.visuals === 'veo' && !veoEnabled()) return { error: 'AI video is not connected yet.' }
+    (input.visuals === 'veo' ? input.scenes * COST[clipAction(clipQuality)] * clipSeconds : 0)
+  if (input.visuals === 'veo' && !veoEnabled() && !input.brief.startsWith('[test]')) return { error: 'AI video is not connected yet.' }
   if (input.visuals === 'veo' && !isPaid(account) && user.role !== 'SUPER_ADMIN') return { error: PAID_ONLY }
   if (input.visuals === 'veo' && user.role !== 'SUPER_ADMIN') {
     const allowance = await veoAllowance(account)
-    if (allowance.left < input.scenes * 4) return { error: veoLimitMessage(allowance, input.scenes * 4) }
+    if (allowance.left < input.scenes * clipSeconds) return { error: veoLimitMessage(allowance, input.scenes * clipSeconds) }
   }
   if (account.creditBalance < max) return { error: notEnough(max, account.creditBalance) }
 
@@ -310,7 +329,8 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     ...emptyDoc(bg),
     scenes: script.scenes.map((sc, i) =>
       newScene(bg, {
-        media: input.visuals === 'ai' ? images[i] : ordered.length ? asSceneMedia(ordered[i % ordered.length]) : null,
+        // Photos being animated show until their clips arrive.
+        media: input.visuals === 'ai' ? images[i] : photos.length ? asSceneMedia(photos[i % photos.length]) : ordered.length ? asSceneMedia(ordered[i % ordered.length]) : null,
         duration: sc.seconds,
         text: sc.text,
         voice: sc.voice,
@@ -355,20 +375,25 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     const fresh = await prisma.account.findUniqueOrThrow({ where: { id: account.id }, select: { creditBalance: true } })
     let balance = fresh.creditBalance
     for (const [i, sc] of doc.scenes.entries()) {
-      const prompt = `${script.scenes[i]?.visual || sc.text}. Vertical social video, no text on screen.`
+      const visual = script.scenes[i]?.visual || sc.text
+      const prompt =
+        veoMode === 'photos'
+          ? `Bring this photo to life: ${visual}. Gentle, realistic camera and subject motion; keep the place and people as they are. No text on screen.`
+          : `${visual}. Vertical social video, no text on screen.`
       const res = await beginClip(account.id, balance, workspace.id, {
         prompt: input.brief.startsWith('[test]') ? `[test] ${prompt}` : prompt,
         quality: clipQuality,
-        seconds: 4,
+        seconds: clipSeconds,
         format,
-        imageId: null,
+        imageId: veoMode === 'photos' ? photos[i % photos.length].id : null,
         videoId: v.id,
         sceneId: sc.id,
+        characterId: character?.id ?? null,
       })
       if (res.jobId) {
         sc.clipJobId = res.jobId
-        sc.duration = Math.max(sc.duration, 4)
-        balance -= COST[clipAction(clipQuality)] * 4
+        sc.duration = Math.max(sc.duration, clipSeconds)
+        balance -= COST[clipAction(clipQuality)] * clipSeconds
       }
     }
     await prisma.video.update({ where: { id: v.id }, data: { data: doc as unknown as Prisma.InputJsonValue } })
