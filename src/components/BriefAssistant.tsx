@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { Check, Compass, Lightbulb, Loader2, MapPin, RotateCcw, Sparkles, Users } from 'lucide-react'
 import type { BriefAdvice } from '@/lib/ai'
-import { getAdvice, saveAnswers } from '@/app/app/brief/actions'
+import { getAdvice, saveAnswers, translateAdvice } from '@/app/app/brief/actions'
 import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
 
@@ -25,6 +25,11 @@ export function BriefAssistant({
   defaultOpen?: boolean
 }) {
   const P = usePrices()
+  // The composer owns the language; elsewhere the assistant has its own.
+  const [ownLang, setOwnLang] = useState('English')
+  const lang = language ?? ownLang
+  const [adviceLang, setAdviceLang] = useState<string>()
+  const [translating, startTranslate] = useTransition()
   const [open, setOpen] = useState(defaultOpen)
   const [goal, setGoal] = useState('')
   const [advice, setAdvice] = useState<BriefAdvice>()
@@ -39,13 +44,35 @@ export function BriefAssistant({
     start(async () => {
       setError(undefined)
       setSaved(false)
-      const res = await getAdvice({ kind, goal, language })
+      const res = await getAdvice({ kind, goal, language: lang })
       if (res.error || !res.advice) return setError(res.error)
       setAdvice(res.advice)
+      setAdviceLang(lang)
       setAnswers({})
       setAudience(res.advice.audiences.length ? 0 : null)
       setUsed(null)
     })
+
+  // Switching language keeps the suggestions and answers — just translated.
+  const translateTo = useCallback(
+    (to: string) => {
+      if (!advice || to === adviceLang) return
+      startTranslate(async () => {
+        setError(undefined)
+        const res = await translateAdvice(advice, to)
+        if (res.error || !res.advice) return setError(res.error)
+        setAdvice(res.advice)
+        setAdviceLang(to)
+      })
+    },
+    [advice, adviceLang],
+  )
+  const lastLang = useRef(lang)
+  useEffect(() => {
+    if (lastLang.current === lang) return
+    lastLang.current = lang
+    translateTo(lang)
+  }, [lang, translateTo])
 
   const answered = advice ? advice.questions.flatMap((q, i) => (answers[i]?.trim() ? [{ question: q.question, answer: answers[i].trim() }] : [])) : []
 
@@ -55,9 +82,10 @@ export function BriefAssistant({
       await saveAnswers(answered)
       setSaved(true)
       if (!again) return
-      const res = await getAdvice({ kind, goal, language })
+      const res = await getAdvice({ kind, goal, language: lang })
       if (res.error || !res.advice) return setError(res.error)
       setAdvice(res.advice)
+      setAdviceLang(lang)
       setAnswers({})
       setAudience(res.advice.audiences.length ? 0 : null)
       setUsed(null)
@@ -88,11 +116,25 @@ export function BriefAssistant({
           <h2 className="font-semibold">Let Loudpilot suggest {kind === 'campaign' ? 'a campaign' : 'what to post'}</h2>
           <p className="text-sm text-zinc-600">Who to reach — by location and product — what it still needs to know, and ideas from your results.</p>
         </div>
-        {advice && (
-          <button type="button" onClick={() => setAdvice(undefined)} className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900">
-            <RotateCcw size={12} /> Start over
-          </button>
-        )}
+        <div className="flex flex-col items-end gap-1">
+          {language === undefined && (
+            <select
+              value={ownLang}
+              onChange={(e) => setOwnLang(e.target.value)}
+              aria-label="Suggestions language"
+              className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs"
+            >
+              {['English', 'Georgian', 'Russian'].map((l) => (
+                <option key={l}>{l}</option>
+              ))}
+            </select>
+          )}
+          {advice && (
+            <button type="button" onClick={() => setAdvice(undefined)} className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900">
+              <RotateCcw size={12} /> Start over
+            </button>
+          )}
+        </div>
       </div>
 
       {!advice && (
@@ -118,8 +160,13 @@ export function BriefAssistant({
       )}
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
+      {translating && (
+        <p className="mt-3 inline-flex items-center gap-1.5 text-sm text-indigo-700" role="status">
+          <Loader2 size={14} className="animate-spin" /> Translating to {lang}…
+        </p>
+      )}
       {advice && (
-        <div className={`mt-4 space-y-5 ${pending ? 'opacity-60' : ''}`}>
+        <div className={`mt-4 space-y-5 ${pending || translating ? 'opacity-60' : ''}`}>
           {advice.known.length > 0 && (
             <div>
               <p className="text-xs font-semibold tracking-wide text-zinc-500">WHAT I KNOW</p>

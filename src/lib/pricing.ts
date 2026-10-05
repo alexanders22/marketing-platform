@@ -16,22 +16,28 @@ export const ACTIONS = {
   videoScript: { label: 'Video script', unit: 'script', credits: 1, costUsd: 0.004 },
   voice: { label: 'Voice-over', unit: 'video', credits: 1, costUsd: 0.01 },
   clipQuick: { label: 'AI clip · Quick (Veo 3.1 Lite)', unit: 'second', credits: 1, costUsd: 0.05 },
-  clipPro: { label: 'AI clip · Pro (Veo 3.1 Fast)', unit: 'second', credits: 2, costUsd: 0.15 },
+  clipPro: { label: 'AI clip · Pro (Veo 3.1 Fast)', unit: 'second', credits: 4, costUsd: 0.15 },
   clipCinema: { label: 'AI clip · Cinema (Veo 3.1)', unit: 'second', credits: 5, costUsd: 0.4 },
 } as const
 
 export type Action = keyof typeof ACTIONS
 export const ACTION_KEYS = Object.keys(ACTIONS) as Action[]
 
+export const VEO_PLANS = ['STARTER', 'TEAM', 'AGENCY'] as const
+export type VeoPlan = (typeof VEO_PLANS)[number]
+
 export type Pricing = {
   // What one credit sells for as a top-up (plans have their own effective
   // price per credit, shown next to it).
   creditPriceUsd: number
   actions: Record<Action, { credits: number; costUsd: number }>
+  // Seconds of AI clips (Veo) each paid plan may generate per calendar month.
+  veoSecondsPerMonth: Record<VeoPlan, number>
 }
 
 export const DEFAULT_PRICING: Pricing = {
   creditPriceUsd: 0.1,
+  veoSecondsPerMonth: { STARTER: 32, TEAM: 120, AGENCY: 320 },
   actions: Object.fromEntries(ACTION_KEYS.map((k) => [k, { credits: ACTIONS[k].credits, costUsd: ACTIONS[k].costUsd }])) as Pricing['actions'],
 }
 

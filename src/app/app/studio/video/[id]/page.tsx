@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { mediaUrl } from '@/lib/storage'
 import { safeFetchBytes } from '@/lib/safe-fetch'
 import { isPaid } from '@/lib/plans'
+import { veoAllowance } from '@/lib/credits'
 import { isFormat, type VideoDoc } from '@/lib/video'
 import { VideoEditor } from './VideoEditor'
 
@@ -22,6 +23,7 @@ export default async function VideoPage({ params }: PageProps<'/app/studio/video
       video={{ id: v.id, name: v.name, format: isFormat(v.format) ? v.format : '9:16', doc: v.data as unknown as VideoDoc }}
       brand={{ name: workspace.name, colors: brand?.colors ?? [], logoUrl: logo }}
       paid={isPaid(account) || user.role === 'SUPER_ADMIN'}
+      veo={user.role === 'SUPER_ADMIN' ? null : await veoAllowance(account)}
       initialStatus={{
         status: v.status,
         error: v.error,

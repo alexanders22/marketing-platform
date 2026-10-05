@@ -1,7 +1,7 @@
 import 'server-only'
 import type { CreditReason, Prisma } from '@prisma/client'
 import { prisma } from './prisma'
-import { ACTION_KEYS, DEFAULT_PRICING, pricesOf, type Action, type Prices, type Pricing } from './pricing'
+import { ACTION_KEYS, DEFAULT_PRICING, pricesOf, VEO_PLANS, type Action, type Prices, type Pricing } from './pricing'
 
 // Credit prices: defaults in src/lib/pricing.ts, overridden by super admins
 // (Setting "pricing"). Read through a short cache — every charge asks.
@@ -14,6 +14,9 @@ export async function getPricing(): Promise<Pricing> {
   const saved = (row?.value ?? {}) as Partial<Pricing>
   const value: Pricing = {
     creditPriceUsd: typeof saved.creditPriceUsd === 'number' ? saved.creditPriceUsd : DEFAULT_PRICING.creditPriceUsd,
+    veoSecondsPerMonth: Object.fromEntries(
+      VEO_PLANS.map((p) => [p, Number.isFinite(saved.veoSecondsPerMonth?.[p]) ? saved.veoSecondsPerMonth![p] : DEFAULT_PRICING.veoSecondsPerMonth[p]]),
+    ) as Pricing['veoSecondsPerMonth'],
     actions: Object.fromEntries(
       ACTION_KEYS.map((k) => {
         const a = saved.actions?.[k]
@@ -81,3 +84,23 @@ export async function balanceOf(accountId: string) {
 
 export const notEnough = (need: number, have: number) =>
   `This needs ${need} credit${need === 1 ? '' : 's'} and you have ${have}. Choose a plan to get more.`
+
+const CLIP_ACTIONS = ['clipQuick', 'clipPro', 'clipCinema']
+
+// Seconds of AI clips an account used this calendar month (UTC): charges
+// count, refunds (negative units) give them back.
+export async function veoSecondsUsed(accountId: string, now = new Date()) {
+  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+  const r = await prisma.creditEntry.aggregate({ where: { accountId, action: { in: CLIP_ACTIONS }, createdAt: { gte: from } }, _sum: { units: true } })
+  return Math.max(0, Math.round(r._sum.units ?? 0))
+}
+
+// This month's Veo allowance: used and limit (0 without a paid plan).
+export async function veoAllowance(account: { id: string; plan: string }) {
+  const [pricing, used] = await Promise.all([getPricing(), veoSecondsUsed(account.id)])
+  const limit = (VEO_PLANS as readonly string[]).includes(account.plan) ? pricing.veoSecondsPerMonth[account.plan as (typeof VEO_PLANS)[number]] : 0
+  return { used, limit, left: Math.max(0, limit - used) }
+}
+
+export const veoLimitMessage = (a: { used: number; limit: number }, need: number) =>
+  `This needs ${need}s of AI clips and your plan has ${Math.max(0, a.limit - a.used)}s left this month (${a.used} of ${a.limit}s used). It renews on the 1st — or upgrade for more.`

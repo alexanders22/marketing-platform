@@ -9,7 +9,7 @@ import { logAdmin, requireSuperAdmin } from '@/lib/admin'
 import { WORKSPACE_COOKIE } from '@/lib/context'
 import { forgetPricing } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
-import { ACTION_KEYS, type Pricing } from '@/lib/pricing'
+import { ACTION_KEYS, VEO_PLANS, type Pricing } from '@/lib/pricing'
 
 export type AdminState = { ok?: string; error?: string } | undefined
 
@@ -271,7 +271,13 @@ export async function savePricing(input: Pricing): Promise<AdminState> {
     if (!Number.isFinite(costUsd) || costUsd < 0 || costUsd > 1000) return { error: `Cost for ${k} must be from $0` }
     actions[k] = { credits, costUsd }
   }
-  const value: Pricing = { creditPriceUsd: price, actions }
+  const veoSecondsPerMonth = {} as Pricing['veoSecondsPerMonth']
+  for (const pl of VEO_PLANS) {
+    const n = Number(input.veoSecondsPerMonth?.[pl])
+    if (!Number.isInteger(n) || n < 0 || n > 100_000) return { error: `Veo limit for ${pl} must be a whole number of seconds` }
+    veoSecondsPerMonth[pl] = n
+  }
+  const value: Pricing = { creditPriceUsd: price, actions, veoSecondsPerMonth }
   await prisma.setting.upsert({
     where: { key: 'pricing' },
     create: { key: 'pricing', value, updatedBy: admin.email },

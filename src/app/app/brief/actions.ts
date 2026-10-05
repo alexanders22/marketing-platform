@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { adviseBrief, aiEnabled, LANGUAGES, type BriefAdvice } from '@/lib/ai'
+import { adviseBrief, aiEnabled, LANGUAGES, translateAdvice as translate, type BriefAdvice } from '@/lib/ai'
 import { dashboard, summaryFacts } from '@/lib/analytics'
 import { requireContext } from '@/lib/context'
 import { charge, notEnough, prices } from '@/lib/credits'
@@ -64,4 +64,18 @@ export async function deleteFact(id: string) {
   const { workspace } = await requireContext()
   await prisma.brandFact.deleteMany({ where: { id, workspaceId: workspace.id } })
   revalidatePath('/app/dossier')
+}
+
+// Suggestions already made, in another language — free, no new analysis.
+export async function translateAdvice(advice: BriefAdvice, language: string): Promise<{ advice?: BriefAdvice; error?: string }> {
+  await requireContext()
+  if (!aiEnabled()) return { error: 'AI is not connected yet.' }
+  const lang = LANGUAGES.find((l) => l === language)
+  if (!lang) return { error: 'Unknown language' }
+  try {
+    return { advice: await translate(advice, lang) }
+  } catch (e) {
+    console.error('translateAdvice failed', e)
+    return { error: 'Could not translate the suggestions. Try again.' }
+  }
 }

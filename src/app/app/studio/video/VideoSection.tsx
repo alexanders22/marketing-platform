@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/Popover'
 import { CLIP_QUALITIES, FORMATS, type ClipQuality, type Format } from '@/lib/video'
 import { createVideo, createVideoWithAI, deleteVideo } from './actions'
 import { VideoMediaPicker, type LibraryItem } from './VideoMediaPicker'
+import { VeoMeter } from './[id]/VideoEditor'
 import { clipAction } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
 
@@ -20,7 +21,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   FAILED: { label: 'Failed', cls: 'bg-red-50 text-red-700' },
 }
 
-export function VideoSection({ videos, paid }: { videos: VideoCard[]; paid: boolean }) {
+export function VideoSection({ videos, paid, veo }: { videos: VideoCard[]; paid: boolean; veo: { used: number; limit: number; left: number } | null }) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [ai, setAi] = useState(false)
@@ -93,12 +94,12 @@ export function VideoSection({ videos, paid }: { videos: VideoCard[]; paid: bool
           ))}
         </ul>
       )}
-      {ai && <AiVideoModal paid={paid} onClose={() => setAi(false)} />}
+      {ai && <AiVideoModal paid={paid} veo={veo} onClose={() => setAi(false)} />}
     </section>
   )
 }
 
-function AiVideoModal({ onClose, paid }: { onClose: () => void; paid: boolean }) {
+function AiVideoModal({ onClose, paid, veo }: { onClose: () => void; paid: boolean; veo: { used: number; limit: number; left: number } | null }) {
   const router = useRouter()
   const [brief, setBrief] = useState('')
   const [format, setFormat] = useState<Format>('9:16')
@@ -188,6 +189,11 @@ function AiVideoModal({ onClose, paid }: { onClose: () => void; paid: boolean })
           {visuals === 'veo' && (
             <div className="mt-2 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-900">
               <p>A real moving 4-second clip for every scene, made by Google Veo. They arrive in the editor within a few minutes.</p>
+              {veo && (
+                <div className="mt-2">
+                  <VeoMeter veo={veo} need={scenes * 4} />
+                </div>
+              )}
               <div role="radiogroup" aria-label="Clip quality" className="mt-2 flex gap-1">
                 {(Object.keys(CLIP_QUALITIES) as ClipQuality[]).map((q) => (
                   <button
@@ -236,7 +242,7 @@ function AiVideoModal({ onClose, paid }: { onClose: () => void; paid: boolean })
           </button>
           <button
             onClick={go}
-            disabled={pending || brief.trim().length < 3}
+            disabled={pending || brief.trim().length < 3 || (visuals === 'veo' && veo !== null && veo.left < scenes * 4)}
             className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             {pending ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}

@@ -58,11 +58,11 @@ test('a failed clip gives the credits back once', async () => {
   await page.getByLabel('Clip description').fill('[test] fail on purpose')
   await page.getByRole('radiogroup', { name: 'Clip quality' }).getByRole('radio', { name: /Pro/ }).click()
   await page.getByRole('radiogroup', { name: 'Clip length' }).getByRole('radio', { name: '6s' }).click()
-  await page.getByRole('button', { name: 'Generate · 12 credits' }).click()
+  await page.getByRole('button', { name: 'Generate · 24 credits' }).click()
   await expect(page.getByText(/AI clip failed: The clip was blocked by safety filters/)).toBeVisible({ timeout: 30_000 })
   expect(balance()).toBe(before)
   const job = sql(`select id from "ClipJob" where "videoId"='${videoId}' and status='FAILED'`)
-  expect(sql(`select count(*)||':'||sum(amount) from "CreditEntry" where "refId"='${job}' and reason='REFUND'`)).toBe('1:12')
+  expect(sql(`select count(*)||':'||sum(amount) from "CreditEntry" where "refId"='${job}' and reason='REFUND'`)).toBe('1:24')
   // The scene is free again.
   await expect(page.getByRole('button', { name: 'Generate clip with AI' })).toBeVisible()
 })
@@ -82,6 +82,25 @@ test('render with the clip and its own sound', async () => {
   const r = spawnSync(FF, ['-hide_banner', '-i', path.resolve('storage', out), '-t', '3', '-af', 'volumedetect', '-f', 'null', '-'], { encoding: 'utf8' })
   const mean = Number(r.stderr.match(/mean_volume: (-?[\d.]+) dB/)?.[1] ?? -91)
   expect(mean).toBeGreaterThan(-60)
+})
+
+test('monthly Veo limit: the meter, refunds give seconds back, over the limit is refused', async () => {
+  // Starter: 32 s a month. One 4 s clip made, the failed Pro clip given back.
+  await page.getByRole('button', { name: 'Generate clip with AI' }).click()
+  await expect(page.getByText('AI clips this month')).toBeVisible()
+  await expect(page.getByText('4 / 32s')).toBeVisible()
+  // Pretend 26 more seconds were used this month: 2 s left.
+  sql(`insert into "CreditEntry"(id,"accountId",amount,reason,note,action,units) values ('ce${Date.now()}','${accountId}',-26,'AI_VIDEO','test usage','clipQuick',26)`)
+  sql(`update "Account" set "creditBalance"="creditBalance"+26 where id='${accountId}'`)
+  await page.reload()
+  await page.getByRole('button', { name: 'Generate clip with AI' }).click()
+  await page.getByLabel('Clip description').fill('[test] over the limit')
+  await expect(page.getByText(/2s left this month/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /Generate · 4 credits/ })).toBeDisabled()
+  sql(`delete from "CreditEntry" where "accountId"='${accountId}' and note='test usage'`)
+  await page.reload()
+  await page.getByRole('button', { name: 'Generate clip with AI' }).click()
+  await expect(page.getByText('4 / 32s')).toBeVisible()
 })
 
 test('trial accounts see Veo locked and cannot start a clip', async ({ browser }) => {

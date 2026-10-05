@@ -14,6 +14,7 @@ import { emptyDoc, FORMATS, isFormat, MAX_SCENES, MOTIONS, newScene, POSITIONS, 
 import { enqueueRender } from '@/lib/video-render'
 import { advanceClip, CLIP_QUALITIES, CLIP_SECONDS, startVeo, veoAspect, veoEnabled, type ClipQuality } from '@/lib/veo'
 import { isPaid, PAID_ONLY } from '@/lib/plans'
+import { veoAllowance, veoLimitMessage } from '@/lib/credits'
 import { clipAction } from '@/lib/pricing'
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/)
@@ -227,6 +228,10 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     (input.visuals === 'veo' ? input.scenes * COST[clipAction(clipQuality)] * 4 : 0)
   if (input.visuals === 'veo' && !veoEnabled()) return { error: 'AI video is not connected yet.' }
   if (input.visuals === 'veo' && !isPaid(account) && user.role !== 'SUPER_ADMIN') return { error: PAID_ONLY }
+  if (input.visuals === 'veo' && user.role !== 'SUPER_ADMIN') {
+    const allowance = await veoAllowance(account)
+    if (allowance.left < input.scenes * 4) return { error: veoLimitMessage(allowance, input.scenes * 4) }
+  }
   if (account.creditBalance < max) return { error: notEnough(max, account.creditBalance) }
 
   const known = await withDossier(brand, workspace.id)
@@ -355,6 +360,10 @@ export async function startClip(raw: z.input<typeof ClipInput>): Promise<{ jobId
   const c = parsed.data
   if (!veoEnabled() && !c.prompt.startsWith('[test]')) return { error: 'AI video is not connected yet.' }
   if (!isPaid(account) && user.role !== 'SUPER_ADMIN') return { error: PAID_ONLY }
+  if (user.role !== 'SUPER_ADMIN') {
+    const allowance = await veoAllowance(account)
+    if (allowance.left < c.seconds) return { error: veoLimitMessage(allowance, c.seconds) }
+  }
   if (c.videoId && !(await prisma.video.findFirst({ where: { id: c.videoId, workspaceId: workspace.id }, select: { id: true } }))) return { error: 'Video not found' }
   if (c.imageId && !(await prisma.media.findFirst({ where: { id: c.imageId, workspaceId: workspace.id, kind: 'IMAGE' }, select: { id: true } }))) return { error: 'Photo not found' }
   const res = await beginClip(account.id, account.creditBalance, workspace.id, c)

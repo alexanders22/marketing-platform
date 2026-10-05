@@ -25,6 +25,8 @@ test('the assistant is offered where posts and campaigns start', async () => {
   }
   await page.getByRole('button', { name: /Not sure what to post\?/ }).click()
   await expect(page.getByLabel('What do you want to achieve')).toBeVisible()
+  // Outside the composer the assistant has its own language.
+  await expect(page.getByLabel('Suggestions language')).toHaveValue('English')
   await expect(page.getByRole('button', { name: /Suggest · 1 credit/ })).toBeVisible()
 })
 
@@ -63,4 +65,25 @@ test('AI: audiences, questions and ideas; an idea fills the composer; answers ar
   await expect(prompt).not.toHaveValue('')
   console.log('PROMPT', await prompt.inputValue())
   expect(Number(sql(`select -sum(amount) from "CreditEntry" e join "Workspace" w on w."accountId"=e."accountId" where w.id='${ws}' and e.note='Marketing suggestions'`))).toBe(1)
+})
+
+test('AI: switching the language translates the suggestions, answers stay', async () => {
+  test.skip(!AI, 'set QA_STRATEGY_AI=1 to run against the real model')
+  test.setTimeout(300_000)
+  await page.goto('/app/campaigns/new?kind=social')
+  await page.getByRole('button', { name: /Not sure what to run\?/ }).click()
+  await page.getByLabel('What do you want to achieve').fill('More cake orders for weekends')
+  await page.getByRole('button', { name: /Suggest · 1 credit/ }).click()
+  const box = page.getByRole('region', { name: 'Loudpilot suggestions' })
+  await expect(box.getByText('WHO TO REACH', { exact: true })).toBeVisible({ timeout: 120_000 })
+  const ideaEn = await box.locator('li p.text-sm.font-semibold').first().innerText()
+  await box.getByLabel('Suggestions language').selectOption('Russian')
+  await expect(box.getByText(/Translating to Russian/)).toBeVisible()
+  await expect(box.getByText(/Translating to Russian/)).toHaveCount(0, { timeout: 90_000 })
+  const ideaRu = await box.locator('li p.text-sm.font-semibold').first().innerText()
+  console.log('IDEA', ideaEn, '→', ideaRu)
+  expect(ideaRu).toMatch(/[А-Яа-яЁё]/)
+  expect(ideaRu).not.toBe(ideaEn)
+  // Still the same number of ideas, still usable.
+  await expect(box.getByRole('button', { name: 'Use this idea' })).toHaveCount(3)
 })

@@ -25,10 +25,20 @@ export function PricingEditor({ initial, plans, used }: { initial: Pricing; plan
   const set = (k: Action, field: 'credits' | 'costUsd', v: string) =>
     setP((cur) => ({ ...cur, actions: { ...cur.actions, [k]: { ...cur.actions[k], [field]: field === 'credits' ? Math.max(0, Math.round(Number(v) || 0)) : Math.max(0, Number(v) || 0) } } }))
 
-  // Worst case: a customer spends the whole monthly allowance on the action
-  // with the highest cost per credit.
-  const worst = ACTION_KEYS.filter((k) => p.actions[k].credits > 0).reduce((a, k) => (p.actions[k].costUsd / p.actions[k].credits > p.actions[a].costUsd / p.actions[a].credits ? k : a), 'postText' as Action)
-  const costPerCredit = p.actions[worst].costUsd / Math.max(1, p.actions[worst].credits)
+  // Worst case: the Veo allowance spent on the clip quality that hurts most,
+  // every other credit on the costliest non-clip action.
+  const CLIPS: Action[] = ['clipQuick', 'clipPro', 'clipCinema']
+  const perCredit = (k: Action) => p.actions[k].costUsd / Math.max(1, p.actions[k].credits)
+  const worst = ACTION_KEYS.filter((k) => !CLIPS.includes(k) && p.actions[k].credits > 0).reduce((a, k) => (perCredit(k) > perCredit(a) ? k : a), 'postText' as Action)
+  const costPerCredit = perCredit(worst)
+  const worstFor = (pl: Plan) => {
+    const limit = p.veoSecondsPerMonth[pl.id as keyof Pricing['veoSecondsPerMonth']] ?? 0
+    return CLIPS.map((q) => {
+      const a = p.actions[q]
+      const secs = a.credits > 0 ? Math.min(limit, Math.floor(pl.credits / a.credits)) : limit
+      return { q, cost: secs * a.costUsd + Math.max(0, pl.credits - secs * a.credits) * costPerCredit }
+    }).reduce((x, y) => (y.cost > x.cost ? y : x))
+  }
 
   const totals = ACTION_KEYS.reduce(
     (t, k) => {
@@ -146,13 +156,47 @@ export function PricingEditor({ initial, plans, used }: { initial: Pricing; plan
       </div>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+        <h2 className="font-semibold">AI clips (Veo) per month</h2>
+        <p className="mt-1 text-sm text-zinc-500">Seconds of clips each paid plan may generate per calendar month. Trials get none. Our cost if the whole allowance goes to each quality:</p>
+        <ul className="mt-3 grid gap-3 sm:grid-cols-3">
+          {plans.map((pl) => {
+            const secs = p.veoSecondsPerMonth[pl.id as keyof Pricing['veoSecondsPerMonth']] ?? 0
+            return (
+              <li key={pl.id} className="rounded-xl bg-zinc-50 p-3 text-sm ring-1 ring-zinc-200">
+                <label className="flex items-center justify-between gap-2 font-medium">
+                  {pl.name}
+                  <span className="flex items-center gap-1 font-normal">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={secs}
+                      onChange={(e) => setP({ ...p, veoSecondsPerMonth: { ...p.veoSecondsPerMonth, [pl.id]: Math.max(0, Math.round(Number(e.target.value) || 0)) } })}
+                      aria-label={`Veo seconds per month on ${pl.name}`}
+                      className={input}
+                    />
+                    s
+                  </span>
+                </label>
+                <p className="mt-2 text-xs text-zinc-600">
+                  Quick {usd(secs * p.actions.clipQuick.costUsd)} · Pro {usd(secs * p.actions.clipPro.costUsd)} · Cinema {usd(secs * p.actions.clipCinema.costUsd)}
+                  <span className="text-zinc-400"> of ${pl.monthly}</span>
+                </p>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+
+      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <h2 className="font-semibold">Worst case per plan</h2>
         <p className="mt-1 text-sm text-zinc-500">
-          A customer spends the whole monthly allowance on <b>{ACTIONS[worst].label}</b> — the highest cost per credit ({usd(costPerCredit)}).
+          A customer uses the full Veo allowance on the costliest clip quality and every other credit on <b>{ACTIONS[worst].label}</b> ({usd(costPerCredit)} per credit).
         </p>
         <ul className="mt-3 grid gap-3 sm:grid-cols-3">
           {plans.map((pl) => {
-            const cost = pl.credits * costPerCredit
+            const w = worstFor(pl)
+            const cost = w.cost
             const m = (pl.monthly - cost) / pl.monthly
             return (
               <li key={pl.id} className="rounded-xl bg-zinc-50 p-3 text-sm ring-1 ring-zinc-200">
@@ -161,6 +205,7 @@ export function PricingEditor({ initial, plans, used }: { initial: Pricing; plan
                   ${pl.monthly} in · {usd(cost)} out
                 </p>
                 <p className={`mt-0.5 ${marginTone(m)}`}>margin {pct(m)}</p>
+                <p className="mt-0.5 text-xs text-zinc-500">clips on {ACTIONS[w.q].label.replace('AI clip · ', '')}</p>
               </li>
             )
           })}

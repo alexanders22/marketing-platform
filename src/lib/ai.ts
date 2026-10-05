@@ -7,6 +7,8 @@ import type { BrandKit } from '@prisma/client'
 const key = process.env.GEMINI_API_KEY
 const client = key ? new GoogleGenAI({ apiKey: key }) : null
 const MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest'
+// Used when the main model stays overloaded (503) after retries.
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest'
 // Tried in order; the first that answers wins.
 const IMAGE_MODELS = [process.env.GEMINI_IMAGE_MODEL, 'gemini-3.1-flash-image', 'gemini-2.5-flash-image'].filter(
   (m): m is string => Boolean(m),
@@ -74,8 +76,8 @@ export async function generatePost(brandName: string, brand: Brand | null, o: Po
     ...o.attachments.map((a) => ({ inlineData: { mimeType: a.mime, data: a.data } })),
     { text: o.prompt },
   ]
-  const res = await client.models.generateContent({
-    model: MODEL,
+  const res = await retrying((model) => client.models.generateContent({
+    model,
     contents: [{ role: 'user', parts }],
     config: {
       systemInstruction: system,
@@ -83,7 +85,7 @@ export async function generatePost(brandName: string, brand: Brand | null, o: Po
       maxOutputTokens: 1500,
       abortSignal: AbortSignal.timeout(45_000),
     },
-  })
+  }))
   const parsed = JSON.parse(res.text ?? '{}') as Partial<GeneratedPost>
   if (!parsed.caption) throw new Error('Empty AI response')
   return {
@@ -145,10 +147,27 @@ export async function generateImage(
 // ─── Campaigns & blog ──────────────────────────────────────────────────────
 
 // `schema` (JSON Schema) makes the model return exactly that shape.
+// Gemini sometimes answers 503 "high demand" or 429: wait and try again,
+// then once more on the lighter fallback model.
+const busy = (e: unknown) => [429, 500, 503].includes((e as { status?: number }).status ?? 0)
+async function retrying<T>(fn: (model: string) => Promise<T>, tries = 2): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn(MODEL)
+    } catch (e) {
+      if (!busy(e)) throw e
+      if (i >= tries) break
+      await new Promise((r) => setTimeout(r, 2000 * i))
+    }
+  }
+  console.warn(`Gemini ${MODEL} busy — using ${FALLBACK_MODEL}`)
+  return fn(FALLBACK_MODEL)
+}
+
 async function json<T>(system: string, prompt: string, maxOutputTokens: number, timeoutMs = 60_000, schema?: unknown): Promise<T> {
   if (!client) throw new Error('AI is not configured')
-  const res = await client.models.generateContent({
-    model: MODEL,
+  const res = await retrying((model) => client.models.generateContent({
+    model,
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     config: {
       systemInstruction: system,
@@ -157,7 +176,7 @@ async function json<T>(system: string, prompt: string, maxOutputTokens: number, 
       maxOutputTokens,
       abortSignal: AbortSignal.timeout(timeoutMs),
     },
-  })
+  }))
   return JSON.parse(res.text ?? 'null') as T
 }
 
@@ -760,4 +779,32 @@ export async function speak(text: string, voiceName: string): Promise<{ wav: Buf
   header.write('data', 36)
   header.writeUInt32LE(pcm.length, 40)
   return { wav: Buffer.concat([header, pcm]), ms: Math.round((pcm.length / 2 / rate) * 1000) }
+}
+
+const ADVICE_SCHEMA = (() => {
+  const str = { type: 'string' }
+  const obj = (props: Record<string, unknown>) => ({ type: 'object', properties: props, required: Object.keys(props) })
+  return obj({
+    known: { type: 'array', items: str },
+    audiences: { type: 'array', items: obj({ name: str, where: str, who: str, wants: str, how: str }) },
+    questions: { type: 'array', items: obj({ question: str, why: str, options: { type: 'array', items: str } }) },
+    ideas: {
+      type: 'array',
+      items: obj({ title: str, why: str, network: { type: 'string', enum: ['FACEBOOK', 'INSTAGRAM', 'BOTH'] }, format: str, audience: str, prompt: str, caption: str }),
+    },
+  })
+})()
+
+// The same suggestions in another language: same items, same order; brand
+// and place names stay as they are.
+export async function translateAdvice(advice: BriefAdvice, language: PostOptions['language']): Promise<BriefAdvice> {
+  const system = [
+    `Translate every text value of this JSON into ${language}. Keep the structure, the number and order of items, and the "network" values exactly.`,
+    'Keep brand names, product names, place names and hashtags as they are. Natural marketing language, not word-for-word.',
+    'Each idea\'s "audience" must stay identical to the translated "name" of the audience it refers to.',
+  ].join('\n')
+  const out = await json<BriefAdvice>(system, JSON.stringify(advice), 8000, 60_000, ADVICE_SCHEMA)
+  const same = (a: unknown[] | undefined, b: unknown[]) => Array.isArray(a) && a.length === b.length
+  if (!out || !same(out.audiences, advice.audiences) || !same(out.questions, advice.questions) || !same(out.ideas, advice.ideas)) throw new Error('Translation changed the structure')
+  return { ...out, ideas: out.ideas.map((i, n) => ({ ...i, network: advice.ideas[n].network })) }
 }

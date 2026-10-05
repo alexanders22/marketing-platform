@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { mediaUrl } from '@/lib/storage'
 import { StudioHome } from './StudioHome'
 import { isPaid } from '@/lib/plans'
+import { veoAllowance } from '@/lib/credits'
 import { timeline, type VideoDoc } from '@/lib/video'
 import { VideoSection } from './video/VideoSection'
 
@@ -68,6 +69,7 @@ export default async function StudioPage({ searchParams }: PageProps<'/app/studi
       {tab === 'video' && (
         <VideoSection
           paid={isPaid(account) || user.role === 'SUPER_ADMIN'}
+          veo={user.role === 'SUPER_ADMIN' ? null : await veoAllowance(account)}
           videos={videos.map((v) => ({
             id: v.id,
             name: v.name,

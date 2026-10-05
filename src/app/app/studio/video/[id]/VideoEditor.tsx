@@ -49,6 +49,8 @@ import { VideoMediaPicker, type LibraryItem } from '../VideoMediaPicker'
 import { clipAction, creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
 
+type Allowance = { used: number; limit: number; left: number }
+
 type Status = { status: 'DRAFT' | 'RENDERING' | 'READY' | 'FAILED'; error: string | null; output: { url: string; poster: string | null } | null }
 
 const MOTION_LABEL: Record<(typeof MOTIONS)[number], string> = {
@@ -67,12 +69,14 @@ export function VideoEditor({
   brand,
   initialStatus,
   paid,
+  veo,
 }: {
   video: { id: string; name: string; format: Format; doc: VideoDoc }
   brand: OverlayBrand
   initialStatus: Status
-  // AI clips (Veo) are for paid plans.
+  // AI clips (Veo) are for paid plans, with seconds per month (null = no limit).
   paid: boolean
+  veo: Allowance | null
 }) {
   const router = useRouter()
   const P = usePrices()
@@ -410,6 +414,7 @@ export function VideoEditor({
                 videoId={video.id}
                 format={format}
                 paid={paid}
+                veo={veo}
                 onStarted={(jobId) => patchScene(scene.id, { clipJobId: jobId })}
                 onError={setError}
                 onCharged={() => router.refresh()}
@@ -706,6 +711,7 @@ function ClipPanel({
   videoId,
   format,
   paid,
+  veo,
   onStarted,
   onError,
   onCharged,
@@ -714,6 +720,7 @@ function ClipPanel({
   videoId: string
   format: Format
   paid: boolean
+  veo: Allowance | null
   onStarted: (jobId: string) => void
   onError: (e: string) => void
   onCharged: () => void
@@ -808,14 +815,43 @@ function ClipPanel({
         ))}
       </div>
       {format !== '9:16' && format !== '16:9' && <p className="text-xs text-zinc-500">Veo makes vertical clips; they are cropped to {format}.</p>}
+      {veo && <VeoMeter veo={veo} need={seconds} />}
       <div className="flex items-center gap-2">
-        <button onClick={go} disabled={pending || prompt.trim().length < 3} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+        <button onClick={go} disabled={pending || prompt.trim().length < 3 || (veo !== null && veo.left < seconds)} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
           {pending ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />} Generate · {cost} credits
         </button>
         <button onClick={() => setOpen(false)} className="text-sm text-zinc-500 hover:text-zinc-900">
           Cancel
         </button>
       </div>
+    </div>
+  )
+}
+
+// This month's AI clip seconds: how much is used and what this clip needs.
+export function VeoMeter({ veo, need }: { veo: Allowance; need: number }) {
+  const short = veo.left < need
+  const pctUsed = veo.limit ? Math.min(100, (veo.used / veo.limit) * 100) : 100
+  return (
+    <div className="text-xs">
+      <div className="flex justify-between text-zinc-600">
+        <span>AI clips this month</span>
+        <span className="tabular-nums">
+          {veo.used} / {veo.limit}s
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-200">
+        <div className={`h-full rounded-full ${short ? 'bg-red-500' : 'bg-indigo-500'}`} style={{ width: `${pctUsed}%` }} />
+      </div>
+      {short && (
+        <p className="mt-1 text-red-600">
+          {veo.left}s left this month — pick a shorter clip, wait for the 1st, or{' '}
+          <Link href="/app/plan" className="underline">
+            upgrade
+          </Link>
+          .
+        </p>
+      )}
     </div>
   )
 }

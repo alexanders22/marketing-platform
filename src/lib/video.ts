@@ -111,7 +111,7 @@ export function timeline(doc: VideoDoc) {
 // AI clips (Google Veo 3.1): credits per second of clip.
 export const CLIP_QUALITIES = {
   quick: { label: 'Quick', perSecond: 1, hint: 'Good for most scenes' },
-  pro: { label: 'Pro', perSecond: 2, hint: 'Sharper motion and detail' },
+  pro: { label: 'Pro', perSecond: 4, hint: 'Sharper motion and detail' },
   cinema: { label: 'Cinema', perSecond: 5, hint: 'Best quality, slowest' },
 } as const
 export type ClipQuality = keyof typeof CLIP_QUALITIES
