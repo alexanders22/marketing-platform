@@ -10,6 +10,8 @@ import { useIsClient } from '@/components/LocalTime'
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker'
 import { designFromMedia } from '../studio/actions'
 import { deletePost, generatePostImages, publishNow, savePost } from './actions'
+import { ImageStylePicker } from '@/components/ImageStylePicker'
+import type { ImageStyle } from '@/lib/image-styles'
 import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
 
@@ -90,6 +92,8 @@ export function PostEditor({
   const [aiOpen, setAiOpen] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiCount, setAiCount] = useState(1)
+  const [aiSource, setAiSource] = useState<'post' | 'custom'>('post')
+  const [aiStyle, setAiStyle] = useState<ImageStyle>('realistic')
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string>()
   const [saved, setSaved] = useState(false)
@@ -188,7 +192,7 @@ export function PostEditor({
   const generate = async () => {
     setGenerating(true)
     setError(undefined)
-    const res = await generatePostImages({ prompt: aiPrompt, caption: content, count: aiCount })
+    const res = await generatePostImages({ prompt: aiSource === 'custom' ? aiPrompt : '', caption: content, count: aiCount, style: aiStyle })
     setGenerating(false)
     if (res.error || !res.images) return setError(res.error)
     setMedia((cur) => [...cur, ...res.images!].slice(0, 10))
@@ -328,16 +332,29 @@ export function PostEditor({
             )}
             {aiOpen && (
               <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50/50 p-4">
-                <label className="text-sm font-medium" htmlFor="ai-image">
-                  Describe the image
-                </label>
-                <textarea
-                  id="ai-image"
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  placeholder={content.trim() ? 'Leave empty to draw from the post text' : 'e.g. Sunset view from a balcony of the new building'}
-                  className="mt-1.5 min-h-20 w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
-                />
+                <div role="radiogroup" aria-label="What to draw" className="space-y-1.5 text-sm">
+                  <label className="flex items-center gap-2">
+                    <input type="radio" checked={aiSource === 'post'} onChange={() => setAiSource('post')} disabled={!content.trim()} /> From the post text
+                    {!content.trim() && <span className="text-xs text-zinc-500">— write the post first</span>}
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="radio" checked={aiSource === 'custom' || !content.trim()} onChange={() => setAiSource('custom')} /> My own description
+                  </label>
+                </div>
+                {(aiSource === 'custom' || !content.trim()) && (
+                  <textarea
+                    id="ai-image"
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    aria-label="Describe the image"
+                    placeholder="e.g. Sunset view from a balcony of the new building"
+                    className="mt-2 min-h-20 w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400"
+                  />
+                )}
+                <p className="mt-3 text-sm font-medium">Style</p>
+                <div className="mt-1.5">
+                  <ImageStylePicker value={aiStyle} onChange={setAiStyle} />
+                </div>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <label className="flex items-center gap-2 text-sm text-zinc-600">
                     Variants
@@ -349,7 +366,7 @@ export function PostEditor({
                   </label>
                   <button
                     onClick={generate}
-                    disabled={generating}
+                    disabled={generating || ((aiSource === 'custom' || !content.trim()) && aiPrompt.trim().length < 3)}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-60"
                   >
                     {generating ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}

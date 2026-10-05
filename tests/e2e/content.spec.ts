@@ -118,7 +118,7 @@ test('Composer: tone / length / language / images popovers update labels and cre
       .getByRole('button', { name: n === 0 ? /^No images/ : new RegExp(`^${n} images?`) })
       .click()
     await expect(badge).toHaveText(String(1 + n))
-    await expect(chip(/^Images/)).toHaveText(n ? `Images (${n})` : 'Images')
+    await expect(chip(/^Images/)).toHaveText(n ? `Images (${n} · Realistic photo)` : 'Images')
   }
   await expect(badge).toHaveAttribute('title', '1 credit: 1 for the text')
 

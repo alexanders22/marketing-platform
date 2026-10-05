@@ -46,6 +46,7 @@ import { HashtagModal, type Library } from './HashtagModal'
 import { audienceLine, BriefAssistant } from '@/components/BriefAssistant'
 import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
+import { IMAGE_STYLE_IDS, IMAGE_STYLES, type ImageStyle } from '@/lib/image-styles'
 
 type Tone = 'Professional' | 'Friendly' | 'Educational' | 'Bold' | 'Founder-led'
 type Length = 'Short' | 'Medium' | 'Long'
@@ -121,6 +122,7 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
   const [libraries, setLibraries] = useState(initialLibs)
   const [libIds, setLibIds] = useState<string[]>([])
   const [images, setImages] = useState(0)
+  const [imageStyle, setImageStyle] = useState<ImageStyle>('realistic')
   const [tone, setTone] = useState<Tone>('Professional')
   const [length, setLength] = useState<Length>('Medium')
   const [language, setLanguage] = useState<Language>('English')
@@ -197,6 +199,7 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
         aiHashtags,
         libraryIds: libIds,
         images,
+        imageStyle,
         attachments: attachments.map(({ mime, data }) => ({ mime: mime as 'image/jpeg', data })),
       })
       if (res.error) setError(res.error)
@@ -366,7 +369,7 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
                 width="w-64"
                 trigger={() => (
                   <Chip icon={ImageIcon} on={images > 0}>
-                    Images{images > 0 && ` (${images})`}
+                    Images{images > 0 && ` (${images} · ${IMAGE_STYLES[imageStyle].label})`}
                   </Chip>
                 )}
               >
@@ -383,6 +386,16 @@ export function Composer({ credits, libraries: initialLibs }: { credits: number;
                         {n === 0 ? 'No images' : `${n} image${n > 1 ? 's' : ''}`}
                       </MenuItem>
                     ))}
+                    {images > 0 && (
+                      <>
+                        <MenuLabel>Style</MenuLabel>
+                        {IMAGE_STYLE_IDS.map((st) => (
+                          <MenuItem key={st} checked={imageStyle === st} onClick={() => (setImageStyle(st), close())}>
+                            {IMAGE_STYLES[st].label}
+                          </MenuItem>
+                        ))}
+                      </>
+                    )}
                   </>
                 )}
               </Popover>

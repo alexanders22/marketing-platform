@@ -10,6 +10,7 @@ import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 import { aiError } from '@/lib/ai-health'
+import { IMAGE_STYLES, type ImageStyle } from '@/lib/image-styles'
 
 const NETWORKS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST'] as const
 
@@ -158,7 +159,7 @@ export async function listMedia(): Promise<{ id: string; url: string }[]> {
 
 // AI images for a post, from a short description (and the post text). Each
 // delivered image costs COST.image; failed ones are free.
-export async function generatePostImages(input: { prompt: string; caption: string; count: number }): Promise<{ images?: { id: string; url: string }[]; error?: string }> {
+export async function generatePostImages(input: { prompt: string; caption: string; count: number; style?: string }): Promise<{ images?: { id: string; url: string }[]; error?: string }> {
   const { account, workspace, brand } = await requireContext()
   const COST = await prices()
   const prompt = input.prompt.trim().slice(0, 1000)
@@ -169,9 +170,10 @@ export async function generatePostImages(input: { prompt: string; caption: strin
   if (account.creditBalance < max) return { error: notEnough(max, account.creditBalance) }
 
   const known = await withDossier(brand, workspace.id)
+  const style = input.style && input.style in IMAGE_STYLES ? IMAGE_STYLES[input.style as ImageStyle].prompt : undefined
   const results = await Promise.allSettled(
     Array.from({ length: count }, (_, i) =>
-      generateImage(workspace.name, known, prompt || input.caption.slice(0, 300), input.caption.slice(0, 2000), i, []).then((img) =>
+      generateImage(workspace.name, known, prompt || input.caption.slice(0, 300), input.caption.slice(0, 2000), i, [], '1:1', style).then((img) =>
         saveMedia(workspace.id, img.data, img.mime, prompt || 'Post image'),
       ),
     ),

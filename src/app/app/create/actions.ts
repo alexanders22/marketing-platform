@@ -9,6 +9,7 @@ import { charge, notEnough, prices } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 import { aiError } from '@/lib/ai-health'
+import { IMAGE_STYLE_IDS, IMAGE_STYLES, type ImageStyle } from '@/lib/image-styles'
 
 const MAX_ATTACHMENT_B64 = 2_800_000 // ~2 MB per image after base64
 
@@ -20,6 +21,7 @@ const Input = z.object({
   aiHashtags: z.boolean(),
   libraryIds: z.array(z.string()).max(10),
   images: z.number().int().min(0).max(4),
+  imageStyle: z.enum(IMAGE_STYLE_IDS as [ImageStyle, ...ImageStyle[]]).optional(),
   attachments: z
     .array(
       z.object({
@@ -74,7 +76,7 @@ export async function createPost(raw: z.input<typeof Input>): Promise<{ post?: C
 
   const results = await Promise.allSettled(
     Array.from({ length: input.images }, (_, i) =>
-      generateImage(workspace.name, known, input.prompt, text.caption, i, input.attachments).then((img) =>
+      generateImage(workspace.name, known, input.prompt, text.caption, i, input.attachments, '1:1', input.imageStyle && IMAGE_STYLES[input.imageStyle].prompt).then((img) =>
         saveMedia(workspace.id, img.data, img.mime, input.prompt),
       ),
     ),

@@ -5,7 +5,8 @@ import { Check, ImageIcon, ImageOff, Loader2, Sparkles } from 'lucide-react'
 import { Modal } from '@/components/ui/Popover'
 import { usePrices } from '@/components/Prices'
 import { TEMPLATE_PHOTO, TEMPLATE_PHOTO_LIBRARY, templatePhotoUrl } from '@/lib/design'
-import { IMAGE_STYLE_IDS, IMAGE_STYLES, type ImageStyle } from '@/lib/image-styles'
+import { ImageStylePicker } from '@/components/ImageStylePicker'
+import type { ImageStyle } from '@/lib/image-styles'
 import { VideoMediaPicker } from '../studio/video/VideoMediaPicker'
 
 export type ImagesChoice = null | { mode: 'ai'; prompt: string | null; style: ImageStyle } | { mode: 'photos'; photoIds: string[] }
@@ -90,19 +91,8 @@ export function CampaignImagesModal({
             </div>
             <div>
               <p className="text-sm font-medium">Style</p>
-              <div role="radiogroup" aria-label="Image style" className="mt-1.5 flex flex-wrap gap-1.5">
-                {IMAGE_STYLE_IDS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    role="radio"
-                    aria-checked={style === s}
-                    onClick={() => setStyle(s)}
-                    className={`rounded-full px-3 py-1.5 text-sm ring-1 ${style === s ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white text-zinc-700 ring-zinc-200 hover:bg-zinc-50'}`}
-                  >
-                    {IMAGE_STYLES[s].label}
-                  </button>
-                ))}
+              <div className="mt-1.5">
+                <ImageStylePicker value={style} onChange={setStyle} />
               </div>
             </div>
             <p className="text-xs text-zinc-500">
