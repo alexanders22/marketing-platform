@@ -20,11 +20,15 @@ import {
   Plus,
   Send,
   Trash2,
+  Wand2,
   X,
 } from 'lucide-react'
 import { useIsClient } from '@/components/LocalTime'
 import { drawEndCard, drawOverlay, toPngBase64, type OverlayBrand } from '@/lib/video-overlay'
 import {
+  CLIP_QUALITIES,
+  CLIP_SECONDS,
+  clipCredits,
   FORMATS,
   MAX_SCENES,
   MOTIONS,
@@ -35,11 +39,12 @@ import {
   timeline,
   uid,
   VOICES,
+  type ClipQuality,
   type Format,
   type Scene,
   type VideoDoc,
 } from '@/lib/video'
-import { generateVoices, renderVideo, saveVideo, videoStatus, videoToPost } from '../actions'
+import { clipStatus, generateVoices, renderVideo, saveVideo, startClip, videoStatus, videoToPost } from '../actions'
 import { VideoMediaPicker, type LibraryItem } from '../VideoMediaPicker'
 
 type Status = { status: 'DRAFT' | 'RENDERING' | 'READY' | 'FAILED'; error: string | null; output: { url: string; poster: string | null } | null }
@@ -113,6 +118,35 @@ export function VideoEditor({
     }, 3000)
     return () => clearInterval(t)
   }, [status.status, video.id, router])
+
+  // AI clips arrive in the background: check each pending one every few seconds.
+  const pending = doc.scenes.filter((s) => s.clipJobId).map((s) => [s.id, s.clipJobId!] as const)
+  const pendingKey = pending.map((p) => p[1]).join(',')
+  useEffect(() => {
+    if (!pendingKey) return
+    const t = setInterval(async () => {
+      for (const [sceneId, jobId] of pendingKey.split(',').map((j) => [doc.scenes.find((s) => s.clipJobId === j)?.id, j] as const)) {
+        if (!sceneId) continue
+        const r = await clipStatus(jobId)
+        if (!r || r.status === 'PENDING') continue
+        if (r.status === 'FAILED') {
+          setError(`AI clip failed: ${r.error ?? 'unknown error'} Your credits are back.`)
+          setDoc((d) => ({ ...d, scenes: d.scenes.map((s) => (s.clipJobId === jobId ? { ...s, clipJobId: null } : s)) }))
+        } else if (r.media) {
+          const m = r.media
+          setDoc((d) => ({
+            ...d,
+            scenes: d.scenes.map((s) =>
+              s.clipJobId === jobId ? { ...s, clipJobId: null, media: m, clipStart: 0, duration: Math.max(s.duration, Math.min(15, (m.durationMs ?? 4000) / 1000)) } : s,
+            ),
+          }))
+          router.refresh()
+        }
+      }
+    }, 5000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingKey])
 
   const patchScene = useCallback(
     (id: string, patch: Partial<Scene>) => setDoc((d) => ({ ...d, scenes: d.scenes.map((s) => (s.id === id ? { ...s, ...patch } : s)) })),
@@ -232,7 +266,8 @@ export function VideoEditor({
           )}
           <button
             onClick={render}
-            disabled={busy || status.status === 'RENDERING'}
+            disabled={busy || status.status === 'RENDERING' || pending.length > 0}
+            title={pending.length ? 'Wait for the AI clips' : undefined}
             className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
           >
             {status.status === 'RENDERING' || (busy && busyWhat === 'render') ? <Loader2 size={15} className="animate-spin" /> : <Clapperboard size={15} />}
@@ -362,6 +397,21 @@ export function VideoEditor({
                   </div>
                 )}
               </Field>
+
+              <ClipPanel
+                key={scene.id}
+                scene={scene}
+                videoId={video.id}
+                format={format}
+                onStarted={(jobId) => patchScene(scene.id, { clipJobId: jobId })}
+                onError={setError}
+                onCharged={() => router.refresh()}
+              />
+              {scene.media?.kind === 'video' && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={Boolean(scene.keepAudio)} onChange={(e) => patchScene(scene.id, { keepAudio: e.target.checked })} /> Use the clip&apos;s own sound
+                </label>
+              )}
 
               <Field label={`Length · ${sceneSeconds(scene).toFixed(1)}s${scene.voiceMs && sceneSeconds(scene) > scene.duration ? ' (fits the voice-over)' : ''}`}>
                 <input type="range" min={1} max={15} step={0.5} value={scene.duration} onChange={(e) => patchScene(scene.id, { duration: Number(e.target.value) })} aria-label="Scene length" className="w-full" />
@@ -598,6 +648,11 @@ function Thumb({ scene, big = false }: { scene: Scene; big?: boolean }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {src && <img src={src} alt="" className="h-full w-full object-cover" />}
       {scene.media?.kind === 'video' && <Film size={11} className="absolute right-0.5 bottom-0.5 text-white drop-shadow" />}
+      {scene.clipJobId && (
+        <span className="absolute inset-0 grid place-items-center bg-black/50" aria-label="AI clip generating">
+          <Loader2 size={14} className="animate-spin text-white" />
+        </span>
+      )}
     </span>
   )
 }
@@ -634,5 +689,113 @@ function IconBtn({ label, onClick, disabled, children }: { label: string; onClic
     <button onClick={onClick} disabled={disabled} aria-label={label} title={label} className="grid h-8 w-8 place-items-center rounded-lg text-zinc-600 hover:bg-zinc-100 disabled:opacity-30">
       {children}
     </button>
+  )
+}
+
+// Generate this scene's footage with Veo — from a description, or by
+// animating the scene's photo.
+function ClipPanel({
+  scene,
+  videoId,
+  format,
+  onStarted,
+  onError,
+  onCharged,
+}: {
+  scene: Scene
+  videoId: string
+  format: Format
+  onStarted: (jobId: string) => void
+  onError: (e: string) => void
+  onCharged: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [prompt, setPrompt] = useState(scene.text || scene.voice)
+  const [quality, setQuality] = useState<ClipQuality>('quick')
+  const [seconds, setSeconds] = useState<number>(4)
+  const photo = scene.media?.kind === 'image' ? scene.media : null
+  const [animate, setAnimate] = useState(Boolean(photo))
+  const [pending, start] = useTransition()
+  const cost = clipCredits(quality, seconds)
+
+  if (scene.clipJobId) {
+    return (
+      <p className="flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+        <Loader2 size={15} className="animate-spin" /> Generating the AI clip — usually under 2 minutes. You can keep editing.
+      </p>
+    )
+  }
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-800 hover:bg-indigo-100">
+        <Wand2 size={15} /> {photo ? 'Animate photo or generate clip' : 'Generate clip with AI'}
+      </button>
+    )
+  }
+  const go = () =>
+    start(async () => {
+      const res = await startClip({
+        prompt,
+        quality,
+        seconds,
+        format,
+        imageId: animate && photo ? photo.id : null,
+        videoId,
+        sceneId: scene.id,
+      })
+      if (res.error || !res.jobId) return onError(res.error ?? 'Could not start the clip')
+      onStarted(res.jobId)
+      onCharged()
+      setOpen(false)
+    })
+  return (
+    <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/50 p-3">
+      <p className="flex items-center gap-1.5 text-sm font-semibold">
+        <Wand2 size={15} className="text-indigo-600" /> AI clip · Google Veo
+      </p>
+      {photo && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={animate} onChange={(e) => setAnimate(e.target.checked)} /> Animate this scene&apos;s photo
+        </label>
+      )}
+      <textarea
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        placeholder={animate && photo ? 'How it should move, e.g. slow push-in, steam rising' : 'What happens in the clip, e.g. baker dusting sugar over croissants, warm light'}
+        aria-label="Clip description"
+        className="min-h-20 w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+      />
+      <div role="radiogroup" aria-label="Clip quality" className="grid grid-cols-3 gap-1">
+        {(Object.keys(CLIP_QUALITIES) as ClipQuality[]).map((q) => (
+          <button
+            key={q}
+            role="radio"
+            aria-checked={quality === q}
+            onClick={() => setQuality(q)}
+            title={CLIP_QUALITIES[q].hint}
+            className={`rounded-lg px-2 py-1.5 text-xs font-medium ring-1 ${quality === q ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200 hover:bg-zinc-50'}`}
+          >
+            {CLIP_QUALITIES[q].label}
+            <span className="block text-[10px] opacity-70">{CLIP_QUALITIES[q].perSecond} cr/s</span>
+          </button>
+        ))}
+      </div>
+      <div role="radiogroup" aria-label="Clip length" className="flex gap-1">
+        {CLIP_SECONDS.map((n) => (
+          <button key={n} role="radio" aria-checked={seconds === n} onClick={() => setSeconds(n)} className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ${seconds === n ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200 hover:bg-zinc-50'}`}>
+            {n}s
+          </button>
+        ))}
+      </div>
+      {format !== '9:16' && format !== '16:9' && <p className="text-xs text-zinc-500">Veo makes vertical clips; they are cropped to {format}.</p>}
+      <div className="flex items-center gap-2">
+        <button onClick={go} disabled={pending || prompt.trim().length < 3} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+          {pending ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />} Generate · {cost} credits
+        </button>
+        <button onClick={() => setOpen(false)} className="text-sm text-zinc-500 hover:text-zinc-900">
+          Cancel
+        </button>
+      </div>
+    </div>
   )
 }

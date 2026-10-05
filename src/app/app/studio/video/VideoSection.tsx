@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Clapperboard, Film, ImageIcon, Loader2, Palette, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Popover'
-import { FORMATS, type Format } from '@/lib/video'
+import { CLIP_QUALITIES, clipCredits, FORMATS, type ClipQuality, type Format } from '@/lib/video'
 import { createVideo, createVideoWithAI, deleteVideo } from './actions'
 import { VideoMediaPicker, type LibraryItem } from './VideoMediaPicker'
 
@@ -101,19 +101,20 @@ function AiVideoModal({ onClose }: { onClose: () => void }) {
   const [brief, setBrief] = useState('')
   const [format, setFormat] = useState<Format>('9:16')
   const [scenes, setScenes] = useState(5)
-  const [visuals, setVisuals] = useState<'library' | 'ai' | 'none'>('library')
+  const [visuals, setVisuals] = useState<'library' | 'ai' | 'veo' | 'none'>('library')
+  const [clipQuality, setClipQuality] = useState<ClipQuality>('quick')
   const [media, setMedia] = useState<LibraryItem[]>([])
   const [picking, setPicking] = useState(false)
   const [voice, setVoice] = useState(true)
   const [language, setLanguage] = useState('English')
   const [error, setError] = useState<string>()
   const [pending, start] = useTransition()
-  const cost = 1 + (voice ? 1 : 0) + (visuals === 'ai' ? scenes : 0)
+  const cost = 1 + (voice ? 1 : 0) + (visuals === 'ai' ? scenes : 0) + (visuals === 'veo' ? scenes * clipCredits(clipQuality, 4) : 0)
 
   const go = () =>
     start(async () => {
       setError(undefined)
-      const res = await createVideoWithAI({ brief, format, scenes, visuals, mediaIds: media.map((m) => m.id), voice, language })
+      const res = await createVideoWithAI({ brief, format, scenes, visuals, clipQuality, mediaIds: media.map((m) => m.id), voice, language })
       if (res.error || !res.id) return setError(res.error)
       router.push(`/app/studio/video/${res.id}`)
     })
@@ -152,11 +153,12 @@ function AiVideoModal({ onClose }: { onClose: () => void }) {
         </div>
         <div>
           <p className="text-sm font-medium">Pictures</p>
-          <div className="mt-1.5 grid grid-cols-3 gap-2">
+          <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {(
               [
                 ['library', ImageIcon, 'My photos & clips'],
                 ['ai', Sparkles, `AI images · ${scenes} cr`],
+                ['veo', Clapperboard, 'AI clips (Veo)'],
                 ['none', Palette, 'Brand colours'],
               ] as const
             ).map(([v, Icon, l]) => (
@@ -170,6 +172,24 @@ function AiVideoModal({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
+          {visuals === 'veo' && (
+            <div className="mt-2 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-900">
+              <p>A real moving 4-second clip for every scene, made by Google Veo. They arrive in the editor within a few minutes.</p>
+              <div role="radiogroup" aria-label="Clip quality" className="mt-2 flex gap-1">
+                {(Object.keys(CLIP_QUALITIES) as ClipQuality[]).map((q) => (
+                  <button
+                    key={q}
+                    role="radio"
+                    aria-checked={clipQuality === q}
+                    onClick={() => setClipQuality(q)}
+                    className={`rounded-lg px-2.5 py-1 font-medium ring-1 ${clipQuality === q ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200'}`}
+                  >
+                    {CLIP_QUALITIES[q].label} · {clipCredits(q, 4) * scenes} cr
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {visuals === 'library' && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {media.map((m) => (

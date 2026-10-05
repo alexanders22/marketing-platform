@@ -5,6 +5,7 @@ import { dispatchAlerts } from '@/lib/alerts'
 import { refreshDossiersDue } from '@/lib/dossier'
 import { checkAllGoals } from '@/lib/goals'
 import { syncInboxDue } from '@/lib/inbox'
+import { advanceClipsDue } from '@/lib/veo'
 import { syncAdsDue } from '@/lib/meta-ads'
 import { reviewsDue } from '@/lib/weekly'
 import { publishDue, refreshInsights } from '@/lib/publisher'
@@ -33,6 +34,8 @@ export async function POST(req: Request) {
   const ads = await syncAdsDue()
   // Direct messages: each account every 2 minutes.
   const inbox = await syncInboxDue()
+  // AI clips: finish the ones Veo is done with (also when nobody is watching).
+  const clips = await advanceClipsDue()
   // Goals hourly, after fresh ad and post numbers.
   let goals = 0
   if (q.get('goals') === '1' || Date.now() - lastGoals > 60 * 60 * 1000) {
@@ -52,5 +55,5 @@ export async function POST(req: Request) {
     })
   }
   const alerts = await dispatchAlerts()
-  return Response.json({ published, insights, ads, inbox, goals, dossiers, alerts })
+  return Response.json({ published, insights, ads, inbox, clips, goals, dossiers, alerts })
 }

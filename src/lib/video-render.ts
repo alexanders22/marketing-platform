@@ -95,8 +95,19 @@ async function render(videoId: string, overlays: (Buffer | null)[]) {
       }
     }
 
-    // Voice-over lines start a beat after their scene.
+    // Voice-over lines start a beat after their scene; clips that keep their
+    // own sound join the same mix.
     const voices: string[] = []
+    for (const [i, p] of parts.entries()) {
+      const s = p.scene
+      const media = s?.keepAudio && s.media?.kind === 'video' ? byId.get(s.media.id) : null
+      if (!media || !(await probe(mediaFile(media.path))).audio) continue
+      const a = input++
+      args.push('-ss', num(Math.max(0, s!.clipStart)), '-t', num(p.seconds), '-i', mediaFile(media.path))
+      const ms = Math.round(p.start * 1000)
+      filters.push(`[${a}:a]aformat=sample_rates=44100:channel_layouts=stereo,afade=t=in:d=0.2,afade=t=out:st=${num(Math.max(0, p.seconds - 0.3))}:d=0.3,adelay=${ms}|${ms}[c${i}]`)
+      voices.push(`[c${i}]`)
+    }
     for (const [i, p] of parts.entries()) {
       const id = p.scene?.voiceMediaId
       const media = id ? byId.get(id) : null

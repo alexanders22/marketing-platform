@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 import { emptyDoc, FORMATS, isFormat, MAX_SCENES, MOTIONS, newScene, POSITIONS, TEXT_STYLES, timeline, VOICES, type Format, type SceneMedia, type VideoDoc } from '@/lib/video'
 import { enqueueRender } from '@/lib/video-render'
+import { advanceClip, CLIP_QUALITIES, CLIP_SECONDS, clipCredits, startVeo, veoAspect, veoEnabled, type ClipQuality } from '@/lib/veo'
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/)
 const SceneSchema = z.object({
@@ -35,6 +36,8 @@ const SceneSchema = z.object({
   voice: z.string().max(400),
   voiceMediaId: z.string().max(40).nullable(),
   voiceMs: z.number().int().min(0).max(120_000).nullable(),
+  clipJobId: z.string().max(40).nullable().optional(),
+  keepAudio: z.boolean().optional(),
 })
 const DocSchema = z.object({
   scenes: z.array(SceneSchema).min(1, 'Add at least one scene').max(MAX_SCENES),
@@ -115,6 +118,7 @@ export async function renderVideo(id: string, overlays: (string | null)[]): Prom
   if (video.status === 'RENDERING') return { error: 'Already rendering' }
   const doc = video.data as unknown as VideoDoc
   if (!(await ownedMedia(workspace.id, doc))) return { error: 'Some media are not available' }
+  if (doc.scenes.some((s) => s.clipJobId)) return { error: 'An AI clip is still being generated — render when it is ready' }
   const { parts } = timeline(doc)
   if (overlays.length !== parts.length) return { error: 'Save the video and try again' }
   const pngs: (Buffer | null)[] = []
@@ -194,7 +198,8 @@ const AiInput = z.object({
   brief: z.string().trim().min(3, 'Describe the video').max(1500),
   format: z.string(),
   scenes: z.number().int().min(3).max(8),
-  visuals: z.enum(['library', 'ai', 'none']),
+  visuals: z.enum(['library', 'ai', 'veo', 'none']),
+  clipQuality: z.enum(Object.keys(CLIP_QUALITIES) as [ClipQuality, ...ClipQuality[]]).optional(),
   mediaIds: z.array(z.string().max(40)).max(20),
   voice: z.boolean(),
   language: z.string(),
@@ -210,7 +215,13 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
   if (!aiEnabled()) return { error: 'AI is not connected yet.' }
   const format: Format = isFormat(input.format) ? input.format : '9:16'
   const language = LANGUAGES.find((l) => l === input.language) ?? 'English'
-  const max = COST.videoScript + (input.voice ? COST.voice : 0) + (input.visuals === 'ai' ? input.scenes * COST.image : 0)
+  const clipQuality: ClipQuality = input.clipQuality ?? 'quick'
+  const max =
+    COST.videoScript +
+    (input.voice ? COST.voice : 0) +
+    (input.visuals === 'ai' ? input.scenes * COST.image : 0) +
+    (input.visuals === 'veo' ? input.scenes * clipCredits(clipQuality, 4) : 0)
+  if (input.visuals === 'veo' && !veoEnabled()) return { error: 'AI video is not connected yet.' }
   if (account.creditBalance < max) return { error: notEnough(max, account.creditBalance) }
 
   const known = await withDossier(brand, workspace.id)
@@ -290,6 +301,116 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
   const v = await prisma.video.create({
     data: { workspaceId: workspace.id, name: script.title, format, data: doc as unknown as Prisma.InputJsonValue },
   })
+
+  // Veo clips: one 4-second clip per scene, generated in the background; the
+  // editor shows them arriving.
+  if (input.visuals === 'veo') {
+    const fresh = await prisma.account.findUniqueOrThrow({ where: { id: account.id }, select: { creditBalance: true } })
+    let balance = fresh.creditBalance
+    for (const [i, sc] of doc.scenes.entries()) {
+      const prompt = `${script.scenes[i]?.visual || sc.text}. Vertical social video, no text on screen.`
+      const res = await beginClip(account.id, balance, workspace.id, {
+        prompt: input.brief.startsWith('[test]') ? `[test] ${prompt}` : prompt,
+        quality: clipQuality,
+        seconds: 4,
+        format,
+        imageId: null,
+        videoId: v.id,
+        sceneId: sc.id,
+      })
+      if (res.jobId) {
+        sc.clipJobId = res.jobId
+        sc.duration = Math.max(sc.duration, 4)
+        balance -= clipCredits(clipQuality, 4)
+      }
+    }
+    await prisma.video.update({ where: { id: v.id }, data: { data: doc as unknown as Prisma.InputJsonValue } })
+  }
   revalidatePath('/app', 'layout')
   return { id: v.id }
+}
+
+/* ─── AI clips (Veo) ─────────────────────────────────────────────────── */
+
+const ClipInput = z.object({
+  prompt: z.string().trim().min(3, 'Describe the clip').max(1500),
+  quality: z.enum(Object.keys(CLIP_QUALITIES) as [ClipQuality, ...ClipQuality[]]),
+  seconds: z.number().int().refine((n) => (CLIP_SECONDS as readonly number[]).includes(n), 'Clips are 4, 6 or 8 seconds'),
+  format: z.string(),
+  imageId: z.string().max(40).nullable(),
+  videoId: z.string().max(40).nullable(),
+  sceneId: z.string().max(20).nullable(),
+})
+
+// Starts a Veo clip. Credits are taken now and given back if it fails.
+export async function startClip(raw: z.input<typeof ClipInput>): Promise<{ jobId?: string; error?: string }> {
+  const { account, workspace } = await requireContext()
+  const parsed = ClipInput.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  const c = parsed.data
+  if (!veoEnabled() && !c.prompt.startsWith('[test]')) return { error: 'AI video is not connected yet.' }
+  if (c.videoId && !(await prisma.video.findFirst({ where: { id: c.videoId, workspaceId: workspace.id }, select: { id: true } }))) return { error: 'Video not found' }
+  if (c.imageId && !(await prisma.media.findFirst({ where: { id: c.imageId, workspaceId: workspace.id, kind: 'IMAGE' }, select: { id: true } }))) return { error: 'Photo not found' }
+  const res = await beginClip(account.id, account.creditBalance, workspace.id, c)
+  if (res.jobId) revalidatePath('/app', 'layout')
+  return res
+}
+
+async function beginClip(accountId: string, balance: number, workspaceId: string, c: z.output<typeof ClipInput>): Promise<{ jobId?: string; error?: string }> {
+  const account = { id: accountId, creditBalance: balance }
+  const workspace = { id: workspaceId }
+  const credits = clipCredits(c.quality, c.seconds)
+  if (account.creditBalance < credits) return { error: notEnough(credits, account.creditBalance) }
+
+  const job = await prisma.clipJob.create({
+    data: {
+      workspaceId: workspace.id,
+      accountId: account.id,
+      videoId: c.videoId,
+      sceneId: c.sceneId,
+      prompt: c.prompt,
+      imageId: c.imageId,
+      quality: c.quality,
+      aspect: veoAspect(c.format),
+      seconds: c.seconds,
+      credits,
+    },
+  })
+  const ok = await charge(account.id, workspace.id, [{ amount: credits, reason: 'AI_VIDEO', note: `AI clip · ${CLIP_QUALITIES[c.quality].label} · ${c.seconds}s` }])
+  if (!ok) {
+    await prisma.clipJob.delete({ where: { id: job.id } })
+    return { error: notEnough(credits, 0) }
+  }
+  try {
+    const operation = await startVeo(job)
+    await prisma.clipJob.update({ where: { id: job.id }, data: { operation } })
+  } catch (e) {
+    console.error('veo start failed', e)
+    const message = e instanceof Error ? e.message : String(e)
+    // Not started: hand the credits back right away.
+    await prisma.$transaction([
+      prisma.account.update({ where: { id: account.id }, data: { creditBalance: { increment: credits } } }),
+      prisma.creditEntry.create({
+        data: { accountId: account.id, workspaceId: workspace.id, amount: credits, reason: 'REFUND', note: 'AI clip could not start', idempotencyKey: `clip-refund:${job.id}`, refType: 'clip', refId: job.id },
+      }),
+      prisma.clipJob.update({ where: { id: job.id }, data: { status: 'FAILED', error: message.slice(0, 500) } }),
+    ])
+    return { error: /safety|policy|blocked/i.test(message) ? 'Google refused this description. Try different words.' : 'Veo could not start the clip. Your credits are back.' }
+  }
+  return { jobId: job.id }
+}
+
+// The editor asks every few seconds; each call moves the job forward.
+export async function clipStatus(jobId: string) {
+  const { workspace } = await requireContext()
+  const owned = await prisma.clipJob.findFirst({ where: { id: jobId, workspaceId: workspace.id }, select: { id: true } })
+  if (!owned) return null
+  const job = await advanceClip(jobId)
+  if (!job) return null
+  const media = job.mediaId ? await prisma.media.findUnique({ where: { id: job.mediaId }, select: { id: true, durationMs: true, posterId: true } }) : null
+  return {
+    status: job.status,
+    error: job.error,
+    media: media ? { id: media.id, kind: 'video' as const, url: mediaUrl(media.id), durationMs: media.durationMs, posterUrl: media.posterId ? mediaUrl(media.posterId) : null } : null,
+  }
 }
