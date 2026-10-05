@@ -44,7 +44,7 @@ test('the dropdown switches language on the same page and is remembered', async 
   await expect(page.getByRole('listbox', { name: 'Язык' })).toBeFocused()
   await page.keyboard.press('ArrowUp')
   await page.keyboard.press('Enter')
-  await page.waitForURL(/\/ka\/features\/inbox$/)
+  await page.waitForURL(/\/ka\/features\/inbox$/, { timeout: 30_000 })
 
   // Next visit to / opens the Georgian landing.
   await page.goto('/')

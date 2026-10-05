@@ -132,7 +132,7 @@ test.describe('onboarding', () => {
     await expect(page.getByText('Choose your plan')).toBeVisible()
     await page.getByRole('button', { name: 'Close' }).click()
     await page.waitForURL(/\/app/)
-    await expect(page.locator('aside').getByText('No plan — choose one').first()).toBeVisible()
+    await expect(page.getByRole('link', { name: /credits left — No plan — choose one/ }).first()).toBeAttached()
     expect(acct(email, 'a.plan, a."creditBalance", a."trialEndsAt" is null')).toBe('NONE|0|t')
     await page.goto('/app/credits')
     await expect(page.getByText('No plan yet')).toBeVisible()

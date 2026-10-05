@@ -3,13 +3,13 @@ import { NextResponse } from 'next/server'
 import { requireContext } from '@/lib/context'
 import { META_STATE_COOKIE, metaAuthUrl, metaEnabled } from '@/lib/meta'
 import { seal } from '@/lib/signed'
-import { appUrl } from '@/lib/mail'
+import { terminalUrl } from '@/lib/hosts'
 
 // Start "Connect Facebook & Instagram" for the current workspace.
 export async function GET(req: Request) {
   const { role } = await requireContext()
-  if (!metaEnabled()) return NextResponse.redirect(new URL('/app/channels?error=meta-off', appUrl()))
-  if (role === 'EDITOR') return NextResponse.redirect(new URL('/app/channels?error=role', appUrl()))
+  if (!metaEnabled()) return NextResponse.redirect(new URL('/app/channels?error=meta-off', terminalUrl()))
+  if (role === 'EDITOR') return NextResponse.redirect(new URL('/app/channels?error=role', terminalUrl()))
 
   const state = randomBytes(16).toString('base64url')
   const res = NextResponse.redirect(metaAuthUrl(state))

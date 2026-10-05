@@ -6,7 +6,8 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { sha256 } from '@/lib/crypto'
-import { actionEmail, appUrl, mailEnabled, sendMail } from '@/lib/mail'
+import { actionEmail, mailEnabled, sendMail } from '@/lib/mail'
+import { terminalUrl } from '@/lib/hosts'
 import { hashPassword, verifyPassword } from '@/lib/password'
 import { clearFailures, isLimited, recordFailure } from '@/lib/rate-limit'
 import { createSession, destroySession, afterLoginPath } from '@/lib/session'
@@ -27,7 +28,7 @@ export async function requestMagicLink(_: FormState, form: FormData): Promise<Fo
 
   if (await recentlySent(email, 'LOGIN')) return { sent: email }
 
-  const link = `${appUrl()}/auth/magic?token=${await issueLink(email, 'LOGIN', LINK_TTL_MS)}`
+  const link = `${terminalUrl()}/auth/magic?token=${await issueLink(email, 'LOGIN', LINK_TTL_MS)}`
   const footer = 'The link works once and expires in 15 minutes. If you did not ask for it, ignore this email.'
   try {
     await sendMail(
@@ -165,7 +166,7 @@ export async function requestPasswordReset(_: FormState, form: FormData): Promis
 
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true } })
   if (user && !(await recentlySent(email, 'PASSWORD_RESET'))) {
-    const link = `${appUrl()}/reset-password?token=${await issueLink(email, 'PASSWORD_RESET', RESET_TTL_MS)}`
+    const link = `${terminalUrl()}/reset-password?token=${await issueLink(email, 'PASSWORD_RESET', RESET_TTL_MS)}`
     const footer = 'The link works once and expires in 30 minutes. If you did not ask to reset your password, ignore this email — your password stays the same.'
     // Not awaited: answering at the same speed for known and unknown emails
     // keeps response time from revealing who has an account.

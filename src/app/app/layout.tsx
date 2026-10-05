@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import { requireContext } from '@/lib/context'
 import { PLANS } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { AppSidebar } from './AppSidebar'
 import { CreditsBadge } from './CreditsBadge'
+import { SectionTabs } from './SectionTabs'
 import { prices } from '@/lib/credits'
 import { PricesProvider } from '@/components/Prices'
 
@@ -61,6 +63,9 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
               </a>
             </div>
           )}
+          <Suspense fallback={null}>
+            <SectionTabs counts={{ alerts, recommendations }} />
+          </Suspense>
           {children}
         </div>
       </main>

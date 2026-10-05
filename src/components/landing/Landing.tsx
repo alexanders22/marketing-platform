@@ -40,7 +40,7 @@ import { Pricing } from "./Pricing";
 import { Footer } from "./Footer";
 import { COPY, localePath, type Lang } from "./i18n";
 import type { Copy } from "./copy/en";
-import { CONTACT } from "./site";
+import { CONTACT, SIGNUP } from "./site";
 
 type Icon = ComponentType<{ size?: number; className?: string }>;
 
@@ -64,7 +64,7 @@ const NETWORKS: { icon: Icon; name: string; color: string }[] = [
 export function Landing({ lang }: { lang: Lang }) {
   const c = COPY[lang];
   return (
-    <div className="overflow-x-clip">
+    <div lang={lang} className="overflow-x-clip">
       <Header lang={lang} />
       <main>
         <Hero c={c} lang={lang} />
@@ -125,7 +125,7 @@ function Card({ children, className = "", solid = false }: { children: ReactNode
   );
 }
 
-function PrimaryCta({ children, href = "/signup" }: { children: ReactNode; href?: string }) {
+function PrimaryCta({ children, href = SIGNUP }: { children: ReactNode; href?: string }) {
   return (
     <a
       href={href}

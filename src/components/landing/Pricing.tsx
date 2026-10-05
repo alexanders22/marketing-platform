@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Building2, Check, Clapperboard, Coins, Rocket, Sparkles, UserRound, Users } from "lucide-react";
 import { DEFAULT_PRICING } from "@/lib/pricing";
 import { COPY, type Lang } from "./i18n";
+import { SIGNUP } from "./site";
 
 const PLANS = [
   {
@@ -97,7 +98,7 @@ export function Pricing({ lang = "en" }: { lang?: Lang }) {
                 {yearly ? t.billedYearly.replace("{total}", (p.monthly * 10).toLocaleString("en-US")) : t.billedMonthly}
               </p>
               <Link
-                href="/signup"
+                href={SIGNUP}
                 className={`mt-6 rounded-lg py-2.5 text-center text-sm font-medium transition ${
                   p.popular
                     ? "bg-white text-zinc-950 hover:bg-zinc-200"

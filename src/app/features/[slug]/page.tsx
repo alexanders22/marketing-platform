@@ -6,7 +6,7 @@ import { Header } from "@/components/landing/Header";
 import { Footer } from "@/components/landing/Footer";
 import { HtmlLang } from "@/components/landing/HtmlLang";
 import { alternates, COPY, localePath, type Lang } from "@/components/landing/i18n";
-import { CONTACT, FEATURES, featureHref, featuresFor } from "@/components/landing/site";
+import { CONTACT, FEATURES, featureHref, featuresFor, SIGNUP } from "@/components/landing/site";
 
 export const dynamicParams = false;
 
@@ -38,7 +38,7 @@ export function FeatureView({ lang, slug }: { lang: Lang; slug: string }) {
   const others = all.filter((x) => x.slug !== f.slug);
 
   return (
-    <div className="overflow-x-clip">
+    <div lang={lang} className="overflow-x-clip">
       {lang !== "en" && <HtmlLang lang={lang} />}
       <Header lang={lang} />
       <main>
@@ -66,7 +66,7 @@ export function FeatureView({ lang, slug }: { lang: Lang; slug: string }) {
             <p className="mx-auto mt-6 max-w-2xl text-lg text-zinc-400 text-pretty">{f.intro}</p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <a
-                href={soon || f.slug === "api" ? CONTACT : "/signup"}
+                href={soon || f.slug === "api" ? CONTACT : SIGNUP}
                 className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200"
               >
                 {soon ? t.featurePage.earlyAccess : f.slug === "api" ? t.featurePage.talk : t.featurePage.start} <ArrowRight size={16} />

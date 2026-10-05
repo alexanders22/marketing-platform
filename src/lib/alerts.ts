@@ -1,7 +1,8 @@
 import 'server-only'
 import { createHmac } from 'node:crypto'
 import type { Alert, AlertSeverity } from '@prisma/client'
-import { appUrl, sendMail } from './mail'
+import { terminalUrl } from './hosts'
+import { sendMail } from './mail'
 import { prisma } from './prisma'
 
 // Alerts are stored first and delivered by dispatchAlerts() on the next
@@ -55,7 +56,7 @@ function digest(alerts: Alert[]) {
       (a) => `<tr><td style="padding:12px 0;border-top:1px solid #f4f4f5">
 <p style="margin:0;font-size:14px;font-weight:600"><span style="color:${COLOR[a.severity]}">●</span> ${esc(a.title)}</p>
 <p style="margin:4px 0 0;font-size:13px;color:#52525b;line-height:1.5">${esc(a.body)}</p>
-${a.href ? `<p style="margin:6px 0 0;font-size:13px"><a href="${appUrl()}${a.href}" style="color:#4f46e5">Open in Loudpilot →</a></p>` : ''}
+${a.href ? `<p style="margin:6px 0 0;font-size:13px"><a href="${terminalUrl()}${a.href}" style="color:#4f46e5">Open in Loudpilot →</a></p>` : ''}
 </td></tr>`,
     )
     .join('')
@@ -77,7 +78,7 @@ export const alertPayload = (a: Alert) => ({
   severity: a.severity.toLowerCase(),
   title: a.title,
   body: a.body,
-  url: a.href ? `${appUrl()}${a.href}` : null,
+  url: a.href ? `${terminalUrl()}${a.href}` : null,
   createdAt: a.createdAt,
 })
 
@@ -110,7 +111,7 @@ export async function dispatchAlerts(limit = 200) {
       try {
         const subject =
           toEmail.length === 1 ? `Loudpilot alert: ${toEmail[0].title}` : `Loudpilot: ${toEmail.length} alerts for ${ws.name}`
-        const text = toEmail.map((a) => `• ${a.title}\n  ${a.body}${a.href ? `\n  ${appUrl()}${a.href}` : ''}`).join('\n\n')
+        const text = toEmail.map((a) => `• ${a.title}\n  ${a.body}${a.href ? `\n  ${terminalUrl()}${a.href}` : ''}`).join('\n\n')
         for (const to of recipients) await sendMail(to, subject, text, digest(toEmail))
         await prisma.alert.updateMany({ where: { id: { in: toEmail.map((a) => a.id) } }, data: { emailedAt: new Date() } })
         emailed += recipients.length ? toEmail.length : 0

@@ -6,7 +6,7 @@ import { refreshDossier } from '@/lib/dossier'
 import { syncAdAccount } from '@/lib/meta-ads'
 import { prisma } from '@/lib/prisma'
 import { unseal } from '@/lib/signed'
-import { appUrl } from '@/lib/mail'
+import { terminalUrl } from '@/lib/hosts'
 
 // Meta sends the person back here. Every Page they picked becomes a FACEBOOK
 // account, its linked Instagram professional account an INSTAGRAM account,
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
         join(partner.ret, k === 'connected' ? `loudpilot_status=connected&loudpilot_accounts=${v}` : `loudpilot_status=error&loudpilot_reason=${PARTNER_REASON[v] ?? 'error'}`),
       )
     }
-    return redirect(new URL(`/app/channels?${q}`, appUrl()))
+    return redirect(new URL(`/app/channels?${q}`, terminalUrl()))
   }
 
   let workspaceId: string

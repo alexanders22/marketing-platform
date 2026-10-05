@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { requireContext } from '@/lib/context'
 import type { DesignDoc } from '@/lib/design'
 import { prisma } from '@/lib/prisma'
@@ -36,20 +35,6 @@ export default async function StudioPage({ searchParams }: PageProps<'/app/studi
   const tab = sp.tab === 'video' && !post ? 'video' : 'images'
   return (
     <>
-      {!post && (
-        <nav aria-label="Studio" className="mb-5 flex w-fit rounded-lg bg-zinc-100 p-1 text-sm">
-          {(
-            [
-              ['images', 'Images', '/app/studio'],
-              ['video', 'Video', '/app/studio?tab=video'],
-            ] as const
-          ).map(([id, label, href]) => (
-            <Link key={id} href={href} aria-current={tab === id ? 'page' : undefined} className={`rounded-md px-4 py-1.5 font-medium ${tab === id ? 'bg-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900'}`}>
-              {label}
-            </Link>
-          ))}
-        </nav>
-      )}
       {tab === 'images' && (
       <StudioHome
         brandName={workspace.name}

@@ -23,7 +23,7 @@ function watch(page: Page) {
 }
 
 const items = (page: Page) => page.locator('ol > li')
-const credits = (page: Page) => page.getByRole('link', { name: /Credits left/ }).first()
+const credits = (page: Page) => page.getByRole('link', { name: /credits left/ }).first()
 const cellLink = (page: Page, day: string, href: string) =>
   page.locator('div.group', { has: page.getByLabel(`New post on ${day}`) }).locator(`a[href="${href}"]`)
 const campaignUrl = /\/app\/campaigns\/(?!new)[^/?]+$/

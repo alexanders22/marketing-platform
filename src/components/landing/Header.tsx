@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, Check, ChevronDown, Globe, Menu, X } from "lucide-react";
 import { Logo } from "./Logo";
 import { COPY, LANG_META, LANGS, localePath, switchPath, type Lang } from "./i18n";
-import { CONTACT, featureHref, featuresFor, integrationsFor, resourcesFor, type Feature } from "./site";
+import { CONTACT, featureHref, featuresFor, integrationsFor, resourcesFor, type Feature, LOGIN, SIGNUP } from "./site";
 
 type MenuKey = "features" | "integrations" | "resources";
 
@@ -72,11 +72,11 @@ export function Header({ lang = "en" }: { lang?: Lang }) {
 
         <div className="hidden items-center gap-3 md:flex">
           <LanguageSwitcher lang={lang} />
-          <Link href="/login" className="text-sm text-zinc-300 transition hover:text-white">
+          <Link href={LOGIN} className="text-sm text-zinc-300 transition hover:text-white">
             {c.nav.login}
           </Link>
           <Link
-            href="/signup"
+            href={SIGNUP}
             className="rounded-full bg-white px-4 py-1.5 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200"
           >
             {c.nav.tryFree}
@@ -375,11 +375,11 @@ function MobileMenu({ onClose, lang }: { onClose: () => void; lang: Lang }) {
       <Link href={localePath(lang, "/#pricing")} onClick={onClose} className="block py-3 text-zinc-200">
         {c.nav.pricing}
       </Link>
-      <Link href="/login" className="block py-3 text-zinc-200">
+      <Link href={LOGIN} className="block py-3 text-zinc-200">
         {c.nav.login}
       </Link>
       <Link
-        href="/signup"
+        href={SIGNUP}
         onClick={onClose}
         className="mt-2 block rounded-full bg-white py-2.5 text-center text-sm font-medium text-zinc-950"
       >

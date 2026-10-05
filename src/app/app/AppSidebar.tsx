@@ -5,57 +5,29 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import {
   Bell,
-  Bot,
-  BookUser,
-  CalendarDays,
   Check,
   ChevronsUpDown,
   Clapperboard,
   Coins,
-  Compass,
   FilePen,
-  Flag,
   FileText,
   Headphones,
-  Inbox,
-  LayoutDashboard,
-  LayoutTemplate,
-  ListChecks,
   Loader2,
-  Link2,
   LogOut,
   Menu,
   Newspaper,
   Palette,
   Plus,
-  Send,
   ShieldCheck,
   Sparkles,
   StickyNote,
   Target,
-  Workflow,
   X,
 } from 'lucide-react'
-import { FaLinkedinIn } from 'react-icons/fa6'
-import { SiFacebook, SiInstagram, SiX } from 'react-icons/si'
 import { logout } from '../(auth)/actions'
 import { switchCompany } from './companies/actions'
 import { CreditsBadge } from './CreditsBadge'
-
-const NAV = [
-  { href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/app/weekly', label: 'This week', icon: ListChecks },
-  { href: '/app/strategy', label: 'Strategy', icon: Compass },
-  { href: '/app/dossier', label: 'Dossier', icon: BookUser },
-  { href: '/app/goals', label: 'Goals', icon: Flag },
-  { href: '/app/alerts', label: 'Alerts', icon: Bell },
-  { href: '/app/planner', label: 'Planner', icon: CalendarDays },
-  { href: '/app/campaigns', label: 'Campaigns', icon: Target },
-  { href: '/app/inbox', label: 'Inbox', icon: Inbox },
-  { href: '/app/bio', label: 'Bio Pages', icon: Link2 },
-  { href: '/app/studio', label: 'Studio', icon: LayoutTemplate },
-  { href: '/app/workflows', label: 'Workflows', icon: Workflow },
-]
+import { MAIN, SETUP, sectionOf, type Section } from './nav'
 
 export type SidebarProps = {
   workspace: string
@@ -119,109 +91,56 @@ export function AppSidebar(props: SidebarProps) {
   )
 }
 
-function SidebarBody({ credits, planLabel, alerts, recommendations, inbox, path, ...rest }: SidebarProps & { path: string }) {
+function SidebarBody({ alerts, recommendations, inbox, path, ...rest }: SidebarProps & { path: string }) {
+  const current = sectionOf(path)
+  const badge = (s: Section) => {
+    if (s.badge === 'inbox' && inbox > 0) return <Count n={inbox} label="unread conversations" tone="bg-indigo-600" />
+    if (s.badge === 'insights' && alerts > 0) return <Count n={alerts} label="unread alerts" tone="bg-red-500" />
+    if (s.badge === 'insights' && recommendations > 0) return <Count n={recommendations} label="open recommendations" tone="bg-indigo-600" />
+    return null
+  }
+  const item = (s: Section) => (
+    <Link
+      key={s.href}
+      href={s.href}
+      aria-current={current === s ? 'page' : undefined}
+      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] transition ${
+        current === s ? 'bg-zinc-200/70 font-medium text-zinc-900' : 'text-zinc-700 hover:bg-zinc-200/50'
+      }`}
+    >
+      <s.icon size={18} />
+      {s.label}
+      {badge(s)}
+    </Link>
+  )
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <WorkspaceMenu {...rest} />
 
       <CreateMenu />
 
-      <nav className="mt-4 space-y-0.5">
-        {NAV.map((n) => {
-          const active = path.startsWith(n.href)
-          return (
-            <Link
-              key={n.href}
-              href={n.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] transition ${
-                active ? 'bg-zinc-200/70 font-medium text-zinc-900' : 'text-zinc-700 hover:bg-zinc-200/50'
-              }`}
-            >
-              <n.icon size={18} />
-              {n.label}
-              {n.href === '/app/weekly' && recommendations > 0 && (
-                <span className="ml-auto rounded-full bg-indigo-600 px-1.5 py-px text-[11px] font-semibold text-white" aria-label={`${recommendations} open recommendations`}>
-                  {recommendations}
-                </span>
-              )}
-              {n.href === '/app/inbox' && inbox > 0 && (
-                <span className="ml-auto rounded-full bg-indigo-600 px-1.5 py-px text-[11px] font-semibold text-white" aria-label={`${inbox} unread conversations`}>
-                  {inbox > 99 ? '99+' : inbox}
-                </span>
-              )}
-              {n.href === '/app/alerts' && alerts > 0 && (
-                <span className="ml-auto rounded-full bg-red-500 px-1.5 py-px text-[11px] font-semibold text-white" aria-label={`${alerts} unread`}>
-                  {alerts > 99 ? '99+' : alerts}
-                </span>
-              )}
-            </Link>
-          )
-        })}
+      <nav aria-label="Main" className="mt-4 space-y-0.5">
+        {MAIN.map(item)}
       </nav>
 
-      <div className="mt-auto space-y-0.5 pt-6">
+      <nav aria-label="Setup" className="mt-auto space-y-0.5 pt-6">
+        {SETUP.map(item)}
         <a
           href="mailto:info@loudpilot.app?subject=Loudpilot%20support"
           className="flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] text-zinc-700 hover:bg-zinc-200/50"
         >
-          <Headphones size={18} /> Support
+          <Headphones size={18} /> Help
         </a>
-        <Link
-          href="/app/mcp"
-          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] hover:bg-zinc-200/50 ${
-            path.startsWith('/app/mcp') ? 'bg-zinc-200/70 font-medium' : 'text-zinc-700'
-          }`}
-        >
-          <Bot size={18} /> AI assistants
-        </Link>
-        <Link
-          href="/app/channels"
-          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] hover:bg-zinc-200/50 ${
-            path.startsWith('/app/channels') ? 'bg-zinc-200/70 font-medium' : 'text-zinc-700'
-          }`}
-        >
-          <Send size={18} /> Channels
-        </Link>
-        <div className="flex gap-2 px-3 py-2">
-          {[
-            { i: SiFacebook, c: '#1877F2', n: 'Facebook' },
-            { i: SiInstagram, c: '#E4405F', n: 'Instagram' },
-            { i: SiX, c: '#000', n: 'X' },
-            { i: FaLinkedinIn, c: '#0A66C2', n: 'LinkedIn' },
-          ].map(({ i: I, c, n }) => (
-            <Link
-              key={n}
-              href="/app/channels"
-              aria-label={`Connect ${n}`}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-200 bg-white"
-            >
-              <I size={16} color={c} />
-            </Link>
-          ))}
-          <Link
-            href="/app/channels"
-            className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500"
-            aria-label="Connect a channel"
-          >
-            <Plus size={16} />
-          </Link>
-        </div>
-
-        <Link
-          href="/app/credits"
-          className="mt-2 block rounded-xl border border-zinc-200 bg-white px-3 py-2.5 shadow-sm"
-        >
-          <span className="flex items-center justify-between text-sm">
-            <span className="inline-flex items-center gap-2 font-medium">
-              <span className={`h-2 w-2 rounded-full ${credits > 0 ? 'bg-emerald-500' : 'bg-zinc-300'}`} />
-              Credits left
-            </span>
-            <span className="font-semibold">{credits.toLocaleString()}</span>
-          </span>
-          <span className="mt-0.5 block text-xs text-zinc-500">{planLabel}</span>
-        </Link>
-      </div>
+      </nav>
     </div>
+  )
+}
+
+function Count({ n, label, tone }: { n: number; label: string; tone: string }) {
+  return (
+    <span className={`ml-auto rounded-full px-1.5 py-px text-[11px] font-semibold text-white ${tone}`} aria-label={`${n} ${label}`}>
+      {n > 99 ? '99+' : n}
+    </span>
   )
 }
 

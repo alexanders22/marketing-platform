@@ -39,6 +39,11 @@ import {
 
 export type Icon = ComponentType<{ size?: number; className?: string }>;
 
+// Sign in / sign up live on the terminal host when there is one.
+const TERMINAL = process.env.NEXT_PUBLIC_TERMINAL_URL ?? "";
+export const LOGIN = `${TERMINAL}/login`;
+export const SIGNUP = `${TERMINAL}/signup`;
+
 // Sales / partnership enquiries.
 export const CONTACT = "mailto:info@loudpilot.app?subject=Loudpilot%20demo";
 export const SUPPORT = "mailto:info@loudpilot.app?subject=Loudpilot%20support";

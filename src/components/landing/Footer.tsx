@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "./Logo";
 import { COPY, localePath, type Lang } from "./i18n";
-import { CONTACT, SUPPORT, featureHref, featuresFor } from "./site";
+import { CONTACT, SUPPORT, featureHref, featuresFor, SIGNUP } from "./site";
 
 export function Footer({ lang = "en" }: { lang?: Lang }) {
   const t = COPY[lang].footer;
@@ -28,7 +28,7 @@ export function Footer({ lang = "en" }: { lang?: Lang }) {
         { label: t.contactSales, href: CONTACT },
         { label: t.support, href: SUPPORT },
         { label: t.login, href: "/login" },
-        { label: t.startFree, href: "/signup" },
+        { label: t.startFree, href: SIGNUP },
       ],
     },
     {

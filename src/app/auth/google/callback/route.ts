@@ -2,10 +2,10 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { exchangeGoogleCode, googleEnabled } from '@/lib/google'
 import { prisma } from '@/lib/prisma'
 import { afterLoginPath, createSession } from '@/lib/session'
-import { appUrl } from '@/lib/mail'
+import { terminalUrl } from '@/lib/hosts'
 
 export async function GET(req: NextRequest) {
-  const fail = () => NextResponse.redirect(new URL('/login?error=google', appUrl()))
+  const fail = () => NextResponse.redirect(new URL('/login?error=google', terminalUrl()))
   if (!googleEnabled()) return fail()
 
   const code = req.nextUrl.searchParams.get('code')
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       })
 
   await createSession(user.id)
-  const res = NextResponse.redirect(new URL(await afterLoginPath(), appUrl()))
+  const res = NextResponse.redirect(new URL(await afterLoginPath(), terminalUrl()))
   res.cookies.delete({ name: 'khma_oauth_state', path: '/auth/google' })
   return res
 }

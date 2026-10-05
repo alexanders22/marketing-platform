@@ -193,8 +193,8 @@ for (const vp of VIEWPORTS) {
     await expect(menu).toHaveCount(0)
     if (mobile) {
       // a nav link closes the drawer and navigates
-      await scope.getByRole('link', { name: 'Bio Pages' }).click()
-      await expect(page).toHaveURL(/\/app\/bio$/)
+      await scope.getByRole('link', { name: 'Studio' }).click()
+      await expect(page).toHaveURL(/\/app\/studio$/)
       await expect(page.locator('div.fixed.inset-0 aside')).toHaveCount(0)
       // X button closes
       await page.getByRole('button', { name: 'Open menu' }).click()

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApiError, body, handler, json, partnerWorkspace, requirePartner } from '@/lib/api'
-import { appUrl } from '@/lib/mail'
+import { terminalUrl } from '@/lib/hosts'
 import { metaEnabled } from '@/lib/meta'
 import { seal } from '@/lib/signed'
 
@@ -19,5 +19,5 @@ export const POST = handler(async (req, ctx: RouteContext<'/api/v1/workspaces/[e
   if (!metaEnabled()) throw new ApiError(503, 'not_configured', 'Meta connections are not available yet')
   const ttl = 3600
   const token = seal({ ws: ws.id, ret: input.returnUrl }, ttl)
-  return json({ url: `${appUrl()}/connect/meta?token=${token}`, expiresAt: new Date(Date.now() + ttl * 1000) }, 201)
+  return json({ url: `${terminalUrl()}/connect/meta?token=${token}`, expiresAt: new Date(Date.now() + ttl * 1000) }, 201)
 })
