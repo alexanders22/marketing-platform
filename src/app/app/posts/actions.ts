@@ -9,6 +9,7 @@ import { aiEnabled, generateImage } from '@/lib/ai'
 import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
 import { mediaUrl, saveMedia } from '@/lib/storage'
+import { aiError } from '@/lib/ai-health'
 
 const NETWORKS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST'] as const
 
@@ -177,7 +178,10 @@ export async function generatePostImages(input: { prompt: string; caption: strin
   )
   const media = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
   results.forEach((r) => r.status === 'rejected' && console.error('generatePostImages failed', r.reason))
-  if (media.length === 0) return { error: 'The AI could not draw this. Try a different description.' }
+  if (media.length === 0) {
+    const reason = results.find((r) => r.status === 'rejected')?.reason
+    return { error: aiError(reason, 'The AI could not draw this. Try a different description.') }
+  }
   const ok = await charge(account.id, workspace.id, [
     { amount: media.length * COST.image, reason: 'AI_IMAGE', note: `${media.length} post image${media.length > 1 ? 's' : ''}`, action: 'image', units: media.length },
   ])

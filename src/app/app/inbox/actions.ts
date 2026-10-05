@@ -7,6 +7,7 @@ import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
 import { InboxError, markRead, sendReply, syncInbox } from '@/lib/inbox'
 import { prisma } from '@/lib/prisma'
+import { aiError } from '@/lib/ai-health'
 
 export async function openConversation(id: string) {
   const { workspace } = await requireContext()
@@ -57,7 +58,7 @@ export async function draftReply(conversationId: string): Promise<{ text?: strin
     )
   } catch (e) {
     console.error('suggestReply failed', e)
-    return { error: 'The AI could not draft a reply. Try again.' }
+    return { error: aiError(e, 'The AI could not draft a reply. Try again.') }
   }
   const ok = await charge(account.id, workspace.id, [{ amount: COST.reply, reason: 'AI_TEXT', note: 'Reply draft', action: 'reply', units: 1 }])
   if (!ok) return { error: notEnough(COST.reply, 0) }

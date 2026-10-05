@@ -8,6 +8,7 @@ import { requireContext } from '@/lib/context'
 import { balanceOf, charge, notEnough, prices } from '@/lib/credits'
 import { syncAdAccount } from '@/lib/meta-ads'
 import { prisma } from '@/lib/prisma'
+import { aiError } from '@/lib/ai-health'
 
 export async function generateSummary(period: number): Promise<{ summary?: PerformanceSummary; error?: string }> {
   const { workspace, account, brand } = await requireContext()
@@ -26,7 +27,7 @@ export async function generateSummary(period: number): Promise<{ summary?: Perfo
     summary = await summarizePerformance(workspace.name, await withDossier(brand, workspace.id), summaryFacts(data))
   } catch (e) {
     console.error('summary failed', e)
-    return { error: 'The summary could not be written — try again.' }
+    return { error: aiError(e, 'The summary could not be written — try again.') }
   }
   if (!summary.headline) return { error: 'The summary could not be written — try again.' }
   // Charged only once the summary exists.

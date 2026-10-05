@@ -1,6 +1,7 @@
 import 'server-only'
 import { GoogleGenAI, type Part } from '@google/genai'
 import type { BrandKit } from '@prisma/client'
+import { noteAiFailure } from './ai-health'
 
 // GEMINI_API_KEY enables generation. GEMINI_MODEL / GEMINI_IMAGE_MODEL
 // override the defaults.
@@ -141,6 +142,7 @@ export async function generateImage(
       lastError = e
     }
   }
+  noteAiFailure(lastError)
   throw lastError ?? new Error('Image generation failed')
 }
 
@@ -155,7 +157,10 @@ async function retrying<T>(fn: (model: string) => Promise<T>, tries = 2): Promis
     try {
       return await fn(MODEL)
     } catch (e) {
-      if (!busy(e)) throw e
+      if (!busy(e)) {
+        noteAiFailure(e)
+        throw e
+      }
       if (i >= tries) break
       await new Promise((r) => setTimeout(r, 2000 * i))
     }

@@ -7,6 +7,7 @@ import { requireContext } from '@/lib/context'
 import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
 import { prisma } from '@/lib/prisma'
+import { aiError } from '@/lib/ai-health'
 
 // "Suggest what to do": audiences, open questions and ideas for a post or
 // campaign, from the dossier, the owner's answers and the last 30 days.
@@ -35,7 +36,7 @@ export async function getAdvice(input: {
     })
   } catch (e) {
     console.error('adviseBrief failed', e)
-    return { error: 'The AI could not prepare suggestions. Try again.' }
+    return { error: aiError(e, 'The AI could not prepare suggestions. Try again.') }
   }
   const ok = await charge(account.id, workspace.id, [{ amount: COST.advice, reason: 'AI_TEXT', note: 'Marketing suggestions', action: 'advice', units: 1 }])
   if (!ok) return { error: notEnough(COST.advice, 0) }
@@ -76,6 +77,6 @@ export async function translateAdvice(advice: BriefAdvice, language: string): Pr
     return { advice: await translate(advice, lang) }
   } catch (e) {
     console.error('translateAdvice failed', e)
-    return { error: 'Could not translate the suggestions. Try again.' }
+    return { error: aiError(e, 'Could not translate the suggestions. Try again.') }
   }
 }

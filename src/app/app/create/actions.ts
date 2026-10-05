@@ -8,6 +8,7 @@ import { requireContext } from '@/lib/context'
 import { charge, notEnough, prices } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 import { mediaUrl, saveMedia } from '@/lib/storage'
+import { aiError } from '@/lib/ai-health'
 
 const MAX_ATTACHMENT_B64 = 2_800_000 // ~2 MB per image after base64
 
@@ -56,7 +57,7 @@ export async function createPost(raw: z.input<typeof Input>): Promise<{ post?: C
     text = await generatePost(workspace.name, known, { ...input, aiHashtags: input.aiHashtags })
   } catch (e) {
     console.error('generatePost failed', e)
-    return { error: 'The AI could not write this post. Please try again.' }
+    return { error: aiError(e, 'The AI could not write this post. Please try again.') }
   }
 
   // Library hashtags are added as-is; AI ones only if switched on. Case-insensitive de-dupe.

@@ -19,6 +19,7 @@ import { advanceClip, CLIP_QUALITIES, CLIP_SECONDS, startVeo, veoAspect, veoEnab
 import { isPaid, PAID_ONLY } from '@/lib/plans'
 import { veoAllowance, veoLimitMessage } from '@/lib/credits'
 import { clipAction } from '@/lib/pricing'
+import { aiError } from '@/lib/ai-health'
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/)
 const SceneSchema = z.object({
@@ -140,7 +141,7 @@ export async function generateVoices(id: string): Promise<{ doc?: VideoDoc; erro
     }
   } catch (e) {
     console.error('voice-over failed', e)
-    return { error: 'The voice-over could not be generated. Try again.' }
+    return { error: aiError(e, 'The voice-over could not be generated. Try again.') }
   }
   const ok = await charge(account.id, workspace.id, [{ amount: COST.voice, reason: 'AI_VIDEO', note: 'Video voice-over', action: 'voice', units: 1 }])
   if (!ok) return { error: notEnough(COST.voice, 0) }
@@ -276,7 +277,7 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     script = await videoScript(workspace.name, known, { brief: input.brief, scenes: input.scenes, language, voice: input.voice })
   } catch (e) {
     console.error('videoScript failed', e)
-    return { error: 'The AI could not write this video. Try again.' }
+    return { error: aiError(e, 'The AI could not write this video. Try again.') }
   }
 
   // Your own photos and clips, in the order picked.
@@ -467,7 +468,7 @@ async function beginClip(accountId: string, balance: number, workspaceId: string
       }),
       prisma.clipJob.update({ where: { id: job.id }, data: { status: 'FAILED', error: message.slice(0, 500) } }),
     ])
-    return { error: /safety|policy|blocked/i.test(message) ? 'Google refused this description. Try different words.' : 'Veo could not start the clip. Your credits are back.' }
+    return { error: /safety|policy|blocked/i.test(message) ? 'Google refused this description. Try different words.' : aiError(e, 'Veo could not start the clip. Your credits are back.') }
   }
   return { jobId: job.id }
 }

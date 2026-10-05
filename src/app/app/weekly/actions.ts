@@ -5,6 +5,7 @@ import { aiEnabled } from '@/lib/ai'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 import { applyRecommendation, createReview, dismissRecommendation } from '@/lib/weekly'
+import { aiError } from '@/lib/ai-health'
 
 export async function reviewNow(): Promise<{ error?: string }> {
   const { workspace, role } = await requireContext()
@@ -16,7 +17,7 @@ export async function reviewNow(): Promise<{ error?: string }> {
     await createReview(workspace.id, { rolling: true })
   } catch (e) {
     console.error('review failed', e)
-    return { error: 'The review could not be written — please try again.' }
+    return { error: aiError(e, 'The review could not be written — please try again.') }
   }
   revalidatePath('/app', 'layout')
   return {}

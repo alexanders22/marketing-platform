@@ -16,6 +16,7 @@ import { balanceOf, charge, notEnough, prices } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 import { BATCH, chunks, pairWithDates, slots, startsInPast } from '@/lib/campaign-plan'
 import { dayIn, isValidTimeZone } from '@/lib/time'
+import { aiError } from '@/lib/ai-health'
 
 const NETWORKS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST'] as const
 
@@ -71,7 +72,7 @@ export async function createSocialCampaign(raw: z.input<typeof Social>): Promise
     }
   } catch (e) {
     console.error('campaign generation failed', e)
-    return { error: 'The AI could not plan this campaign. Please try again.' }
+    return { error: aiError(e, 'The AI could not plan this campaign. Please try again.') }
   }
   if (made.length === 0) return { error: 'The AI could not plan this campaign. Please try again.' }
 
@@ -129,7 +130,7 @@ export async function createBlogCampaign(raw: z.input<typeof Blog>): Promise<{ i
     outlines = await generateBlogOutlines(workspace.name, await withDossier(brand, workspace.id), { brief: c.brief, count: dates.length, language: c.language })
   } catch (e) {
     console.error('blog plan failed', e)
-    return { error: 'The AI could not plan this series. Please try again.' }
+    return { error: aiError(e, 'The AI could not plan this series. Please try again.') }
   }
   if (!(await charge(account.id, workspace.id, [{ amount: outlines.length * COST.blogOutline, reason: 'AI_BLOG', note: `Blog series: ${c.name}`, action: 'blogOutline', units: outlines.length }]))) {
     return { error: notEnough(outlines.length, await balanceOf(account.id)) }
@@ -190,7 +191,7 @@ export async function regenerateCampaignPost(postId: string): Promise<{ error?: 
     })
   } catch (e) {
     console.error('regenerate failed', e)
-    return { error: 'The AI could not rewrite this post. Please try again.' }
+    return { error: aiError(e, 'The AI could not rewrite this post. Please try again.') }
   }
   if (!(await charge(account.id, workspace.id, [{ amount: COST.campaignPost, reason: 'AI_TEXT', note: `Rewrite: ${c.name}`, action: 'campaignPost', units: 1 }]))) {
     return { error: notEnough(COST.campaignPost, await balanceOf(account.id)) }

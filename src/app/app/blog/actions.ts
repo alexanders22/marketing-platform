@@ -7,6 +7,7 @@ import { aiEnabled, generateBlogArticle, LANGUAGES, LENGTHS, TONES } from '@/lib
 import { requireContext } from '@/lib/context'
 import { balanceOf, charge, notEnough, prices } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
+import { aiError } from '@/lib/ai-health'
 
 const AiBlog = z.object({
   topic: z.string().trim().min(5, 'Describe the topic').max(1000),
@@ -34,7 +35,7 @@ export async function createAiBlog(raw: z.input<typeof AiBlog>): Promise<{ id?: 
     article = await generateBlogArticle(workspace.name, await withDossier(brand, workspace.id), { ...parsed.data, keywords })
   } catch (e) {
     console.error('blog generation failed', e)
-    return { error: 'The AI could not write this article. Please try again.' }
+    return { error: aiError(e, 'The AI could not write this article. Please try again.') }
   }
   if (!(await charge(account.id, workspace.id, [{ amount: COST.blogArticle, reason: 'AI_BLOG', note: 'Blog article', action: 'blogArticle', units: 1 }]))) {
     return { error: notEnough(COST.blogArticle, await balanceOf(account.id)) }
@@ -79,7 +80,7 @@ export async function writeArticle(postId: string): Promise<{ error?: string }> 
     })
   } catch (e) {
     console.error('article generation failed', e)
-    return { error: 'The AI could not write this article. Please try again.' }
+    return { error: aiError(e, 'The AI could not write this article. Please try again.') }
   }
   // Fill the article and charge in one transaction, and only if it is still
   // empty — a second tab or a replay can't pay twice or overwrite it.

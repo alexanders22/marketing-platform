@@ -8,6 +8,7 @@ import { balanceOf, charge, notEnough, prices } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 import { OBJECTIVES, applyGoals, applyPosts, buildPlan, setAdLaunched } from '@/lib/strategist'
 import { isValidTimeZone } from '@/lib/time'
+import { aiError } from '@/lib/ai-health'
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const Input = z
@@ -39,7 +40,7 @@ export async function createPlan(raw: z.input<typeof Input>): Promise<{ id?: str
     plan = await buildPlan(workspace.id, parsed.data as Parameters<typeof buildPlan>[1], user.id)
   } catch (e) {
     console.error('plan failed', e)
-    return { error: 'The strategist could not finish the plan — please try again.' }
+    return { error: aiError(e, 'The strategist could not finish the plan — please try again.') }
   }
   // Charged once the plan exists; if the balance moved meanwhile, the plan
   // is removed again.
