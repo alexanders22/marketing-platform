@@ -32,13 +32,16 @@ export class GaError extends Error {
   }
 }
 
-export function gaAuthUrl(state: string) {
+// Search Console signs in through the same client and callback.
+export const SC_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly'
+
+export function gaAuthUrl(state: string, scope = GA_SCOPE) {
   const url = new URL(AUTH_URL)
   url.search = new URLSearchParams({
     client_id: clientId(),
     redirect_uri: gaRedirectUri(),
     response_type: 'code',
-    scope: GA_SCOPE,
+    scope,
     state,
     // A refresh token, every time (Google only sends it on consent).
     access_type: 'offline',
@@ -62,11 +65,11 @@ async function token(body: Record<string, string>): Promise<TokenResponse> {
   return data
 }
 
-export async function exchangeGaCode(code: string) {
+export async function exchangeGaCode(code: string, scope = GA_SCOPE) {
   const t = await token({ code, redirect_uri: gaRedirectUri(), grant_type: 'authorization_code' })
   if (!t.refresh_token) throw new GaError('Google did not grant offline access')
   const scopes = (t.scope ?? '').split(' ').filter(Boolean)
-  if (!scopes.includes(GA_SCOPE)) throw new GaError('Analytics access was not granted')
+  if (!scopes.includes(scope)) throw new GaError(scope === GA_SCOPE ? 'Analytics access was not granted' : 'Search Console access was not granted')
   return { access: t.access_token, refresh: t.refresh_token, expiresAt: new Date(Date.now() + t.expires_in * 1000), scopes }
 }
 
@@ -80,7 +83,7 @@ export async function gaAccessToken(a: Pick<SocialAccount, 'id' | 'accessTokenEn
   return t.access_token
 }
 
-async function call<T>(url: string, accessToken: string, body?: unknown): Promise<T> {
+export async function call<T>(url: string, accessToken: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method: body ? 'POST' : 'GET',
     headers: { authorization: `Bearer ${accessToken}`, ...(body ? { 'content-type': 'application/json' } : {}) },

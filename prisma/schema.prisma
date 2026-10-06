@@ -420,6 +420,8 @@ enum SocialNetwork {
   META_ADS
   // A Google Analytics 4 property: website visits and key events.
   GOOGLE_ANALYTICS
+  // A Google Search Console site: searches, clicks and positions.
+  SEARCH_CONSOLE
   TIKTOK
   LINKEDIN
   YOUTUBE

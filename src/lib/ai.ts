@@ -46,7 +46,7 @@ const TONE_HINT: Record<PostOptions['tone'], string> = {
 
 // BrandKit plus, when known, the dossier brief (company profile and what
 // worked before) — see src/lib/dossier.ts.
-type Brand = BrandKit & { dossier?: string }
+export type Brand = BrandKit & { dossier?: string }
 
 function brandContext(name: string, brand: Brand | null) {
   return [
@@ -1088,4 +1088,102 @@ export async function explainResults(brandName: string, brand: Brand | null, com
     why: (Array.isArray(out?.why) ? out.why : []).map((x) => s(x)).filter(Boolean).slice(0, 4),
     next: (Array.isArray(out?.next) ? out.next : []).map((x) => s(x)).filter(Boolean).slice(0, 4),
   }
+}
+
+// ─── SEO ──────────────────────────────────────────────────────────────────
+
+export type SeoActions = { summary: string; actions: { title: string; why: string; how: string; impact: 'high' | 'medium' | 'low' }[] }
+
+// What to do about the SEO check: the most valuable fixes first, with
+// rewritten titles and descriptions and content ideas from real searches.
+export async function seoAdvice(brandName: string, brand: Brand | null, report: unknown, language: PostOptions['language']): Promise<SeoActions> {
+  const system = [
+    'You are a senior SEO consultant writing the action list for a small business website.',
+    'Use only the data given: the technical checks, the pages read, and (if present) Google Search Console queries with clicks, impressions, CTR and position.',
+    'Order by impact on getting customers from Google. Be concrete: for title/description fixes write the new text; for "almost on page one" searches name the page and what to add; for content, name 1–3 page or article ideas from real queries.',
+    'Also cover how to be cited by AI assistants (Google AI Overviews, ChatGPT, Gemini) when relevant: clear answers, FAQ, structured data, consistent business details.',
+    '"summary": 2 sentences on where the site stands. "actions": 5–8 items, each {title, why (cite the data), how (steps or the exact text), impact: high|medium|low}.',
+    brandContext(brandName, brand),
+    `Write in ${language}. Return JSON.`,
+  ].join('\n\n')
+  const str = { type: 'string' }
+  const out = await json<SeoActions>(system, JSON.stringify(report), 6000, 90_000, {
+    type: 'object',
+    properties: {
+      summary: str,
+      actions: {
+        type: 'array',
+        items: { type: 'object', properties: { title: str, why: str, how: str, impact: { type: 'string', enum: ['high', 'medium', 'low'] } }, required: ['title', 'why', 'how', 'impact'] },
+      },
+    },
+    required: ['summary', 'actions'],
+  })
+  const s = (v: unknown, n = 600) => String(v ?? '').trim().slice(0, n)
+  return {
+    summary: s(out?.summary, 500),
+    actions: (Array.isArray(out?.actions) ? out.actions : [])
+      .map((a) => ({ title: s(a?.title, 160), why: s(a?.why), how: s(a?.how, 1200), impact: (['high', 'medium', 'low'].includes(a?.impact) ? a.impact : 'medium') as 'high' | 'medium' | 'low' }))
+      .filter((a) => a.title)
+      .slice(0, 8),
+  }
+}
+
+// ─── AI search (GEO) ──────────────────────────────────────────────────────
+
+// Questions a potential customer would ask an AI assistant when looking for
+// what the company sells — without naming the company.
+export async function aiSearchQuestions(brandName: string, brand: Brand | null, seeds: string[], language: PostOptions['language']): Promise<string[]> {
+  const system = [
+    'You write the questions real people type into ChatGPT, Gemini or Google AI Mode when they look for a product or service like the company’s.',
+    'Write 6 natural, specific questions: "best …", "where to …", "who does …", comparisons, price questions — with the city or country when the business is local.',
+    'Never name the company itself: we test whether the AI recommends it on its own.',
+    seeds.length ? `Real Google searches that bring people to the site (use them as inspiration): ${seeds.slice(0, 15).join('; ')}` : '',
+    brandContext(brandName, brand),
+    `Write the questions in ${language}. Return JSON {"questions": string[]}.`,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  const out = await json<{ questions: string[] }>(system, 'Write the questions.', 1500, 60_000, {
+    type: 'object',
+    properties: { questions: { type: 'array', items: { type: 'string' } } },
+    required: ['questions'],
+  })
+  const name = brandName.toLowerCase()
+  return (Array.isArray(out?.questions) ? out.questions : [])
+    .map((q) => String(q ?? '').trim().slice(0, 200))
+    .filter((q) => q && !q.toLowerCase().includes(name))
+    .slice(0, 6)
+}
+
+export type AiAnswer = { answer: string; businesses: string[]; sources: { title: string; url: string }[] }
+
+// Answer like an AI assistant with Google Search, and say which businesses
+// the answer recommends and which pages it used.
+export async function askAiSearch(question: string): Promise<AiAnswer> {
+  if (!client) throw new Error('AI is not configured')
+  const res = await retrying((model) =>
+    client.models.generateContent({
+      model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `${question}\n\nAnswer the way an AI assistant answers a customer: short, with concrete recommendations found in search. Then on the very last line write "BUSINESSES:" followed by the names of the businesses or brands you recommended, separated by "; " (or "none").`,
+            },
+          ],
+        },
+      ],
+      config: { tools: [{ googleSearch: {} }], maxOutputTokens: 1500, abortSignal: AbortSignal.timeout(90_000) },
+    }),
+  )
+  const text = (res.text ?? '').trim()
+  const m = text.match(/BUSINESSES:\s*(.*)\s*$/i)
+  const businesses = m && !/^none\.?$/i.test(m[1].trim()) ? m[1].split(/;\s*/).map((b) => b.replace(/[*_]/g, '').trim()).filter(Boolean).slice(0, 12) : []
+  const chunks = res.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []
+  const sources = chunks
+    .flatMap((c) => (c.web?.uri ? [{ title: String(c.web.title ?? '').slice(0, 120), url: c.web.uri }] : []))
+    .filter((s, i, all) => all.findIndex((x) => x.title === s.title) === i)
+    .slice(0, 10)
+  return { answer: (m ? text.slice(0, m.index) : text).trim().slice(0, 3000), businesses, sources }
 }

@@ -54,9 +54,13 @@ export const MAIN: Section[] = [
   },
   {
     label: 'Website',
-    href: '/app/website/tracking',
+    href: '/app/website',
     icon: Globe,
-    tabs: [{ label: 'Tracking', href: '/app/website/tracking' }],
+    tabs: [
+      { label: 'SEO', href: '/app/website' },
+      { label: 'AI search', href: '/app/website/ai' },
+      { label: 'Tracking', href: '/app/website/tracking' },
+    ],
   },
   {
     label: 'Brand',

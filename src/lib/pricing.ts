@@ -23,6 +23,8 @@ export const ACTIONS = {
   compare: { label: 'Competitor comparison', unit: 'report', credits: 3, costUsd: 0.02 },
   brandbookRead: { label: 'Brandbook reading', unit: 'brandbook', credits: 2, costUsd: 0.02 },
   brandbookDesign: { label: 'Brandbook design (3 directions)', unit: 'brandbook', credits: 3, costUsd: 0.02 },
+  seoAdvice: { label: 'SEO action plan', unit: 'plan', credits: 2, costUsd: 0.02 },
+  aiSearch: { label: 'AI search visibility check', unit: 'check', credits: 5, costUsd: 0.2 },
 } as const
 
 export type Action = keyof typeof ACTIONS

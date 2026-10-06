@@ -79,7 +79,7 @@ test('without the analytics permission the connection is refused', async () => {
   await section().getByRole('link', { name: 'Add or refresh' }).click()
   await page.waitForURL(/error=ga-api/)
   await expect(page.getByText('Google did not accept the connection. Please try again.')).toBeVisible()
-  google.setScope('https://www.googleapis.com/auth/analytics.readonly')
+  google.setScope(null)
 })
 
 test('a website goal: sign-ups a week, checked against Google Analytics, shown on the dashboard', async () => {

@@ -1,8 +1,9 @@
 import { createServer, type Server } from 'node:http'
 
-// A tiny stand-in for Google's OAuth and the Analytics Admin/Data APIs. The
-// dev server talks to it when .env has GOOGLE_AUTH_URL, GOOGLE_TOKEN_URL,
-// GA_ADMIN_URL and GA_DATA_URL on http://127.0.0.1:18998.
+// A tiny stand-in for Google's OAuth, the Analytics Admin/Data APIs and
+// Search Console. The dev server talks to it when .env has GOOGLE_AUTH_URL,
+// GOOGLE_TOKEN_URL, GA_ADMIN_URL, GA_DATA_URL and SC_URL on
+// http://127.0.0.1:18998.
 
 export const FAKE_GOOGLE_PORT = 18998
 const SCOPE = 'https://www.googleapis.com/auth/analytics.readonly'
@@ -11,7 +12,15 @@ export type GaReportCall = { property: string; dimensions: string[] }
 
 export function startFakeGoogle() {
   let properties = [{ property: 'properties/111', displayName: 'Bloom Bakery website' }]
-  let grantScope = SCOPE
+  // Grants what was asked for, unless a test overrides it.
+  let grantScope: string | null = null
+  let asked = SCOPE
+  let scSites = [
+    { siteUrl: 'sc-domain:127.0.0.1', permissionLevel: 'siteOwner' },
+    { siteUrl: 'https://other.example/', permissionLevel: 'siteFullUser' },
+    { siteUrl: 'https://unverified.example/', permissionLevel: 'siteUnverifiedUser' },
+  ]
+  const scQueries: { site: string; body: Record<string, unknown> }[] = []
   let failData: { status: number; message: string } | null = null
   const reports: GaReportCall[] = []
   const tokens: Record<string, string>[] = []
@@ -34,6 +43,7 @@ export function startFakeGoogle() {
 
     // Consent screen: approve at once and go back with a code.
     if (url.pathname === '/auth') {
+      asked = url.searchParams.get('scope') ?? SCOPE
       const back = new URL(url.searchParams.get('redirect_uri')!)
       back.searchParams.set('code', 'fake-code')
       back.searchParams.set('state', url.searchParams.get('state') ?? '')
@@ -47,7 +57,7 @@ export function startFakeGoogle() {
         access_token: `fake-access-${tokens.length}`,
         ...(p.grant_type === 'authorization_code' ? { refresh_token: 'fake-refresh' } : {}),
         expires_in: 3600,
-        scope: grantScope,
+        scope: grantScope ?? asked,
       })
     }
     if (url.pathname === '/admin/accountSummaries') {
@@ -69,6 +79,30 @@ export function startFakeGoogle() {
       })
       return json(200, { rows })
     }
+    // Search Console: 28 days of searches for the site.
+    if (url.pathname === '/sc/sites') return json(200, { siteEntry: scSites })
+    const sc = url.pathname.match(/^\/sc\/sites\/(.+)\/searchAnalytics\/query$/)
+    if (sc) {
+      const q = JSON.parse(body) as { dimensions: string[]; startDate: string }
+      scQueries.push({ site: decodeURIComponent(sc[1]), body: q })
+      const dim = q.dimensions[0]
+      const r = (key: string, clicks: number, impressions: number, position: number) => ({ keys: [key], clicks, impressions, ctr: impressions ? clicks / impressions : 0, position })
+      if (dim === 'query')
+        return json(200, {
+          rows: [
+            r('bloom bakery', 120, 400, 1.2),
+            r('fresh bread tbilisi', 9, 600, 7.4),
+            r('birthday cake order', 4, 300, 11.8),
+            r('croissant near me', 2, 900, 3.1),
+            r('bakery jobs', 0, 5, 40),
+          ],
+        })
+      if (dim === 'page') return json(200, { rows: [r('http://127.0.0.1:18996/', 100, 1200, 4), r('http://127.0.0.1:18996/cakes', 30, 800, 8)] })
+      // Dates: this period 5 clicks a day, the one before 4.
+      const prev = Date.parse(q.startDate) < Date.now() - 40 * 86_400_000
+      return json(200, { rows: Array.from({ length: 28 }, (_, i) => r(`d${i}`, prev ? 4 : 5, 100, 6)) })
+    }
+
     json(404, { error: { message: `fake-google: no route ${url.pathname}` } })
   })
 
@@ -76,7 +110,9 @@ export function startFakeGoogle() {
     reports,
     tokens,
     setProperties: (p: { property: string; displayName: string }[]) => (properties = p),
-    setScope: (s: string) => (grantScope = s),
+    setScope: (s: string | null) => (grantScope = s),
+    setScSites: (s: { siteUrl: string; permissionLevel: string }[]) => (scSites = s),
+    scQueries,
     failData: (f: { status: number; message: string } | null) => (failData = f),
     listen: async () => {
       for (let i = 0; i < 300; i++) {

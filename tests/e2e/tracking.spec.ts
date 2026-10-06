@@ -24,8 +24,8 @@ const PIXEL = `<script>fbq('init', '1234567890123456'); fbq('track', 'PageView')
 test.beforeAll(async ({ browser }) => {
   await new Promise<void>((r) => site.listen(SITE_PORT, '127.0.0.1', () => r()))
   page = await browser.newPage()
-  await newAccount(page, 'track')
-  workspaceId = sql(`select w.id from "Workspace" w join "BrandKit" b on b."workspaceId"=w.id order by w."createdAt" desc limit 1`)
+  const { brand } = await newAccount(page, 'track', `Track ${Date.now()}`)
+  workspaceId = sql(`select id from "Workspace" where name='${brand}'`)
   sql(`update "BrandKit" set website='http://127.0.0.1:${SITE_PORT}/' where "workspaceId"='${workspaceId}'`)
 })
 test.afterAll(async () => {
