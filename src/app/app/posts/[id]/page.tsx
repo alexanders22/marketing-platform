@@ -7,11 +7,12 @@ import { prisma } from '@/lib/prisma'
 import { PUBLISHABLE } from '@/lib/publisher'
 import { mediaUrl } from '@/lib/storage'
 import { PostEditor } from '../PostEditor'
+import { boostAccounts, boostsFor } from '@/lib/boost'
 
 export const metadata: Metadata = { title: 'Edit post — Loudpilot' }
 
 export default async function EditPostPage({ params }: PageProps<'/app/posts/[id]'>) {
-  const { workspace, brand } = await requireContext()
+  const { workspace, brand, role } = await requireContext()
   const { id } = await params
   const post = await prisma.post.findFirst({
     where: { id, workspaceId: workspace.id },
@@ -27,8 +28,10 @@ export default async function EditPostPage({ params }: PageProps<'/app/posts/[id
     where: { workspaceId: workspace.id, network: { in: [...PUBLISHABLE] }, status: 'ACTIVE' },
     select: { network: true },
   })
+  const [adAccounts, byDelivery] = await Promise.all([boostAccounts(workspace.id), boostsFor(post.deliveries.map((d) => d.id))])
   return (
     <PostEditor
+      boost={{ accounts: adAccounts, canSpend: role === 'OWNER' || role === 'ADMIN', byDelivery }}
       brand={{ name: workspace.name, logoUrl: brand?.logoUrl ?? null, website: brand?.website ?? null }}
       initial={{
         id: post.id,

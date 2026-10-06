@@ -10,7 +10,8 @@ export const META_VERSION = process.env.META_GRAPH_VERSION || 'v26.0'
 const GRAPH = (process.env.META_GRAPH_URL || 'https://graph.facebook.com').replace(/\/$/, '')
 const DIALOG = process.env.META_DIALOG_URL || `https://www.facebook.com/${META_VERSION}/dialog/oauth`
 
-// Publishing + insights for Pages and Instagram, read access to ad accounts.
+// Publishing + insights for Pages and Instagram, ad accounts (read, and
+// ads_management to boost posts), messaging.
 export const META_SCOPES = (
   process.env.META_SCOPES ||
   [
@@ -23,6 +24,7 @@ export const META_SCOPES = (
     'instagram_manage_insights',
     'business_management',
     'ads_read',
+    'ads_management',
     'pages_messaging',
     'pages_manage_metadata',
     'instagram_manage_messages',

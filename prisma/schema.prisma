@@ -179,6 +179,7 @@ model Workspace {
   bioPages         BioPage[]
   adCampaigns      AdCampaign[]
   websiteDays      WebsiteDay[]
+  boosts           Boost[]
   aiSummaries      AiSummary[]
   goals            Goal[]
   alerts           Alert[]
@@ -324,6 +325,7 @@ model PostDelivery {
   metrics         Json?
   metricsAt       DateTime?
   createdAt       DateTime       @default(now())
+  boosts          Boost[]
 
   @@unique([postId, socialAccountId])
   @@index([socialAccountId, createdAt])
@@ -458,6 +460,7 @@ model SocialAccount {
 
   deliveries  PostDelivery[]
   adCampaigns AdCampaign[]
+  boosts      Boost[]
   websiteDays WebsiteDay[]
   // Ad accounts: when campaigns and insights were last read.
   syncedAt    DateTime?
@@ -599,9 +602,10 @@ model AdCampaign {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  days  AdInsightDay[]
-  goals Goal[]
-  ads   AdItem[]
+  days   AdInsightDay[]
+  goals  Goal[]
+  ads    AdItem[]
+  boosts Boost[]
 
   @@unique([socialAccountId, externalId])
   @@index([workspaceId])
@@ -1192,4 +1196,40 @@ model Brandbook {
   data        Json
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+// A published Facebook or Instagram post promoted with the workspace's ad
+// account ("Boost"): one campaign → ad set → ad built from the post itself.
+model Boost {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveryId  String
+  delivery    PostDelivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  // The META_ADS account that pays.
+  adAccountId String
+  adAccount   SocialAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  // AWARENESS | ENGAGEMENT | TRAFFIC
+  goal        String
+  // Per day, in the ad account currency (major units).
+  dailyBudget Float
+  currency    String?
+  startsAt    DateTime
+  endsAt      DateTime
+  // { countries, ageMin, ageMax, gender, placements, category }
+  audience    Json
+  // ACTIVE | PAUSED | FAILED
+  status      String
+  error       String?
+  campaignExternalId String?
+  adSetExternalId    String?
+  adExternalId       String?
+  adCampaignId String?
+  adCampaign   AdCampaign?  @relation(fields: [adCampaignId], references: [id], onDelete: SetNull)
+  createdById  String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([deliveryId])
+  @@index([workspaceId, createdAt])
 }

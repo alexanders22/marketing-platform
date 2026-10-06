@@ -16,6 +16,8 @@ import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
 import { CtaPicker } from '@/components/CtaPicker'
 import { ctaLine, type Cta } from '@/lib/cta'
+import type { AdAccountChoice, BoostView } from '@/lib/boost'
+import { BoostPanel } from './BoostPanel'
 
 export type PostDraft = {
   id?: string
@@ -70,12 +72,15 @@ export function PostEditor({
   defaultWhen,
   connected = [],
   deliveries = [],
+  boost,
 }: {
   initial: PostDraft
   brand: { name: string; logoUrl: string | null; website?: string | null }
   // Networks with at least one active connected account.
   connected?: Network[]
   deliveries?: Delivery[]
+  // Boosting published Facebook / Instagram posts with the ad account.
+  boost?: { accounts: AdAccountChoice[]; canSpend: boolean; byDelivery: Record<string, BoostView[]> }
   // Local "YYYY-MM-DDTHH:mm" for a new post opened from a Planner day.
   defaultWhen?: string
 }) {
@@ -504,6 +509,16 @@ export function PostEditor({
                           </span>
                         ))}
                       </div>
+                    )}
+                    {boost && d.status === 'PUBLISHED' && (d.network === 'FACEBOOK' || d.network === 'INSTAGRAM') && (
+                      <BoostPanel
+                        deliveryId={d.id}
+                        network={d.network}
+                        boosts={boost.byDelivery[d.id] ?? []}
+                        accounts={boost.accounts}
+                        canSpend={boost.canSpend}
+                        hasLink={!!cta?.url || /https?:\/\//.test(content)}
+                      />
                     )}
                   </li>
                 )

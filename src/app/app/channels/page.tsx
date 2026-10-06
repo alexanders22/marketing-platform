@@ -130,6 +130,11 @@ export default async function ChannelsPage({ searchParams }: PageProps<'/app/cha
                           Needs reconnecting{a.lastError ? ` — ${a.lastError}` : ''}
                         </span>
                       )}
+                      {a.network === 'META_ADS' && a.status === 'ACTIVE' && (
+                        <span className={`ml-2 ${a.scopes.includes('ads_management') ? 'text-emerald-600' : 'text-amber-700'}`}>
+                          {a.scopes.includes('ads_management') ? 'Can boost posts' : 'Read only — reconnect and allow “Manage ads” to boost posts'}
+                        </span>
+                      )}
                     </p>
                   </div>
                   {canEdit && <DisconnectButton id={a.id} name={a.name} />}

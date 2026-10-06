@@ -16,6 +16,7 @@ export function startFakeMeta() {
   let failNextPublish: { code: number; message: string } | null = null
   let failPath: { re: RegExp; code: number; message: string } | null = null
   let leadsStatus = 'ACTIVE'
+  let canManageAds = true
   const hooks: { headers: Record<string, string | string[] | undefined>; body: string }[] = []
   let n = 0
   const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString()
@@ -98,7 +99,7 @@ export function startFakeMeta() {
     if (path === '/me') return json(200, { id: 'meta-user-1', name: 'Test Person' })
     if (path === '/me/permissions')
       return json(200, {
-        data: ['pages_show_list', 'pages_manage_posts', 'instagram_content_publish', 'ads_read', 'pages_messaging', 'pages_manage_metadata', 'instagram_manage_messages'].map((permission) => ({ permission, status: 'granted' })),
+        data: ['pages_show_list', 'pages_manage_posts', 'instagram_content_publish', 'ads_read', ...(canManageAds ? ['ads_management'] : []), 'pages_messaging', 'pages_manage_metadata', 'instagram_manage_messages'].map((permission) => ({ permission, status: 'granted' })),
       })
     if (path === '/me/accounts')
       return json(200, {
@@ -113,6 +114,13 @@ export function startFakeMeta() {
       })
     if (path === '/me/adaccounts')
       return json(200, { data: [{ id: 'act_1', name: 'Bloom Ads', account_status: 1, currency: 'GEL', timezone_name: 'Asia/Tbilisi' }] })
+
+    // Boost: campaign → ad set → creative → ad, then pause/resume or delete.
+    if (req.method === 'POST' && path === '/act_1/campaigns') return json(200, { id: `boost-cmp-${++n}` })
+    if (req.method === 'POST' && path === '/act_1/adsets') return json(200, { id: `boost-set-${++n}` })
+    if (req.method === 'POST' && path === '/act_1/adcreatives') return json(200, { id: `boost-cr-${++n}` })
+    if (req.method === 'POST' && path === '/act_1/ads') return json(200, { id: `boost-ad-${++n}` })
+    if (/^\/boost-cmp-\d+$/.test(path) && (req.method === 'POST' || req.method === 'DELETE')) return json(200, { success: true })
 
     // Ad account act_1: a lead campaign (₾20/day: 4 leads a day in the last
     // 30 days, 2 before) and a paused awareness campaign (₾10/day).
@@ -273,6 +281,7 @@ export function startFakeMeta() {
     failNextPublish: (code: number, message: string) => (failNextPublish = { code, message }),
     failNext: (re: RegExp, code: number, message: string) => (failPath = { re, code, message }),
     setLeadsStatus: (s: string) => (leadsStatus = s),
+    setCanManageAds: (v: boolean) => (canManageAds = v),
     hooks,
     // Specs that use the fake run in parallel workers: whoever holds the port
     // first goes ahead, the others wait their turn.

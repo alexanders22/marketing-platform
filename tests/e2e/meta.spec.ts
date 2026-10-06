@@ -173,6 +173,99 @@ test('insights are read back and shown on the post', async () => {
   await expect(page.getByText('1,200')).toBeVisible()
 })
 
+// A text post published to Facebook (Instagram fails without an image).
+async function publishedFacebookPost(text: string) {
+  const id = addPost(text)
+  await page.goto(`/app/posts/${id}`)
+  page.once('dialog', (d) => d.accept())
+  await page.getByRole('button', { name: 'Publish now' }).click()
+  await expect(page.getByText('failed on 1')).toBeVisible()
+  const story = sql(`select d."externalId" from "PostDelivery" d join "SocialAccount" a on a.id=d."socialAccountId" where d."postId"='${id}' and a.network='FACEBOOK'`)
+  return { id, story }
+}
+
+test('boost a published post: campaign, ad set, an ad made from the post', async () => {
+  const { id, story } = await publishedFacebookPost('Open house this weekend')
+  const before = meta.calls.length
+  await page.getByRole('button', { name: 'Boost', exact: true }).click()
+  const form = page.getByRole('region', { name: 'Boost settings' })
+  await form.getByText('More people see it').click()
+  await form.getByLabel('Daily budget').fill('15')
+  await form.getByLabel('Days').fill('5')
+  await expect(form.getByText('= up to ₾75.00')).toBeVisible()
+  await form.getByLabel('Ad category').selectOption('HOUSING')
+  // Housing ads reach everyone 18–65: no age or gender fields.
+  await expect(form.getByLabel('Minimum age')).toBeHidden()
+  await form.getByRole('button', { name: 'Armenia' }).click()
+  await form.getByLabel('Placements').selectOption('NETWORK_ONLY')
+  let asked = ''
+  page.once('dialog', (d) => {
+    asked = d.message()
+    d.accept()
+  })
+  await form.getByRole('button', { name: 'Boost post' }).click()
+  const row = page.getByLabel('Boost', { exact: true })
+  await expect(row.getByText('Running')).toBeVisible()
+  expect(asked).toContain('₾75.00')
+  await expect(row.getByText(/₾15\.00\/day/)).toBeVisible()
+  // One boost at a time per post.
+  await expect(page.getByRole('button', { name: 'Boost', exact: true })).toBeHidden()
+
+  const posts = meta.calls.slice(before).filter((c) => c.method === 'POST')
+  const campaign = posts.find((c) => c.path === '/act_1/campaigns')!.params
+  expect(campaign).toMatchObject({ objective: 'OUTCOME_AWARENESS', status: 'ACTIVE', special_ad_categories: '["HOUSING"]', special_ad_category_country: '["GE","AM"]' })
+  const set = posts.find((c) => c.path === '/act_1/adsets')!.params
+  expect(set).toMatchObject({ daily_budget: '1500', optimization_goal: 'REACH', billing_event: 'IMPRESSIONS' })
+  expect(Date.parse(set.end_time) - Date.parse(set.start_time)).toBe(5 * 86_400_000)
+  const targeting = JSON.parse(set.targeting)
+  expect(targeting).toMatchObject({ geo_locations: { countries: ['GE', 'AM'] }, age_min: 18, age_max: 65, publisher_platforms: ['facebook'] })
+  expect(targeting.genders).toBeUndefined()
+  expect(posts.find((c) => c.path === '/act_1/adcreatives')!.params.object_story_id).toBe(story)
+  const ad = posts.find((c) => c.path === '/act_1/ads')!.params
+  expect(ad.adset_id).toMatch(/^boost-set-/)
+  expect(JSON.parse(ad.creative).creative_id).toMatch(/^boost-cr-/)
+
+  // On the dashboard at once, as an ad campaign of the ad account.
+  expect(sql(`select b.status||':'||c.objective from "Boost" b join "AdCampaign" c on c.id=b."adCampaignId" join "PostDelivery" d on d.id=b."deliveryId" where d."postId"='${id}'`)).toBe('ACTIVE:OUTCOME_AWARENESS')
+
+  // Pause and resume go to the campaign.
+  await row.getByRole('button', { name: 'Pause' }).click()
+  await expect(row.getByText('Paused')).toBeVisible()
+  const ext = sql(`select b."campaignExternalId" from "Boost" b join "PostDelivery" d on d.id=b."deliveryId" where d."postId"='${id}'`)
+  expect(meta.calls.filter((c) => c.method === 'POST' && c.path === `/${ext}`).at(-1)!.params.status).toBe('PAUSED')
+  await row.getByRole('button', { name: 'Resume' }).click()
+  await expect(row.getByText('Running')).toBeVisible()
+})
+
+test('a refused ad set removes the half-made campaign and says why', async () => {
+  const { id } = await publishedFacebookPost('Bread masterclass')
+  await page.getByRole('button', { name: 'Boost', exact: true }).click()
+  const form = page.getByRole('region', { name: 'Boost settings' })
+  await form.getByLabel('Create paused').check()
+  meta.failNext(/\/act_1\/adsets$/, 100, 'Invalid parameter: targeting is too narrow.')
+  await form.getByRole('button', { name: 'Create paused boost' }).click()
+  await expect(form.getByText('Meta refused: Invalid parameter: targeting is too narrow.')).toBeVisible()
+  expect(meta.calls.filter((c) => c.method === 'POST' && c.path === '/act_1/campaigns').at(-1)!.params.status).toBe('PAUSED')
+  expect(meta.calls.some((c) => c.method === 'DELETE' && /^\/boost-cmp-/.test(c.path))).toBe(true)
+  expect(sql(`select b.status from "Boost" b join "PostDelivery" d on d.id=b."deliveryId" where d."postId"='${id}'`)).toBe('FAILED')
+})
+
+test('without "Manage ads" the boost form explains how to turn it on', async () => {
+  const scopes = sql(`select array_to_string(scopes, ',') from "SocialAccount" where "workspaceId"='${workspaceId}' and network='META_ADS'`)
+  expect(scopes).toContain('ads_management')
+  sql(`update "SocialAccount" set scopes=array_remove(scopes,'ads_management') where "workspaceId"='${workspaceId}' and network='META_ADS'`)
+  try {
+    await publishedFacebookPost('Seasonal menu')
+    await page.getByRole('button', { name: 'Boost', exact: true }).click()
+    const form = page.getByRole('region', { name: 'Boost settings' })
+    await expect(form.getByText('To boost posts from Loudpilot')).toBeVisible()
+    await expect(form.getByText(/Bloom Ads: .*allow "Manage ads"/)).toBeVisible()
+    await expect(form.getByRole('button', { name: 'Boost post' })).toBeHidden()
+  } finally {
+    sql(`update "SocialAccount" set scopes=array_append(scopes,'ads_management') where "workspaceId"='${workspaceId}' and network='META_ADS'`)
+  }
+})
+
 test('expired token marks the account for reconnecting', async () => {
   const id = addPost('Token test')
   meta.failNextPublish(190, 'Error validating access token: Session has expired')
