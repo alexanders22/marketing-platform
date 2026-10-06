@@ -46,6 +46,9 @@ const slug = (s: string) =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 60) || 'post'
 
+// utm_campaign for a Loudpilot campaign (also how its visits are found in GA).
+export const utmCampaign = (name: string | null | undefined) => (name ? slug(name) : 'loudpilot')
+
 // The link with UTM tags, keeping any the author already set.
 export function withUtm(url: string, network: string, ctx: { campaign?: string | null; postId?: string | null }) {
   try {
@@ -53,7 +56,7 @@ export function withUtm(url: string, network: string, ctx: { campaign?: string |
     const set = (k: string, v: string) => !u.searchParams.has(k) && u.searchParams.set(k, v)
     set('utm_source', network.toLowerCase())
     set('utm_medium', 'social')
-    set('utm_campaign', ctx.campaign ? slug(ctx.campaign) : 'loudpilot')
+    set('utm_campaign', utmCampaign(ctx.campaign))
     if (ctx.postId) set('utm_content', ctx.postId)
     return u.toString()
   } catch {

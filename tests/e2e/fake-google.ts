@@ -64,6 +64,7 @@ export function startFakeGoogle() {
       const rows = days(span).flatMap(({ ga, i }) => {
         if (dims.length === 1) return [row([ga], [100 + i, 80 + i, 30, 60, 3, 0])]
         if (dims[1] === 'sessionDefaultChannelGroup') return [row([ga, 'Paid Social'], [60 + i, 2]), row([ga, 'Organic Search'], [40, 1])]
+        if (dims[1] === 'sessionCampaignName') return [row([ga, 'open-house-week'], [12, 1])]
         return [row([ga, 'sign_up'], [2]), row([ga, 'generate_lead'], [1])]
       })
       return json(200, { rows })

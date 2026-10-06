@@ -1061,3 +1061,31 @@ export async function designBrandbook(
   if (list.length === 0) throw new Error('No directions')
   return list.slice(0, 3)
 }
+
+// ─── Plan vs actual ───────────────────────────────────────────────────────
+
+export type ResultsExplanation = { headline: string; why: string[]; next: string[] }
+
+// Why the results differ from the plan, and what to change next.
+export async function explainResults(brandName: string, brand: Brand | null, comparison: unknown, language: PostOptions['language']): Promise<ResultsExplanation> {
+  const system = [
+    'You are the account manager of a marketing agency explaining to the client how a plan went: what was planned vs what happened.',
+    'Use only the rows given. Be honest about misses, credit wins. If the period is still running, say so and judge the pace.',
+    '"headline": one sentence verdict. "why": 2–4 likely reasons for the gaps, citing the rows (and the playbook where relevant). "next": 2–4 concrete changes for the next period.',
+    brandContext(brandName, brand),
+    MARKETING_PLAYBOOK,
+    `Write in ${language}. Return JSON {"headline": string, "why": string[], "next": string[]}.`,
+  ].join('\n\n')
+  const str = { type: 'string' }
+  const out = await json<ResultsExplanation>(system, JSON.stringify(comparison), 3000, 60_000, {
+    type: 'object',
+    properties: { headline: str, why: { type: 'array', items: str }, next: { type: 'array', items: str } },
+    required: ['headline', 'why', 'next'],
+  })
+  const s = (v: unknown, n = 300) => String(v ?? '').trim().slice(0, n)
+  return {
+    headline: s(out?.headline),
+    why: (Array.isArray(out?.why) ? out.why : []).map((x) => s(x)).filter(Boolean).slice(0, 4),
+    next: (Array.isArray(out?.next) ? out.next : []).map((x) => s(x)).filter(Boolean).slice(0, 4),
+  }
+}

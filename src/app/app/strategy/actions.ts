@@ -87,10 +87,13 @@ export async function launchPlan(id: string): Promise<{ error?: string; posts?: 
   return { posts, goals: goals.created, ...(goals.errors.length ? { error: goals.errors.join(' · ') } : {}) }
 }
 
-export async function markAdLaunched(id: string, adId: string, launched: boolean): Promise<{ error?: string }> {
+export async function markAdLaunched(id: string, adId: string, launched: boolean, adCampaignId?: string | null): Promise<{ error?: string }> {
   const plan = await ownPlan(id)
   if (!plan) return { error: 'Plan not found' }
-  await setAdLaunched(plan, adId, launched)
+  if (adCampaignId && !(await prisma.adCampaign.findFirst({ where: { id: adCampaignId, workspaceId: plan.workspaceId }, select: { id: true } }))) {
+    return { error: 'Campaign not found' }
+  }
+  await setAdLaunched(plan, adId, launched || Boolean(adCampaignId), adCampaignId)
   revalidatePath(`/app/strategy/${id}`)
   return {}
 }

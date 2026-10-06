@@ -9,6 +9,8 @@ import { LocalTime } from '@/components/LocalTime'
 import { writeArticle } from '../../blog/actions'
 import { addCampaignImages, deleteCampaign, regenerateCampaignPost } from '../actions'
 import { CampaignImagesModal, type ImagesChoice } from '../CampaignImages'
+import { ComparisonCard } from '../../results/Comparison'
+import type { Comparison } from '@/lib/actuals'
 import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
 
@@ -37,7 +39,9 @@ export function CampaignView({
   images,
   imagesError,
   videos = 0,
+  comparison = null,
 }: {
+  comparison?: Comparison | null
   videos?: number
   campaign: Campaign
   posts: Item[]
@@ -115,6 +119,12 @@ export function CampaignView({
       </div>
 
       <p className="mb-6 rounded-xl bg-zinc-50 p-4 text-sm whitespace-pre-wrap text-zinc-700">{c.brief}</p>
+
+      {comparison && (
+        <div className="mb-6">
+          <ComparisonCard kind="campaign" id={c.id} data={comparison} />
+        </div>
+      )}
 
       {!isBlog && images.generating && (
         <div className="mb-6 rounded-xl bg-indigo-50 p-4 text-sm text-indigo-900 ring-1 ring-indigo-200" role="status">

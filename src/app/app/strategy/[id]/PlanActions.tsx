@@ -68,6 +68,38 @@ export function LaunchedToggle({ planId, adId, launched }: { planId: string; adI
   )
 }
 
+// Which real Meta campaign this planned ad became — so results can be
+// compared with the plan.
+export function LinkCampaign({ planId, adId, value, campaigns }: { planId: string; adId: string; value: string | null; campaigns: { id: string; name: string }[] }) {
+  const { pending, msg, run } = useAction()
+  const [v, setV] = useState(value ?? '')
+  if (campaigns.length === 0) return null
+  return (
+    <label className="inline-flex items-center gap-2 text-sm text-zinc-600">
+      Running as
+      <select
+        value={v}
+        disabled={pending}
+        aria-label="Linked Meta campaign"
+        onChange={(e) => {
+          const next = e.target.value
+          setV(next)
+          run(() => markAdLaunched(planId, adId, Boolean(next), next || null), () => '')
+        }}
+        className="max-w-56 rounded-lg border border-zinc-200 bg-white px-2 py-1 text-sm"
+      >
+        <option value="">— pick the Meta campaign —</option>
+        {campaigns.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      {msg.error && <span className="text-xs text-red-600">{msg.error}</span>}
+    </label>
+  )
+}
+
 export function CopyText({ text, label = 'Copy setup' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -108,8 +140,11 @@ export function LaunchPlan({ planId, left }: { planId: string; left: number }) {
   const [msg, setMsg] = useState<string>()
   if (left === 0) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
-        <Check size={15} /> Plan launched
+      <span className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+          <Check size={15} /> Plan launched
+        </span>
+        {msg && <span className="text-sm text-zinc-600">{msg}</span>}
       </span>
     )
   }

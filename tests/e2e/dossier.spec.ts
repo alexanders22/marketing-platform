@@ -132,6 +132,27 @@ test('the media plan at a glance and one-click launch', async () => {
   await expect(page.getByText('3 posts in the Planner, 1 goals watched.')).toBeVisible()
   await expect(page.getByText('Plan launched')).toBeVisible()
   expect(sql(`select count(*) from "Post" where "workspaceId"='${ws}' and content in ('Black Friday tour','Kitchen','Plans')`)).toBe('3')
+
+  // Launched: planned vs actual appears.
+  const cmp = page.getByRole('region', { name: 'Plan vs actual' })
+  await expect(cmp).toBeVisible()
+  const row = cmp.getByRole('row', { name: /^Posts published/ })
+  await expect(row).toContainText('3')
+  await expect(row).toContainText('0')
+  await expect(row).toContainText('Behind')
+})
+
+test('a planned ad linked to its Meta campaign is compared with its results', async () => {
+  const planId = sql(`select id from "StrategyPlan" where "workspaceId"='${ws}' and title like 'Fill the open house%' limit 1`)
+  await page.goto(`/app/strategy/${planId}`)
+  const link = page.getByLabel('Linked Meta campaign')
+  await expect(link).toBeVisible()
+  const first = await link.locator('option').nth(1).getAttribute('value')
+  await link.selectOption(first!)
+  await expect.poll(() => sql(`select data->'ads'->0->>'adCampaignId' from "StrategyPlan" where id='${planId}'`)).toBe(first)
+  await page.reload()
+  const cmp = page.getByRole('region', { name: 'Plan vs actual' })
+  await expect(cmp.getByRole('row', { name: /Ads · Open house leads · spend/ })).toBeVisible()
 })
 
 test('another workspace cannot open the plan', async ({ browser }) => {

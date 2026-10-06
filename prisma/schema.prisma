@@ -1137,6 +1137,8 @@ model WebsiteDay {
   // [{ channel, sessions, keyEvents }] and { eventName: count }.
   channels    Json          @default("[]")
   events      Json          @default("{}")
+  // Sessions and key events per UTM campaign (utm_campaign): [{ campaign, sessions, keyEvents }].
+  campaigns   Json          @default("[]")
   updatedAt   DateTime      @updatedAt
 
   @@unique([accountId, date])

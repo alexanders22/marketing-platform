@@ -36,7 +36,7 @@ export type PlanInput = {
 export type PlanData = Omit<StrategyDraft, 'ads' | 'posts' | 'goals'> & {
   timeZone: string
   forecastNote: string
-  ads: (StrategyDraft['ads'][number] & { budget: number | null; dailyBudget: number | null; forecast: Forecast | null; launched?: boolean })[]
+  ads: (StrategyDraft['ads'][number] & { budget: number | null; dailyBudget: number | null; forecast: Forecast | null; launched?: boolean; adCampaignId?: string | null })[]
   posts: (StrategyDraft['posts'][number] & { postId?: string })[]
   goals: (StrategyDraft['goals'][number] & { goalId?: string })[]
 }
@@ -200,11 +200,13 @@ export async function applyGoals(plan: StrategyPlan, ids?: string[]) {
   return { created, errors }
 }
 
-export async function setAdLaunched(plan: StrategyPlan, adId: string, launched: boolean) {
+export async function setAdLaunched(plan: StrategyPlan, adId: string, launched: boolean, adCampaignId?: string | null) {
   const data = planData(plan)
   const ad = data.ads.find((a) => a.id === adId)
   if (!ad) return false
   ad.launched = launched
+  // The real Meta campaign it became, to compare plan and results.
+  if (adCampaignId !== undefined) ad.adCampaignId = adCampaignId
   await save(plan, data)
   return true
 }

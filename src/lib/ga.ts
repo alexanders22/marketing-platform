@@ -129,7 +129,7 @@ export async function syncWebsite(accountId: string, days?: number) {
   let access: string
   try {
     access = await gaAccessToken(a)
-    const [totals, channels, events] = await Promise.all([
+    const [totals, channels, events, campaigns] = await Promise.all([
       report({
         dimensions: [{ name: 'date' }],
         metrics: ['sessions', 'totalUsers', 'newUsers', 'engagedSessions', 'keyEvents', 'totalRevenue'].map((name) => ({ name })),
@@ -140,14 +140,26 @@ export async function syncWebsite(accountId: string, days?: number) {
         metrics: [{ name: 'keyEvents' }],
         metricFilter: { filter: { fieldName: 'keyEvents', numericFilter: { operation: 'GREATER_THAN', value: { doubleValue: 0 } } } },
       }),
+      // Per utm_campaign: Loudpilot tags post links with the campaign's name.
+      report({
+        dimensions: [{ name: 'date' }, { name: 'sessionCampaignName' }],
+        metrics: [{ name: 'sessions' }, { name: 'keyEvents' }],
+        dimensionFilter: { notExpression: { filter: { fieldName: 'sessionCampaignName', inListFilter: { values: ['(not set)', '(direct)', '(organic)', '(referral)'] } } } },
+      }),
     ])
 
-    const byDay = new Map<string, { channels: { channel: string; sessions: number; keyEvents: number }[]; events: Record<string, number> }>()
-    const day = (d: string) => byDay.get(d) ?? (byDay.set(d, { channels: [], events: {} }), byDay.get(d)!)
+    const byDay = new Map<
+      string,
+      { channels: { channel: string; sessions: number; keyEvents: number }[]; events: Record<string, number>; campaigns: { campaign: string; sessions: number; keyEvents: number }[] }
+    >()
+    const day = (d: string) => byDay.get(d) ?? (byDay.set(d, { channels: [], events: {}, campaigns: [] }), byDay.get(d)!)
     for (const r of channels.rows ?? []) {
       day(ymd(r.dimensionValues[0].value)).channels.push({ channel: r.dimensionValues[1].value, sessions: num(r.metricValues[0].value), keyEvents: num(r.metricValues[1].value) })
     }
     for (const r of events.rows ?? []) day(ymd(r.dimensionValues[0].value)).events[r.dimensionValues[1].value] = num(r.metricValues[0].value)
+    for (const r of campaigns.rows ?? []) {
+      day(ymd(r.dimensionValues[0].value)).campaigns.push({ campaign: r.dimensionValues[1].value, sessions: num(r.metricValues[0].value), keyEvents: num(r.metricValues[1].value) })
+    }
 
     let n = 0
     for (const r of totals.rows ?? []) {
@@ -163,6 +175,7 @@ export async function syncWebsite(accountId: string, days?: number) {
         revenue,
         channels: (extra?.channels ?? []).sort((x, y) => y.sessions - x.sessions) as unknown as Prisma.InputJsonValue,
         events: (extra?.events ?? {}) as Prisma.InputJsonValue,
+        campaigns: (extra?.campaigns ?? []) as unknown as Prisma.InputJsonValue,
       }
       await prisma.websiteDay.upsert({
         where: { accountId_date: { accountId: a.id, date } },

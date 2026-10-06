@@ -123,6 +123,7 @@ test('campaign pictures from template photos, spread over the posts in order', a
   const { id, ws } = await campaignWithPosts(page, 'cpics', 3)
   await page.goto(`/app/campaigns/${id}`)
   await expect(page.getByText('3 posts without a picture.')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Plan vs actual' }).getByRole('row', { name: /^Posts published/ })).toContainText('3')
   await page.getByRole('button', { name: 'Add pictures' }).click()
   const dialog = page.getByRole('dialog', { name: 'Pictures for your posts' })
   await expect(dialog.getByRole('radio', { name: 'No pictures' })).toHaveCount(0)

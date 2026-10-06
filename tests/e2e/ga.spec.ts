@@ -34,7 +34,7 @@ test('connect one property: read right away, numbers on the dashboard', async ()
   // Tokens are stored encrypted, never in clear.
   const enc = sql(`select "refreshTokenEnc" from "SocialAccount" where "workspaceId"='${ws}' and network='GOOGLE_ANALYTICS'`)
   expect(enc).not.toContain('fake-refresh')
-  expect(google.reports.map((r) => r.dimensions.join('+')).sort()).toEqual(['date', 'date+eventName', 'date+sessionDefaultChannelGroup'])
+  expect(google.reports.map((r) => r.dimensions.join('+')).sort()).toEqual(['date', 'date+eventName', 'date+sessionCampaignName', 'date+sessionDefaultChannelGroup'])
 
   await page.goto('/app/dashboard?days=30')
   const site = page.getByRole('region', { name: 'Website' })

@@ -9,7 +9,9 @@ import { formatMoney, formatNumber } from '@/lib/format'
 import { WINDOWS, formatMetric, metricDef } from '@/lib/goal-metrics'
 import { prisma } from '@/lib/prisma'
 import { OBJECTIVES, type PlanData } from '@/lib/strategist'
-import { ApplyButton, ArchiveButton, CopyText, LaunchPlan, LaunchedToggle } from './PlanActions'
+import { ApplyButton, ArchiveButton, CopyText, LaunchPlan, LaunchedToggle, LinkCampaign } from './PlanActions'
+import { ComparisonCard } from '../../results/Comparison'
+import { planActuals } from '@/lib/actuals'
 import { holidaysBetween, type Holiday } from '@/lib/holidays'
 import { prices } from '@/lib/credits'
 import { Clapperboard, PartyPopper } from 'lucide-react'
@@ -42,6 +44,10 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
   const canEdit = role !== 'EDITOR' && plan.status !== 'ARCHIVED'
   const money = (v: number) => formatMoney(v, plan.currency)
   const COST = await prices()
+  const adCampaigns = await prisma.adCampaign.findMany({ where: { workspaceId: workspace.id }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
+  // Once something of the plan is live, compare it with what happened.
+  const started = d.posts.some((p) => p.postId) || d.goals.some((g) => g.goalId) || d.ads.some((a) => a.launched)
+  const comparison = started ? await planActuals(plan) : null
   const audienceName = (aid: string) => d.audiences.find((a) => a.id === aid)?.name ?? '—'
 
   return (
@@ -62,6 +68,8 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
         {canEdit && <LaunchPlan planId={plan.id} left={d.posts.filter((p) => !p.postId).length + d.goals.filter((g) => !g.goalId).length} />}
         {canEdit && <ArchiveButton planId={plan.id} />}
       </div>
+
+      {comparison && <ComparisonCard kind="plan" id={plan.id} data={comparison} />}
 
       <MediaPlan d={d} money={money} holidays={holidaysBetween(plan.startsOn, plan.endsOn)} cost={{ image: COST.image, video: COST.videoScript + COST.voice }} />
 
@@ -149,6 +157,7 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
                     </div>
                     <CopyText text={setup} />
                     {canEdit && <LaunchedToggle planId={plan.id} adId={c.id} launched={Boolean(c.launched)} />}
+                    {canEdit && <LinkCampaign planId={plan.id} adId={c.id} value={c.adCampaignId ?? null} campaigns={adCampaigns} />}
                   </div>
                   {c.forecast && (
                     <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">

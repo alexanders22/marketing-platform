@@ -4,6 +4,7 @@ import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 import { mediaUrl } from '@/lib/storage'
 import { CampaignView } from './CampaignView'
+import { campaignActuals } from '@/lib/actuals'
 
 // Outside the component: render functions must stay pure.
 const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000)
@@ -29,8 +30,11 @@ export default async function CampaignPage({ params, searchParams }: PageProps<'
   const videos = await prisma.media.count({ where: { workspaceId: workspace.id, kind: 'VIDEO', NOT: { prompt: { startsWith: 'Video poster' } } } })
   // A job cut short by a restart counts as finished after half an hour.
   const generating = c.imageStatus === 'GENERATING' && c.updatedAt > minutesAgo(30)
+  // Social campaigns: what was planned vs what the posts did.
+  const comparison = c.kind === 'SOCIAL' && c.posts.length ? await campaignActuals(c) : null
   return (
     <CampaignView
+      comparison={comparison}
       images={{ generating, done: c.imagesDone, total: c.imagesTotal }}
       imagesError={typeof q.images === 'string' ? q.images : undefined}
       videos={videos}
