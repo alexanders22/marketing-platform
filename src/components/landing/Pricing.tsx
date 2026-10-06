@@ -139,7 +139,9 @@ export function Pricing({ lang = "en" }: { lang?: Lang }) {
         })}
       </div>
 
-      <div className="mt-8 flex flex-wrap justify-center gap-x-8 gap-y-3 text-sm text-zinc-400">
+      <p className="mt-6 text-center text-xs text-zinc-500">{t.vat}</p>
+
+      <div className="mt-6 flex flex-wrap justify-center gap-x-8 gap-y-3 text-sm text-zinc-400">
         {t.perks.map(
           (t) => (
             <span key={t} className="inline-flex items-center gap-2">
@@ -149,6 +151,8 @@ export function Pricing({ lang = "en" }: { lang?: Lang }) {
           ),
         )}
       </div>
+
+      <Rivals t={t.rivals} />
 
       <div className="mt-8 flex flex-col items-start justify-between gap-4 rounded-2xl border border-white/10 bg-zinc-900/60 p-6 sm:flex-row sm:items-center">
         <div>
@@ -163,6 +167,63 @@ export function Pricing({ lang = "en" }: { lang?: Lang }) {
         </a>
       </div>
     </div>
+  );
+}
+
+// List prices for 5 people and 20 social profiles (vendors' websites, Oct 2026).
+const RIVALS: { tool: string; plan: string; price: number; basis?: "buffer" | "hootsuite" | "sprout"; us?: true }[] = [
+  { tool: "Loudpilot", plan: "Team", price: 79, us: true },
+  { tool: "Ocoya", plan: "Team", price: 79 },
+  { tool: "Buffer", plan: "Team", price: 200, basis: "buffer" },
+  { tool: "Hootsuite", plan: "Professional", price: 995, basis: "hootsuite" },
+  { tool: "Sprout Social", plan: "Professional", price: 1495, basis: "sprout" },
+];
+
+function Rivals({ t }: { t: (typeof COPY)["en"]["pricing"]["rivals"] }) {
+  return (
+    <section className="mt-12 rounded-2xl border border-white/10 bg-zinc-900/60 p-6" aria-labelledby="rivals-title">
+      <h3 id="rivals-title" className="text-lg font-semibold">
+        {t.title}
+      </h3>
+      <p className="mt-1 text-sm text-zinc-400">{t.sub}</p>
+      <div className="mt-5 grid gap-6 lg:grid-cols-[3fr_2fr]">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" aria-label={t.title}>
+            <thead className="text-left text-xs text-zinc-500">
+              <tr>
+                <th className="py-2 pr-3 font-medium">{t.tool}</th>
+                <th className="py-2 pr-3 font-medium">{t.plan}</th>
+                <th className="py-2 text-right font-medium">{t.price}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {RIVALS.map((r) => (
+                <tr key={r.tool} className={r.us ? "text-white" : "text-zinc-300"}>
+                  <td className={`py-2.5 pr-3 ${r.us ? "font-semibold" : ""}`}>{r.tool}</td>
+                  <td className="py-2.5 pr-3 text-zinc-400">{r.plan}</td>
+                  <td className="py-2.5 text-right">
+                    <span className={`tabular-nums ${r.us ? "font-semibold text-emerald-300" : ""}`}>${r.price.toLocaleString("en-US")}</span>
+                    {(r.us || r.basis) && <span className="block text-xs text-zinc-500">{r.us ? t.incl : t.basis[r.basis!]}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">{t.ours}</p>
+          <ul className="mt-3 space-y-2 text-sm text-zinc-300">
+            {t.oursItems.map((x) => (
+              <li key={x} className="flex items-start gap-2">
+                <Check size={15} className="mt-0.5 shrink-0 text-emerald-400" />
+                {x}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <p className="mt-4 text-xs text-zinc-500">{t.note}</p>
+    </section>
   );
 }
 

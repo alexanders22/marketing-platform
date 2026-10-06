@@ -67,11 +67,15 @@ test('a trial is not a payment; a recorded payment unlocks paid features and gra
   await admin.goto(`/admin/companies/${id}`)
   await admin.getByRole('textbox', { name: 'Note' }).first().fill('bank transfer #1')
   await admin.getByRole('button', { name: 'Record payment' }).click()
-  await expect(admin.getByText(/Paid until \d{4}-\d{2}-\d{2} · \+300 credits/)).toBeVisible()
+  // Starter $29, VAT included: $4.42 of it is 18% VAT.
+  await expect(admin.getByText(/Paid until \d{4}-\d{2}-\d{2} · \$29 incl\. \$4\.42 VAT · \+300 credits/)).toBeVisible()
   // A second month paid ahead: paid longer, but this month's credits only once.
   await admin.getByRole('textbox', { name: 'Note' }).first().fill('bank transfer #2')
   await admin.getByRole('button', { name: 'Record payment' }).click()
-  await expect(admin.getByText(/Paid until \d{4}-\d{2}-\d{2}$/)).toBeVisible()
+  await expect(admin.getByText(/Paid until \d{4}-\d{2}-\d{2} · \$29 incl\. \$4\.42 VAT$/)).toBeVisible()
+  expect(sql(`select details->>'net' from "AdminLog" where action='payment.record' and "targetId"='${id}' order by "createdAt" desc limit 1`)).toBe('24.58')
+  await admin.goto('/admin/payments')
+  await expect(admin.getByText('VAT 18% to pay')).toBeVisible()
   await admin.close()
   expect(Number(sql(`select extract(day from "paidUntil" - now()) from "Account" where id='${id}'`))).toBeGreaterThan(55)
   expect(sql(`select "creditBalance" from "Account" where id='${id}'`)).toBe('350')

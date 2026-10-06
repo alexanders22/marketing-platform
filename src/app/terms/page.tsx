@@ -45,7 +45,7 @@ export default function TermsPage() {
         </li>
         <li>
           Paid plans and credit packs are billed in advance at the prices shown on our{" "}
-          <Link href="/#pricing">pricing</Link> section when you buy. Prices exclude taxes unless stated.
+          <Link href="/#pricing">pricing</Link> section when you buy. Prices include Georgian VAT (18%).
         </li>
         <li>
           Credits already spent are not refundable. If the Service fails to deliver what you paid for, write to us and

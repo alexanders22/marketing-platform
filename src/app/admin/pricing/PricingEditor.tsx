@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { ACTIONS, ACTION_KEYS, type Action, type Pricing } from '@/lib/pricing'
+import { netOf, VAT } from '@/lib/tax'
 import { savePricing } from '../actions'
 
 type Plan = { id: string; name: string; monthly: number; credits: number }
@@ -17,9 +18,10 @@ export function PricingEditor({ initial, plans, used }: { initial: Pricing; plan
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>()
   const [pending, start] = useTransition()
 
-  // What one credit is really worth on each plan (monthly price ÷ credits).
+  // What one credit is really worth on each plan: the price without VAT
+  // (prices include 18%, which goes to the state) ÷ credits.
   const values = useMemo(
-    () => [{ id: 'topup', name: 'Top-up', perCredit: p.creditPriceUsd }, ...plans.map((pl) => ({ id: pl.id, name: pl.name, perCredit: pl.monthly / pl.credits }))],
+    () => [{ id: 'topup', name: 'Top-up', perCredit: netOf(p.creditPriceUsd) }, ...plans.map((pl) => ({ id: pl.id, name: pl.name, perCredit: netOf(pl.monthly) / pl.credits }))],
     [p.creditPriceUsd, plans],
   )
   const set = (k: Action, field: 'credits' | 'costUsd', v: string) =>
@@ -73,7 +75,7 @@ export function PricingEditor({ initial, plans, used }: { initial: Pricing; plan
             <div key={pl.id} className="text-sm">
               <p className="font-medium text-zinc-700">{pl.name}</p>
               <p className="mt-1 text-zinc-500">
-                ${pl.monthly} ÷ {pl.credits.toLocaleString()} = <b className="text-zinc-900">{usd(pl.monthly / pl.credits)}</b>/credit
+                ${pl.monthly} − {Math.round(VAT.rate * 100)}% VAT = {usd(netOf(pl.monthly))} ÷ {pl.credits.toLocaleString()} = <b className="text-zinc-900">{usd(netOf(pl.monthly) / pl.credits)}</b>/credit
               </p>
             </div>
           ))}
@@ -180,7 +182,7 @@ export function PricingEditor({ initial, plans, used }: { initial: Pricing; plan
                 </label>
                 <p className="mt-2 text-xs text-zinc-600">
                   Quick {usd(secs * p.actions.clipQuick.costUsd)} · Pro {usd(secs * p.actions.clipPro.costUsd)} · Cinema {usd(secs * p.actions.clipCinema.costUsd)}
-                  <span className="text-zinc-400"> of ${pl.monthly}</span>
+                  <span className="text-zinc-400"> of {usd(netOf(pl.monthly))} net</span>
                 </p>
               </li>
             )
@@ -197,12 +199,13 @@ export function PricingEditor({ initial, plans, used }: { initial: Pricing; plan
           {plans.map((pl) => {
             const w = worstFor(pl)
             const cost = w.cost
-            const m = (pl.monthly - cost) / pl.monthly
+            const net = netOf(pl.monthly)
+            const m = (net - cost) / net
             return (
               <li key={pl.id} className="rounded-xl bg-zinc-50 p-3 text-sm ring-1 ring-zinc-200">
                 <p className="font-medium">{pl.name}</p>
                 <p className="mt-1 text-zinc-600">
-                  ${pl.monthly} in · {usd(cost)} out
+                  {usd(net)} in (after VAT) · {usd(cost)} out
                 </p>
                 <p className={`mt-0.5 ${marginTone(m)}`}>margin {pct(m)}</p>
                 <p className="mt-0.5 text-xs text-zinc-500">clips on {ACTIONS[w.q].label.replace('AI clip · ', '')}</p>

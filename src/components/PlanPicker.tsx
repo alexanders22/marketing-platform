@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Building2, CheckCircle2, Clapperboard, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Share2, UserRound, Users, X, Code2 } from 'lucide-react'
 import { DEFAULT_PRICING } from '@/lib/pricing'
 import { BUNDLES, PLANS, TRIAL_DAYS, yearlyTotal, type PlanId } from '@/lib/plans'
+import { VAT } from '@/lib/tax'
 import { choosePlan } from '@/app/app/plan/actions'
 
 const ICON = { STARTER: Rocket, TEAM: Users, AGENCY: Building2 }
@@ -111,7 +112,7 @@ export function PlanPicker({ current, after = '/app' }: { current?: PlanId | nul
                   ${yearly ? yearlyTotal(p.monthly).toLocaleString() : p.monthly}
                   <span className="text-base font-normal text-zinc-500"> / {yearly ? 'year' : 'month'}</span>
                 </p>
-                <p className="text-xs text-zinc-500">{yearly ? 'Billed yearly' : 'Billed monthly'}</p>
+                <p className="text-xs text-zinc-500">{yearly ? 'Billed yearly' : 'Billed monthly'} · incl. {Math.round(VAT.rate * 100)}% VAT</p>
                 <button
                   onClick={() => pick(p.id)}
                   disabled={pending}

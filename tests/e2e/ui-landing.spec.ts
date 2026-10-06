@@ -97,6 +97,20 @@ test('landing: pricing monthly / yearly toggle', async ({ page }) => {
   await expect(prices).toHaveText(['$29', '$79', '$199'])
 })
 
+test('landing: prices include VAT and compare with other tools', async ({ page }) => {
+  await page.goto('/#pricing')
+  const pricing = page.locator('section#pricing')
+  await expect(pricing.getByText('All prices in USD and include 18% VAT.')).toBeVisible()
+  const table = pricing.getByRole('table', { name: 'Same team, compared' })
+  await expect(table.getByRole('row')).toHaveCount(6)
+  await expect(table.getByRole('row').filter({ hasText: 'Loudpilot' })).toContainText('$79incl. VAT')
+  await expect(table.getByRole('row').filter({ hasText: 'Hootsuite' })).toContainText('$995$199 × 5 users, billed yearly')
+  await page.goto('/ka#pricing')
+  await expect(page.getByText('ყველა ფასი USD-შია და მოიცავს 18% დღგ-ს.')).toBeVisible()
+  await page.goto('/ru#pricing')
+  await expect(page.getByRole('table', { name: 'Та же команда — сравнение' })).toBeVisible()
+})
+
 test('landing: CTAs go to /signup and /login', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('header').getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login')

@@ -7,6 +7,8 @@ import { z } from 'zod'
 import type { CreditReason, MemberRole } from '@prisma/client'
 import { logAdmin, requireSuperAdmin } from '@/lib/admin'
 import { bookPayment } from '@/lib/billing'
+import { PLANS, yearlyTotal } from '@/lib/plans'
+import { vatParts } from '@/lib/tax'
 import { WORKSPACE_COOKIE } from '@/lib/context'
 import { forgetPricing } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
@@ -115,10 +117,16 @@ export async function recordPayment(accountId: string, _: AdminState, f: FormDat
     return tx.adminLog.findFirst({ where: { action: 'payment.record', details: { path: ['key'], equals: key } }, select: { id: true } })
   })
   if (booked) return { ok: 'Already booked' }
+  // The list price, VAT included (18%): what the customer paid and what goes to the state.
+  const monthly = PLANS.find((p) => p.id === account.plan)?.monthly ?? 0
+  const money = vatParts((cycle === 'YEARLY' ? yearlyTotal(monthly) : monthly) * periods)
   const { paidUntil, granted } = await bookPayment(accountId, periods, cycle)
-  await logAdmin(admin, 'payment.record', 'account', accountId, { key, periods, cycle, note, paidUntil: paidUntil.toISOString(), granted })
+  await logAdmin(admin, 'payment.record', 'account', accountId, { key, periods, cycle, note, plan: account.plan, ...money, paidUntil: paidUntil.toISOString(), granted })
   revalidatePath(`/admin/companies/${accountId}`)
-  return { ok: `Paid until ${paidUntil.toISOString().slice(0, 10)}${granted ? ` · +${granted} credits` : ''}` }
+  revalidatePath('/admin/payments')
+  return {
+    ok: `Paid until ${paidUntil.toISOString().slice(0, 10)} · $${money.gross} incl. $${money.vat} VAT${granted ? ` · +${granted} credits` : ''}`,
+  }
 }
 
 export async function pauseAccount(accountId: string, _: AdminState, f: FormData): Promise<AdminState> {

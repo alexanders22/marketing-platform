@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { CreditReason } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { VAT } from '@/lib/tax'
 import { card, daysAgo, fmtDateTime, REASON, Stat } from '../shared'
 
 const KINDS: { id: string; label: string; reasons: CreditReason[] }[] = [
@@ -15,7 +16,7 @@ export default async function AdminPayments({ searchParams }: PageProps<'/admin/
   const sp = await searchParams
   const kind = KINDS.find((k) => k.id === sp.kind) ?? KINDS[0]
   const since = daysAgo(30)
-  const [rows, month, all] = await Promise.all([
+  const [rows, month, all, bookings] = await Promise.all([
     prisma.creditEntry.findMany({
       where: { reason: { in: kind.reasons } },
       orderBy: { createdAt: 'desc' },
@@ -24,7 +25,17 @@ export default async function AdminPayments({ searchParams }: PageProps<'/admin/
     }),
     prisma.creditEntry.groupBy({ by: ['reason'], where: { createdAt: { gte: since } }, _sum: { amount: true }, _count: true }),
     prisma.creditEntry.groupBy({ by: ['reason'], _sum: { amount: true } }),
+    prisma.adminLog.findMany({ where: { action: 'payment.record', createdAt: { gte: since } }, select: { details: true } }),
   ])
+  // Money booked in the last 30 days (list prices include 18% VAT).
+  const money = bookings.reduce(
+    (s, b) => {
+      const d = (b.details ?? {}) as { gross?: number; vat?: number; net?: number }
+      return { gross: s.gross + (d.gross ?? 0), vat: s.vat + (d.vat ?? 0), net: s.net + (d.net ?? 0) }
+    },
+    { gross: 0, vat: 0, net: 0 },
+  )
+  const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const sum = (g: { reason: CreditReason; _sum: { amount: number | null } }[], r: CreditReason[]) => g.filter((x) => r.includes(x.reason)).reduce((s, x) => s + (x._sum.amount ?? 0), 0)
 
   return (
@@ -34,6 +45,11 @@ export default async function AdminPayments({ searchParams }: PageProps<'/admin/
         <p className="mt-1 text-sm text-zinc-500">
           Card payments aren&apos;t connected yet. Book a manual payment (bank transfer, invoice) on a company&apos;s page — it shows up here.
         </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-3" aria-label="Revenue, 30 days">
+        <Stat label="Booked, 30 days (incl. VAT)" value={usd(money.gross)} sub={`${bookings.length} payments`} />
+        <Stat label={`VAT ${Math.round(VAT.rate * 100)}% to pay`} value={usd(money.vat)} sub={VAT.country} />
+        <Stat label="Net revenue, 30 days" value={usd(money.net)} />
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat label="Paid credits, 30 days" value={sum(month, ['PURCHASE']).toLocaleString()} sub={`${sum(all, ['PURCHASE']).toLocaleString()} all time`} />
