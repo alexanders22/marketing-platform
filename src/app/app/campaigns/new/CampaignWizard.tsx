@@ -12,6 +12,13 @@ import { usePrices } from '@/components/Prices'
 import { CtaPicker } from '@/components/CtaPicker'
 import type { Cta } from '@/lib/cta'
 
+const STAGES = [
+  { id: 'AWARENESS', label: 'Get known', hint: 'reach new people' },
+  { id: 'CONSIDERATION', label: 'Build interest', hint: 'visits, messages' },
+  { id: 'CONVERSION', label: 'Get leads & sales', hint: 'sign-ups, orders' },
+  { id: 'RETENTION', label: 'Bring them back', hint: 'repeat customers' },
+] as const
+
 const TONES = ['Professional', 'Friendly', 'Educational', 'Bold', 'Founder-led'] as const
 const LANGS = ['English', 'Georgian', 'Russian'] as const
 
@@ -24,11 +31,23 @@ const tomorrow = () => localDay(1)
 
 const input = 'w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100'
 
-export function CampaignWizard({ kind, credits, website }: { kind: 'social' | 'blog'; credits: number; website?: string | null }) {
+export function CampaignWizard({
+  kind,
+  credits,
+  website,
+  initialName = '',
+  initialBrief = '',
+}: {
+  kind: 'social' | 'blog'
+  credits: number
+  website?: string | null
+  initialName?: string
+  initialBrief?: string
+}) {
   const P = usePrices()
   const router = useRouter()
-  const [name, setName] = useState('')
-  const [brief, setBrief] = useState('')
+  const [name, setName] = useState(initialName)
+  const [brief, setBrief] = useState(initialBrief)
   const [startsOn, setStartsOn] = useState(tomorrow)
   const [today] = useState(() => localDay(0))
   const [time, setTime] = useState('10:00')
@@ -39,6 +58,7 @@ export function CampaignWizard({ kind, credits, website }: { kind: 'social' | 'b
   const [language, setLanguage] = useState<(typeof LANGS)[number]>('English')
   const [channels, setChannels] = useState<Network[]>(['FACEBOOK', 'INSTAGRAM'])
   const [cta, setCta] = useState<Cta | null>(null)
+  const [stage, setStage] = useState<(typeof STAGES)[number]['id'] | null>(null)
   const [error, setError] = useState<string>()
   // Social campaigns ask about pictures before they are written.
   const [askImages, setAskImages] = useState(false)
@@ -54,7 +74,7 @@ export function CampaignWizard({ kind, credits, website }: { kind: 'social' | 'b
       const res =
         kind === 'blog'
           ? await createBlogCampaign({ ...base, count, perWeek })
-          : await createSocialCampaign({ ...base, weeks, postsPerWeek: perWeek, channels, cta })
+          : await createSocialCampaign({ ...base, weeks, postsPerWeek: perWeek, channels, cta, stage })
       if (res.error || !res.id) {
         // Back to the form: most errors are about its fields.
         setAskImages(false)
@@ -134,6 +154,24 @@ export function CampaignWizard({ kind, credits, website }: { kind: 'social' | 'b
         {kind === 'social' && (
           <Field label="Channels" group>
             <ChannelPicker value={channels} onChange={setChannels} />
+          </Field>
+        )}
+        {kind === 'social' && (
+          <Field label="Funnel stage" hint="What the campaign should do — it shapes every post." group>
+            <div className="grid gap-2 sm:grid-cols-4">
+              {STAGES.map((st) => (
+                <button
+                  key={st.id}
+                  type="button"
+                  aria-pressed={stage === st.id}
+                  onClick={() => setStage(stage === st.id ? null : st.id)}
+                  className={`rounded-lg border px-3 py-2 text-left text-sm transition ${stage === st.id ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 hover:border-zinc-400'}`}
+                >
+                  <span className="block font-medium">{st.label}</span>
+                  <span className={`block text-xs ${stage === st.id ? 'text-zinc-300' : 'text-zinc-500'}`}>{st.hint}</span>
+                </button>
+              ))}
+            </div>
           </Field>
         )}
         {kind === 'social' && (

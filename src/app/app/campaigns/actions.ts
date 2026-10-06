@@ -42,7 +42,16 @@ const Social = Base.extend({
   channels: z.array(z.enum(NETWORKS)).max(NETWORKS.length),
   // Every post ends with it (links tagged with UTM at publish time).
   cta: CtaInput.nullable().optional(),
+  // Where in the funnel the campaign works: shapes every post.
+  stage: z.enum(['AWARENESS', 'CONSIDERATION', 'CONVERSION', 'RETENTION']).nullable().optional(),
 })
+
+const STAGE_BRIEF = {
+  AWARENESS: 'Funnel stage: awareness — reach people who do not know the brand yet: strong hooks, entertaining or useful, no hard selling.',
+  CONSIDERATION: 'Funnel stage: consideration — people know the brand: explain benefits, how it works, comparisons, reviews and proof; invite a visit or a message.',
+  CONVERSION: 'Funnel stage: conversion — ask for the action: the offer, price or deadline, risk reversal (guarantee, free consultation), a clear call to action in every post.',
+  RETENTION: 'Funnel stage: retention — existing customers and followers: loyalty offers, referrals, new arrivals, community and thanks.',
+} as const
 
 const Blog = Base.extend({
   count: z.number().int().min(2).max(12),
@@ -68,9 +77,10 @@ export async function createSocialCampaign(raw: z.input<typeof Social>): Promise
   const made: { post: PlannedPost; date: Date }[] = []
   try {
     for (const [i, chunk] of chunks(dates, BATCH).entries()) {
+      const staged = c.stage ? `${c.brief}\n\n${STAGE_BRIEF[c.stage]}` : c.brief
       const base = c.cta
-        ? `${c.brief}\n\nEvery post leads to this action: ${CTA_TYPES[c.cta.type].label}. The button line with the link is added automatically after the text — build up to it, don't write the link.`
-        : c.brief
+        ? `${staged}\n\nEvery post leads to this action: ${CTA_TYPES[c.cta.type].label}. The button line with the link is added automatically after the text — build up to it, don't write the link.`
+        : staged
       const brief = i === 0 ? base : `${base}\n\nThis continues the campaign; earlier angles: ${made.map((m) => m.post.angle).join('; ')}`
       const posts = await generateCampaignPosts(workspace.name, await withDossier(brand, workspace.id), {
         brief,

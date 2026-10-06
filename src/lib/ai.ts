@@ -2,6 +2,7 @@ import 'server-only'
 import { GoogleGenAI, type Part } from '@google/genai'
 import type { BrandKit } from '@prisma/client'
 import { noteAiFailure } from './ai-health'
+import { COPY_RULES, MARKETING_PLAYBOOK } from './marketing-kb'
 
 // GEMINI_API_KEY enables generation. GEMINI_MODEL / GEMINI_IMAGE_MODEL
 // override the defaults.
@@ -65,6 +66,7 @@ export async function generatePost(brandName: string, brand: Brand | null, o: Po
   const system = [
     'You write social media posts for one brand. Stay strictly on brand and never invent prices, dates, offers or facts that are not in the request, the attached images or the brand details.',
     brandContext(brandName, brand),
+    COPY_RULES,
     `Tone: ${o.tone} — ${TONE_HINT[o.tone]}. Length: ${LENGTH[o.length]}. Write in ${o.language}.`,
     o.attachments.length ? 'The user attached reference images — describe what is actually in them when relevant.' : '',
     o.aiHashtags ? 'Add 3–6 relevant hashtags in the "hashtags" array (without #).' : 'Return an empty "hashtags" array.',
@@ -199,6 +201,7 @@ export async function generateCampaignPosts(
   const system = [
     'You are a social media strategist planning one campaign for a brand. Never invent prices, dates, offers or facts beyond the brief and brand details.',
     brandContext(brandName, brand),
+    COPY_RULES,
     `Tone: ${o.tone} — ${TONE_HINT[o.tone]}. Write in ${o.language}. Captions 300–600 characters, no hashtags inside captions.`,
     `Return JSON: an array of exactly ${o.dates.length} objects {"angle": short label, "caption": string, "hashtags": string[3-6 without #]}, in date order. Every post must have a different angle and build on the previous ones.`,
   ].join('\n\n')
@@ -251,6 +254,7 @@ export async function generateBlogArticle(
   const system = [
     'You write blog articles for a brand. Structure with an engaging intro, H2/H3 sections, short paragraphs, lists where useful and a closing call to action. Never invent statistics, prices or facts about the brand; speak generally where unsure.',
     brandContext(brandName, brand),
+    COPY_RULES,
     `Tone: ${o.tone} — ${TONE_HINT[o.tone]}. Length: ${BLOG_LENGTH[o.length]}. Write in ${o.language}.`,
     o.keywords.length ? `Work these keywords in naturally: ${o.keywords.join(', ')}.` : '',
     'Return JSON: {"title": string, "body": Markdown string without the title as H1}.',
@@ -276,9 +280,10 @@ export async function summarizePerformance(
 ): Promise<PerformanceSummary> {
   const system = [
     'You are a senior performance marketer reviewing a brand’s results for its owner. Be concrete and brief: name campaigns and numbers, compare with the previous period, and explain likely causes in plain words.',
-    'Use ONLY the numbers given. Do not invent benchmarks, numbers or campaigns. If paid or organic data is empty, say that it is not connected or has no activity instead of analysing it.',
+    'Use ONLY the numbers given for the client. You may compare them with the typical ranges in the playbook, saying they are typical. Never invent the client\'s numbers or campaigns. If paid, organic or website data is empty, say that it is not connected or has no activity instead of analysing it.',
     'Recommendations must be specific actions the owner can take this week (e.g. move budget from A to B, refresh the creative of C, post more of the format that worked).',
     brandContext(brandName, brand),
+    MARKETING_PLAYBOOK,
     `Write in ${language}. Money in the given currency. Return JSON {"headline": one sentence, "wins": string[0-3], "concerns": string[0-3], "actions": string[1-4]}.`,
   ].join('\n\n')
   const out = await json<PerformanceSummary>(system, `Results:\n${JSON.stringify(facts)}`, 2000)
@@ -368,6 +373,7 @@ export async function auditBrand(brandName: string, brand: Brand | null, profile
     'Group posts into topics by what they are about (product, behind the scenes, offers, tips, news …) and judge each topic.',
     'Write for a busy owner: plain words, specific, no jargon.',
     brandContext(brandName, brand),
+    MARKETING_PLAYBOOK,
     profile ? `Company profile: ${JSON.stringify(profile)}` : '',
     'Return JSON {"summary": 2-3 sentences, "works": [{"insight","evidence"}] up to 5, "doesnt": [{"insight","evidence"}] up to 5, "topics": [{"name","verdict": "works"|"weak"|"untested","evidence"}] up to 8, "bestTimes": one sentence, "formats": one sentence, "frequency": one sentence, "ads": [{"insight","evidence"}] up to 4, "avoid": string[] up to 5 concrete things never to repeat, "opportunities": string[] up to 5 things not tried yet that fit this company}.',
   ]
@@ -412,7 +418,7 @@ export type StrategyDraft = {
   }[]
   pillars: { name: string; why: string; share: number }[]
   posts: { id: string; date: string; time: string; network: string; format: string; pillar: string; caption: string; hashtags: string[]; visual: string; why: string }[]
-  goals: { id: string; scope: 'ADS' | 'POSTS'; network?: string | null; metric: string; target: number; windowDays: number; why: string }[]
+  goals: { id: string; scope: 'ADS' | 'POSTS' | 'WEBSITE'; network?: string | null; metric: string; target: number; windowDays: number; why: string }[]
   weekly: string
   risks: string[]
 }
@@ -426,9 +432,10 @@ export async function generateStrategy(brandName: string, brand: Brand | null, b
     '- Forecasts are computed by the system, not by you: do not write expected leads, reach or costs.',
     '- Budget: give shares (0–1) of the total; ads[].share is that campaign’s share of the TOTAL budget. Shares across budgetSplit sum to 1.',
     '- Posts: only for the first 14 days of the period, 3–10 posts, each with a ready caption and 3–8 hashtags (no #). Dates YYYY-MM-DD inside the period, time HH:MM.',
-    '- Goals use only these metric ids — ads: cost_per_result, results, ctr, cpm, spend; posts: posts, reach, avg_reach, engagements, engagement_rate, views. scope "ADS" or "POSTS"; percent targets in percent (2 = 2%). Money targets only when the facts give a currency and past cost per result.',
+    '- Goals use only these metric ids — ads: cost_per_result, results, ctr, cpm, spend; posts: posts, reach, avg_reach, engagements, engagement_rate, views; website (only when the facts include website numbers): site_key_events, site_cost_per_key_event, site_visits, site_conversion_rate. scope "ADS", "POSTS" or "WEBSITE"; percent targets in percent (2 = 2%). Money targets only when the facts give a currency and past cost per result.',
     '- If there is no ad budget, plan organic only and say what an ad budget would add.',
     brandContext(brandName, brand),
+    MARKETING_PLAYBOOK,
     `Write in ${language}.`,
     'Return JSON {"headline": one sentence, "diagnosis": string[2-5] what stands between the client and the goal, "strategy": 3-5 sentences, "audiences": [{"id":"a1","name","who","why","targeting":{"ages":"25-44","genders":"all|women|men","locations":string[],"interests":string[]},"message": the angle for them}] 1-3, "budgetSplit": [{"label","share","why"}], "ads": [{"id":"c1","name","objective": "SALES"|"LEADS"|"TRAFFIC"|"AWARENESS"|"ENGAGEMENT","audienceId","share","days","creatives":[{"headline","primaryText","cta","visual"}] 2-3,"why"}] 0-3, "pillars": [{"name","why","share"}] 2-4, "posts": [{"id":"p1","date","time","network": "FACEBOOK"|"INSTAGRAM","format": "Reel"|"Carousel"|"Photo"|"Video"|"Text","pillar","caption","hashtags": string[],"visual": what to shoot or design for it,"why": the evidence for this post}], "goals": [{"id":"g1","scope","network": "FACEBOOK"|"INSTAGRAM"|null,"metric","target","windowDays": 7|30,"why"}] 2-5, "weekly": what the agency checks every week, "risks": string[1-3]}.',
   ].join('\n\n')
@@ -489,7 +496,7 @@ export async function generateStrategy(brandName: string, brand: Brand | null, b
     })),
     goals: arr<StrategyDraft['goals'][number]>(out?.goals, 5).map((g, i) => ({
       id: str(g?.id, 20) || `g${i + 1}`,
-      scope: g?.scope === 'POSTS' ? 'POSTS' : 'ADS',
+      scope: g?.scope === 'POSTS' ? 'POSTS' : g?.scope === 'WEBSITE' ? 'WEBSITE' : 'ADS',
       network: g?.network === 'FACEBOOK' || g?.network === 'INSTAGRAM' ? g.network : null,
       metric: str(g?.metric, 40),
       target: num(g?.target, 0, 1e9, 0),
@@ -542,6 +549,7 @@ export async function weeklyReview(brandName: string, brand: Brand | null, facts
     '  "other": anything else {"steps":[]}.',
     '- Campaign names must match the facts exactly. Never invent offers, prices or results. Respect "Never repeat" from the dossier.',
     brandContext(brandName, brand),
+    MARKETING_PLAYBOOK,
     `Write in ${language}.`,
     'Return JSON {"headline": one sentence, "summary": 3-4 sentences, "wins": [{"text","evidence"}] 0-3, "issues": [{"text","evidence"}] 0-3, "recommendations": [{"kind","title","why","impact": "high"|"medium"|"low", ...kind fields}]}.',
   ].join('\n\n')
@@ -653,6 +661,7 @@ export async function adviseBrief(
     'Audience "name" is a short label of 2–5 words (e.g. "Weekend party hosts"); details go in "who".',
     'Use the formats, days and topics that worked; avoid what did not. Never invent prices, offers, dates or numbers.',
     brandContext(brandName, brand),
+    MARKETING_PLAYBOOK,
     `Write everything in ${input.language}.`,
     'Return JSON {"known": string[], "audiences": [...], "questions": [...], "ideas": [...]}.',
   ].join('\n\n')
@@ -725,6 +734,7 @@ export async function videoScript(
     'Also "title" (internal name), "caption" (the post text, ≤ 400 characters) and 3–6 "hashtags" without #.',
     'Never invent prices, offers, dates or facts that are not in the brief or the brand details.',
     brandContext(brandName, brand),
+    COPY_RULES,
     `Write text, voice and caption in ${input.language}.`,
   ].join('\n\n')
   const str = { type: 'string' }
@@ -819,4 +829,235 @@ export async function translateAdvice(advice: BriefAdvice, language: PostOptions
   const same = (a: unknown[] | undefined, b: unknown[]) => Array.isArray(a) && a.length === b.length
   if (!out || !same(out.audiences, advice.audiences) || !same(out.questions, advice.questions) || !same(out.ideas, advice.ideas)) throw new Error('Translation changed the structure')
   return { ...out, ideas: out.ideas.map((i, n) => ({ ...i, network: advice.ideas[n].network })) }
+}
+
+// ─── Competitors ───────────────────────────────────────────────────────────
+
+export type FoundCompetitor = { name: string; website: string; why: string }
+
+// Real companies from Google Search (grounding), not guesses: the same
+// business type in the same place. The owner confirms which to follow.
+export async function findCompetitors(brandName: string, profile: CompanyProfile | null, brand: Brand | null, exclude: string[]): Promise<FoundCompetitor[]> {
+  if (!client) throw new Error('AI is not configured')
+  const about = [
+    `Company: ${brandName}`,
+    brand?.website && `Website: ${brand.website}`,
+    profile?.summary && `What they do: ${profile.summary}`,
+    profile?.industry && `Industry: ${profile.industry}`,
+    profile?.locations.length ? `Where: ${profile.locations.join(', ')}` : '',
+    profile?.offerings.length ? `Offers: ${profile.offerings.map((o) => o.name).join(', ')}` : '',
+    exclude.length ? `Already listed (skip them): ${exclude.join(', ')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  const res = await retrying((model) =>
+    client.models.generateContent({
+      model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `${about}\n\nSearch the web and find up to 5 direct competitors: real companies offering the same kind of product or service to the same customers in the same city or country. Only companies you found in search results, with their real website. Return ONLY a JSON array: [{"name": string, "website": "https://…", "why": "one short sentence: why they compete"}].`,
+            },
+          ],
+        },
+      ],
+      config: { tools: [{ googleSearch: {} }], maxOutputTokens: 2000, abortSignal: AbortSignal.timeout(90_000) },
+    }),
+  )
+  const text = (res.text ?? '').replace(/```(json)?/g, '').trim()
+  const json = text.slice(text.indexOf('['), text.lastIndexOf(']') + 1)
+  let list: unknown = []
+  try {
+    list = JSON.parse(json || '[]')
+  } catch {
+    list = []
+  }
+  return (Array.isArray(list) ? list : [])
+    .map((c) => ({ name: String(c?.name ?? '').slice(0, 80), website: String(c?.website ?? '').slice(0, 200), why: String(c?.why ?? '').slice(0, 200) }))
+    .filter((c) => c.name && /^https?:\/\/[^\s/]+\.[^\s]+/.test(c.website))
+    .slice(0, 5)
+}
+
+export type CompetitorReportData = {
+  summary: string
+  positioning: string
+  table: { dimension: string; us: string; them: { name: string; value: string }[] }[]
+  wins: string[]
+  gaps: string[]
+  perCompetitor: { name: string; strengths: string[]; weaknesses: string[] }[]
+  actions: { title: string; why: string; kind: 'post' | 'campaign' | 'offer' | 'website' | 'ads' }[]
+}
+
+// "Us vs them" from the website profiles and the owner's notes.
+export async function compareCompetitors(
+  brandName: string,
+  brand: Brand | null,
+  own: CompanyProfile | null,
+  rivals: { name: string; website: string | null; notes: string; profile: CompanyProfile | null }[],
+  language: PostOptions['language'],
+): Promise<CompetitorReportData> {
+  const system = [
+    'You are the strategist of a marketing agency comparing a client with its competitors.',
+    'Use only what the profiles and notes say; where something is unknown write "not stated". Never invent prices or claims.',
+    'Do this:',
+    '- "summary": 2–3 sentences: how the market looks and where the client stands.',
+    '- "positioning": one sentence — the position the client should own against these competitors.',
+    '- "table": rows for these dimensions in this order: Offer, Prices, Unique selling points, Audience, Tone & content, Proof & trust. "us" = the client; "them" = one value per competitor (same order as given). Short phrases.',
+    '- "wins": 2–5 things the client does better.',
+    '- "gaps": 2–5 things competitors do better or that the client is missing.',
+    '- "perCompetitor": strengths and weaknesses of each (1–3 each).',
+    '- "actions": 3–6 concrete marketing actions (kind: post | campaign | offer | website | ads) with "why" citing the comparison.',
+    brandContext(brandName, brand),
+    MARKETING_PLAYBOOK,
+    `Write everything in ${language}.`,
+  ].join('\n\n')
+  const str = { type: 'string' }
+  const list = { type: 'array', items: str }
+  const obj = (props: Record<string, unknown>) => ({ type: 'object', properties: props, required: Object.keys(props) })
+  const schema = obj({
+    summary: str,
+    positioning: str,
+    table: { type: 'array', items: obj({ dimension: str, us: str, them: { type: 'array', items: obj({ name: str, value: str }) } }) },
+    wins: list,
+    gaps: list,
+    perCompetitor: { type: 'array', items: obj({ name: str, strengths: list, weaknesses: list }) },
+    actions: { type: 'array', items: obj({ title: str, why: str, kind: { type: 'string', enum: ['post', 'campaign', 'offer', 'website', 'ads'] } }) },
+  })
+  const out = await json<CompetitorReportData>(system, JSON.stringify({ client: own, competitors: rivals }), 8000, 120_000, schema)
+  const s = (v: unknown, n = 400) => String(v ?? '').trim().slice(0, n)
+  const arr = (v: unknown) => (Array.isArray(v) ? v : [])
+  return {
+    summary: s(out?.summary, 800),
+    positioning: s(out?.positioning),
+    table: arr(out?.table)
+      .slice(0, 8)
+      .map((r) => ({ dimension: s(r?.dimension, 60), us: s(r?.us), them: arr(r?.them).slice(0, 8).map((t) => ({ name: s(t?.name, 80), value: s(t?.value) })) })),
+    wins: arr(out?.wins).map((x) => s(x)).filter(Boolean).slice(0, 6),
+    gaps: arr(out?.gaps).map((x) => s(x)).filter(Boolean).slice(0, 6),
+    perCompetitor: arr(out?.perCompetitor)
+      .slice(0, 8)
+      .map((c) => ({ name: s(c?.name, 80), strengths: arr(c?.strengths).map((x) => s(x)).slice(0, 3), weaknesses: arr(c?.weaknesses).map((x) => s(x)).slice(0, 3) })),
+    actions: arr(out?.actions)
+      .slice(0, 6)
+      .map((a) => ({ title: s(a?.title, 160), why: s(a?.why), kind: (['post', 'campaign', 'offer', 'website', 'ads'].includes(a?.kind) ? a.kind : 'post') as CompetitorReportData['actions'][number]['kind'] }))
+      .filter((a) => a.title),
+  }
+}
+
+// ─── Brandbook ─────────────────────────────────────────────────────────────
+
+export type BrandbookData = {
+  name: string
+  summary: string
+  mission: string
+  values: string[]
+  personality: string[]
+  audience: string
+  voice: { tone: string; do: string[]; dont: string[]; words: string[] }
+  colors: { hex: string; name: string; role: string }[]
+  fonts: { heading: string; body: string }
+  logo: string[]
+  imagery: { style: string; do: string[]; dont: string[] }
+  taglines: string[]
+}
+
+const BOOK_SCHEMA = (() => {
+  const str = { type: 'string' }
+  const list = { type: 'array', items: str }
+  const obj = (props: Record<string, unknown>) => ({ type: 'object', properties: props, required: Object.keys(props) })
+  return obj({
+    name: str,
+    summary: str,
+    mission: str,
+    values: list,
+    personality: list,
+    audience: str,
+    voice: obj({ tone: str, do: list, dont: list, words: list }),
+    colors: { type: 'array', items: obj({ hex: str, name: str, role: str }) },
+    fonts: obj({ heading: str, body: str }),
+    logo: list,
+    imagery: obj({ style: str, do: list, dont: list }),
+    taglines: list,
+  })
+})()
+
+export function cleanBook(b: Partial<BrandbookData> | null | undefined): BrandbookData {
+  const s = (v: unknown, n = 300) => String(v ?? '').trim().slice(0, n)
+  const arr = (v: unknown, n = 8, len = 200) => (Array.isArray(v) ? v.map((x) => s(x, len)).filter(Boolean).slice(0, n) : [])
+  const hex = (v: unknown) => {
+    const m = s(v, 9).match(/^#?([0-9a-f]{6}|[0-9a-f]{3})$/i)
+    if (!m) return null
+    const h = m[1].length === 3 ? m[1].split('').map((c) => c + c).join('') : m[1]
+    return `#${h.toUpperCase()}`
+  }
+  return {
+    name: s(b?.name, 80),
+    summary: s(b?.summary, 600),
+    mission: s(b?.mission, 400),
+    values: arr(b?.values, 6, 80),
+    personality: arr(b?.personality, 6, 40),
+    audience: s(b?.audience, 400),
+    voice: { tone: s(b?.voice?.tone, 300), do: arr(b?.voice?.do, 6), dont: arr(b?.voice?.dont, 6), words: arr(b?.voice?.words, 12, 40) },
+    colors: (Array.isArray(b?.colors) ? b!.colors : [])
+      .map((c) => ({ hex: hex(c?.hex), name: s(c?.name, 40), role: s(c?.role, 60) }))
+      .filter((c): c is { hex: string; name: string; role: string } => !!c.hex)
+      .slice(0, 8),
+    fonts: { heading: s(b?.fonts?.heading, 60), body: s(b?.fonts?.body, 60) },
+    logo: arr(b?.logo, 6),
+    imagery: { style: s(b?.imagery?.style, 300), do: arr(b?.imagery?.do, 5), dont: arr(b?.imagery?.dont, 5) },
+    taglines: arr(b?.taglines, 5, 120),
+  }
+}
+
+// Reads the owner's brandbook (PDF or page images) — only what it says.
+export async function readBrandbook(brandName: string, files: { mime: string; data: string }[]): Promise<BrandbookData> {
+  if (!client) throw new Error('AI is not configured')
+  const system = [
+    `You read the brandbook (brand guidelines) of "${brandName}" for a marketing agency.`,
+    'Extract only what the document states. Colours as HEX (convert RGB/CMYK/Pantone to the closest HEX), each with its name and role (primary, secondary, accent, background, text). Fonts as named. Leave a field empty when the document does not say it.',
+    'Write in English, keep brand names and taglines in their original language.',
+  ].join('\n')
+  const res = await retrying((model) =>
+    client.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [...files.map((f) => ({ inlineData: { mimeType: f.mime, data: f.data } })), { text: 'Extract the brand guidelines.' }] }],
+      config: { systemInstruction: system, responseMimeType: 'application/json', responseJsonSchema: BOOK_SCHEMA, maxOutputTokens: 8000, abortSignal: AbortSignal.timeout(180_000) },
+    }),
+  )
+  return cleanBook(JSON.parse(res.text ?? 'null'))
+}
+
+// No brandbook yet: three distinct directions from the brand, its audience
+// and the owner's answers. Fonts only from the given list.
+export async function designBrandbook(
+  brandName: string,
+  brand: Brand | null,
+  answers: { personality: string[]; audience: string; avoid: string; colors: string },
+  fonts: readonly string[],
+  language: PostOptions['language'],
+): Promise<BrandbookData[]> {
+  const system = [
+    'You are a brand designer at a marketing agency creating a brandbook for a small or medium business.',
+    'Create THREE clearly different directions (e.g. one classic, one bold, one warm/friendly) that all fit the company and the owner\'s answers.',
+    'Each direction is a full brandbook: name (of the direction), summary, mission, 3–5 values, personality traits, audience, voice (tone, do, dont, signature words), 5 colours with HEX, name and role (primary, secondary, accent, background, text) with good contrast, fonts (heading and body ONLY from this list: ' + fonts.join(', ') + '), logo usage rules, imagery style with do/dont, 3 taglines.',
+    'Keep what the company already uses when it is known (colours, tone) unless the owner asks for a change.',
+    brandContext(brandName, brand),
+    `Write in ${language}; keep HEX codes and font names as is.`,
+    'Return JSON {"directions": [3 brandbooks]}.',
+  ].join('\n\n')
+  const out = await json<{ directions?: Partial<BrandbookData>[] }>(
+    system,
+    JSON.stringify({ ownerAnswers: answers }),
+    12000,
+    150_000,
+    { type: 'object', properties: { directions: { type: 'array', items: BOOK_SCHEMA } }, required: ['directions'] },
+  )
+  const list = (out?.directions ?? []).map(cleanBook).map((b) => ({
+    ...b,
+    fonts: { heading: fonts.includes(b.fonts.heading) ? b.fonts.heading : fonts[0], body: fonts.includes(b.fonts.body) ? b.fonts.body : fonts[0] },
+  }))
+  if (list.length === 0) throw new Error('No directions')
+  return list.slice(0, 3)
 }

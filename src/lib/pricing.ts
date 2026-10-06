@@ -18,6 +18,11 @@ export const ACTIONS = {
   clipQuick: { label: 'AI clip · Quick (Veo 3.1 Lite)', unit: 'second', credits: 1, costUsd: 0.05 },
   clipPro: { label: 'AI clip · Pro (Veo 3.1 Fast)', unit: 'second', credits: 4, costUsd: 0.15 },
   clipCinema: { label: 'AI clip · Cinema (Veo 3.1)', unit: 'second', credits: 5, costUsd: 0.4 },
+  competitor: { label: 'Competitor website analysis', unit: 'competitor', credits: 1, costUsd: 0.004 },
+  competitorSearch: { label: 'Find competitors (Google Search)', unit: 'search', credits: 1, costUsd: 0.036 },
+  compare: { label: 'Competitor comparison', unit: 'report', credits: 3, costUsd: 0.02 },
+  brandbookRead: { label: 'Brandbook reading', unit: 'brandbook', credits: 2, costUsd: 0.02 },
+  brandbookDesign: { label: 'Brandbook design (3 directions)', unit: 'brandbook', credits: 3, costUsd: 0.02 },
 } as const
 
 export type Action = keyof typeof ACTIONS

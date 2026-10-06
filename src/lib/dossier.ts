@@ -284,11 +284,13 @@ export async function refreshDossiersDue(limit = 5) {
 // A compact brief every AI feature adds to its prompt.
 export async function dossierBrief(workspaceId: string) {
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
-  const [profile, audit, facts, site] = await Promise.all([
+  const [profile, audit, facts, site, rivals, book] = await Promise.all([
     prisma.brandProfile.findUnique({ where: { workspaceId } }),
     prisma.brandAudit.findFirst({ where: { workspaceId }, orderBy: { createdAt: 'desc' } }),
     prisma.brandFact.findMany({ where: { workspaceId }, orderBy: { updatedAt: 'desc' }, take: 30 }),
     prisma.websiteDay.findMany({ where: { workspaceId, date: { gte: since } } }),
+    prisma.competitorReport.findFirst({ where: { workspaceId }, orderBy: { createdAt: 'desc' } }),
+    prisma.brandbook.findUnique({ where: { workspaceId } }),
   ])
   const p = profile?.data as CompanyProfile | undefined
   const a = audit?.data as BrandAuditData | undefined
@@ -308,7 +310,30 @@ export async function dossierBrief(workspaceId: string) {
     if (a.bestTimes) lines.push(`Best times: ${a.bestTimes}`)
     if (a.formats) lines.push(`Formats: ${a.formats}`)
   }
+  if (book) {
+    const b = book.data as { voice?: { tone?: string; do?: string[]; dont?: string[]; words?: string[] }; imagery?: { style?: string }; taglines?: string[]; personality?: string[] }
+    lines.push(
+      [
+        'Brandbook (follow it):',
+        b.personality?.length ? `personality ${b.personality.join(', ')}` : '',
+        b.voice?.tone ? `tone ${b.voice.tone}` : '',
+        b.voice?.do?.length ? `do: ${b.voice.do.join('; ')}` : '',
+        b.voice?.dont?.length ? `don't: ${b.voice.dont.join('; ')}` : '',
+        b.voice?.words?.length ? `signature words: ${b.voice.words.join(', ')}` : '',
+        b.imagery?.style ? `imagery: ${b.imagery.style}` : '',
+        b.taglines?.length ? `taglines: ${b.taglines.join(' | ')}` : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    )
+  }
   if (site.length) lines.push(websiteLine(site))
+  if (rivals) {
+    const r = rivals.data as { positioning?: string; wins?: string[]; gaps?: string[]; perCompetitor?: { name: string }[] }
+    lines.push(
+      `Competitors (${(r.perCompetitor ?? []).map((c) => c.name).join(', ')}): position to own — ${r.positioning ?? ''}. Where we win: ${(r.wins ?? []).join('; ')}. Gaps: ${(r.gaps ?? []).join('; ')}.`,
+    )
+  }
   // The owner's own answers win over anything guessed from the website.
   if (facts.length) lines.push(`The owner told us:\n${facts.map((f) => `- ${f.question} ${f.answer}`).join('\n')}`)
   return lines.join('\n')

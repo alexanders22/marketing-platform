@@ -173,6 +173,9 @@ model Workspace {
   videos           Video[]
   clipJobs         ClipJob[]
   characters       Character[]
+  competitors      Competitor[]
+  brandbook        Brandbook?
+  competitorReports CompetitorReport[]
   bioPages         BioPage[]
   adCampaigns      AdCampaign[]
   websiteDays      WebsiteDay[]
@@ -1138,4 +1141,53 @@ model WebsiteDay {
 
   @@unique([accountId, date])
   @@index([workspaceId, date])
+}
+
+// A competitor the owner follows: its website is read into a profile like
+// the company's own, and it is compared in a CompetitorReport.
+model Competitor {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  website     String?
+  facebook    String?
+  instagram   String?
+  // What the owner knows (prices, strengths, ads they saw…).
+  notes       String    @default("")
+  // CompanyProfile read from the website (see src/lib/ai.ts).
+  profile     Json?
+  analyzedAt  DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
+}
+
+// "Us vs them": the comparison table, where the company wins, gaps and
+// actions — written by the AI from the profiles.
+model CompetitorReport {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  language    String
+  data        Json
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
+// The brand's rules: read from the owner's brandbook (PDF / images) or
+// created with AI. Applying it fills the brand kit; the AI follows it.
+model Brandbook {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // UPLOAD or GENERATED.
+  source      String
+  // BrandbookData (src/lib/ai.ts).
+  data        Json
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }

@@ -58,6 +58,8 @@ export const MAIN: Section[] = [
     tabs: [
       { label: 'Dossier', href: '/app/dossier' },
       { label: 'Strategy', href: '/app/strategy' },
+      { label: 'Competitors', href: '/app/competitors' },
+      { label: 'Brandbook', href: '/app/brandbook' },
       { label: 'Brand kit', href: '/app/brand' },
     ],
   },

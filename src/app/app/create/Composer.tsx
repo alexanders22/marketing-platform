@@ -116,8 +116,8 @@ type SpeechRec = {
   onerror: () => void
 }
 
-export function Composer({ credits, libraries: initialLibs }: { credits: number; libraries: Library[] }) {
-  const [prompt, setPrompt] = useState('')
+export function Composer({ credits, libraries: initialLibs, initialPrompt = '' }: { credits: number; libraries: Library[]; initialPrompt?: string }) {
+  const [prompt, setPrompt] = useState(initialPrompt)
   const [aiHashtags, setAiHashtags] = useState(true)
   const [libraries, setLibraries] = useState(initialLibs)
   const [libIds, setLibIds] = useState<string[]>([])
