@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import {
   Bell,
   Check,
+  Compass,
   ChevronsUpDown,
   Clapperboard,
   Coins,
@@ -145,6 +146,7 @@ function Count({ n, label, tone }: { n: number; label: string; tone: string }) {
 }
 
 const CREATE = [
+  { href: '/app/strategy/new', label: 'Plan my marketing with AI', icon: Compass, tint: 'bg-indigo-100 text-indigo-700' },
   { href: '/app/posts/new', label: 'New post or thread', icon: StickyNote, tint: 'bg-emerald-100 text-emerald-700' },
   { href: '/app/create', label: 'New AI social post', icon: Sparkles, tint: 'bg-sky-100 text-sky-700' },
   { href: '/app/campaigns/new?kind=social', label: 'New AI social campaign', icon: Target, tint: 'bg-violet-100 text-violet-700' },

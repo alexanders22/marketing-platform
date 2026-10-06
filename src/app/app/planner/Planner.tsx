@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight, FileText, List, Plus, Sparkles, Target } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, FileText, List, PartyPopper, Plus, Sparkles, Target } from 'lucide-react'
+import { holidaysBetween, type Holiday } from '@/lib/holidays'
 import { ChannelIcons } from '@/components/channels'
 import { LocalTime, useIsClient } from '@/components/LocalTime'
 
@@ -138,6 +139,12 @@ function Month({ y, m, posts }: { y: number; m: number; posts: PlannerPost[] }) 
     }
     return map
   }, [posts, isClient])
+  // Holidays and marketing moments on the visible days.
+  const holidays = useMemo(() => {
+    const map = new Map<string, Holiday[]>()
+    for (const h of holidaysBetween(localDay(cells[0]), localDay(cells[cells.length - 1]))) map.set(h.date, [...(map.get(h.date) ?? []), h])
+    return map
+  }, [cells])
 
   return (
     <div className="overflow-x-auto">
@@ -174,6 +181,18 @@ function Month({ y, m, posts }: { y: number; m: number; posts: PlannerPost[] }) 
                   <Plus size={15} />
                 </Link>
               </div>
+              {(holidays.get(key) ?? []).map((h) => (
+                <Link
+                  key={h.name}
+                  href={`/app/create?prompt=${encodeURIComponent(`A post for ${h.name} (${h.date}). ${h.idea}`)}`}
+                  title={`${h.name} — ${h.idea} Click to write a post.`}
+                  className={`mt-1 flex items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
+                    h.kind === 'public' ? 'bg-rose-50 text-rose-800' : 'bg-violet-50 text-violet-800'
+                  }`}
+                >
+                  <PartyPopper size={11} className="shrink-0" /> <span className="truncate">{h.name}</span>
+                </Link>
+              ))}
               <div className="mt-1 space-y-1">
                 {items.slice(0, 4).map((p) => (
                   <Link

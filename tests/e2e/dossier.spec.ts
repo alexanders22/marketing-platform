@@ -96,6 +96,44 @@ test('applying a plan: posts become Planner drafts at local time, goals start wa
   await expect.poll(() => sql(`select data->'ads'->0->>'launched' from "StrategyPlan" where id='${id}'`)).toBe('true')
 })
 
+test('the media plan at a glance and one-click launch', async () => {
+  const data = {
+    headline: 'Black Friday flats',
+    diagnosis: ['x'],
+    strategy: 'Reels then leads.',
+    audiences: [],
+    budgetSplit: [],
+    ads: [],
+    pillars: [],
+    posts: [
+      { id: 'q1', date: '2026-11-20', time: '19:00', network: 'INSTAGRAM', format: 'Reel', pillar: 'Homes', caption: 'Black Friday tour', hashtags: [], visual: 'Walkthrough', why: 'w' },
+      { id: 'q2', date: '2026-11-22', time: '19:00', network: 'INSTAGRAM', format: 'Photo', pillar: 'Homes', caption: 'Kitchen', hashtags: [], visual: 'Kitchen', why: 'w' },
+      { id: 'q3', date: '2026-11-24', time: '10:00', network: 'FACEBOOK', format: 'Carousel', pillar: 'Homes', caption: 'Plans', hashtags: [], visual: 'Plans', why: 'w' },
+    ],
+    goals: [{ id: 'h1', scope: 'POSTS', metric: 'posts', target: 3, windowDays: 7, why: 'Consistency' }],
+    weekly: 'w',
+    risks: [],
+    timeZone: 'Asia/Tbilisi',
+    forecastNote: 'n',
+  }
+  const id = `plan${Date.now()}b`
+  sql(
+    `insert into "StrategyPlan"(id,"workspaceId",title,goal,objective,budget,currency,"startsOn","endsOn",data,"updatedAt") values ('${id}','${ws}','${data.headline}','Sell flats','LEADS',null,'GEL','2026-11-15','2026-11-30','${JSON.stringify(data).replace(/'/g, "''")}',now())`,
+  )
+  await page.goto(`/app/strategy/${id}`)
+  const glance = page.getByRole('region', { name: 'Media plan' })
+  await expect(glance.getByText('3 posts')).toBeVisible()
+  await expect(glance.getByText('Instagram + Facebook')).toBeVisible()
+  await expect(glance.getByText('Instagram · Reel × 1')).toBeVisible()
+  // Black Friday (27 Nov 2026) falls in the plan.
+  await expect(glance.getByText(/Black Friday \(11-27\)/)).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Make the video →' })).toHaveAttribute('href', /\/app\/studio\?tab=video&ai=Black%20Friday%20tour/)
+  await page.getByRole('button', { name: 'Launch the plan' }).click()
+  await expect(page.getByText('3 posts in the Planner, 1 goals watched.')).toBeVisible()
+  await expect(page.getByText('Plan launched')).toBeVisible()
+  expect(sql(`select count(*) from "Post" where "workspaceId"='${ws}' and content in ('Black Friday tour','Kitchen','Plans')`)).toBe('3')
+})
+
 test('another workspace cannot open the plan', async ({ browser }) => {
   const id = sql(`select id from "StrategyPlan" where "workspaceId"='${ws}' limit 1`)
   const other = await browser.newPage()

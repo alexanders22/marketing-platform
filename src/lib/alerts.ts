@@ -4,6 +4,8 @@ import type { Alert, AlertSeverity } from '@prisma/client'
 import { terminalUrl } from './hosts'
 import { sendMail } from './mail'
 import { prisma } from './prisma'
+import { holidaysBetween } from './holidays'
+import { ACTIVE_WORKSPACE } from './pause'
 
 // Alerts are stored first and delivered by dispatchAlerts() on the next
 // tick: an email digest to account owners/admins and, for partner
@@ -153,4 +155,30 @@ export async function dispatchAlerts(limit = 200) {
     }
   }
   return { emailed, hooked }
+}
+
+// Ten days before a holiday or marketing moment: a reminder to prepare a
+// post or an offer, once per workspace (dedupe key per holiday).
+export async function holidayRemindersDue(now = new Date()) {
+  if (process.env.KHMA_HOLIDAY_REMINDERS === 'off') return 0
+  const day = new Date(now.getTime() + 10 * 86_400_000).toISOString().slice(0, 10)
+  const due = holidaysBetween(day, day)
+  if (due.length === 0) return 0
+  const workspaces = await prisma.workspace.findMany({ where: { accountId: { not: null }, ...ACTIVE_WORKSPACE }, select: { id: true } })
+  let n = 0
+  for (const h of due) {
+    for (const w of workspaces) {
+      const a = await raiseAlert({
+        workspaceId: w.id,
+        kind: 'holiday',
+        severity: 'INFO',
+        title: `${h.name} is in 10 days (${h.date})`,
+        body: `${h.idea} Plan a post or an offer now so it is ready in time.`,
+        href: `/app/create?prompt=${encodeURIComponent(`A post for ${h.name} (${h.date}). ${h.idea}`)}`,
+        dedupeKey: `holiday:${h.date}:${h.name}`,
+      })
+      if (a) n++
+    }
+  }
+  return n
 }

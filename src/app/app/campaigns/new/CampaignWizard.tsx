@@ -37,7 +37,9 @@ export function CampaignWizard({
   website,
   initialName = '',
   initialBrief = '',
+  videos = 0,
 }: {
+  videos?: number
   kind: 'social' | 'blog'
   credits: number
   website?: string | null
@@ -208,6 +210,8 @@ export function CampaignWizard({
           posts={total}
           confirm={pending ? 'Planning… up to a minute' : 'Create campaign'}
           busy={pending}
+          videos={videos}
+          reelBrief={brief}
           onConfirm={(choice) => submit(choice)}
           onClose={() => setAskImages(false)}
         />

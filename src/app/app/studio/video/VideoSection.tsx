@@ -28,7 +28,10 @@ export function VideoSection({
   paid,
   veo,
   characters = [],
+  initialAiBrief,
 }: {
+  // Opened from a campaign: the AI video starts with its brief.
+  initialAiBrief?: string
   videos: VideoCard[]
   paid: boolean
   veo: { used: number; limit: number; left: number } | null
@@ -36,7 +39,7 @@ export function VideoSection({
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
-  const [ai, setAi] = useState(false)
+  const [ai, setAi] = useState(Boolean(initialAiBrief))
   const [, start] = useTransition()
 
   const [tplFormat, setTplFormat] = useState<Format>('9:16')
@@ -159,7 +162,7 @@ export function VideoSection({
           ))}
         </ul>
       )}
-      {ai && <AiVideoModal paid={paid} veo={veo} characters={characters} onClose={() => setAi(false)} />}
+      {ai && <AiVideoModal paid={paid} veo={veo} characters={characters} initialBrief={initialAiBrief} onClose={() => setAi(false)} />}
     </section>
   )
 }
@@ -169,14 +172,16 @@ function AiVideoModal({
   paid,
   veo,
   characters,
+  initialBrief = '',
 }: {
+  initialBrief?: string
   onClose: () => void
   paid: boolean
   veo: { used: number; limit: number; left: number } | null
   characters: { id: string; name: string }[]
 }) {
   const router = useRouter()
-  const [brief, setBrief] = useState('')
+  const [brief, setBrief] = useState(initialBrief)
   const [format, setFormat] = useState<Format>('9:16')
   const [scenes, setScenes] = useState(5)
   const [visuals, setVisuals] = useState<'library' | 'ai' | 'veo' | 'none'>('library')

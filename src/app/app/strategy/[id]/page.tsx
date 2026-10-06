@@ -9,7 +9,10 @@ import { formatMoney, formatNumber } from '@/lib/format'
 import { WINDOWS, formatMetric, metricDef } from '@/lib/goal-metrics'
 import { prisma } from '@/lib/prisma'
 import { OBJECTIVES, type PlanData } from '@/lib/strategist'
-import { ApplyButton, ArchiveButton, CopyText, LaunchedToggle } from './PlanActions'
+import { ApplyButton, ArchiveButton, CopyText, LaunchPlan, LaunchedToggle } from './PlanActions'
+import { holidaysBetween, type Holiday } from '@/lib/holidays'
+import { prices } from '@/lib/credits'
+import { Clapperboard, PartyPopper } from 'lucide-react'
 
 export const metadata: Metadata = { title: 'Plan — Loudpilot' }
 
@@ -38,6 +41,7 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
   const d = plan.data as unknown as PlanData
   const canEdit = role !== 'EDITOR' && plan.status !== 'ARCHIVED'
   const money = (v: number) => formatMoney(v, plan.currency)
+  const COST = await prices()
   const audienceName = (aid: string) => d.audiences.find((a) => a.id === aid)?.name ?? '—'
 
   return (
@@ -55,8 +59,11 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-balance">{d.headline}</h1>
           <p className="mt-2 text-sm text-zinc-500">“{plan.goal}”</p>
         </div>
+        {canEdit && <LaunchPlan planId={plan.id} left={d.posts.filter((p) => !p.postId).length + d.goals.filter((g) => !g.goalId).length} />}
         {canEdit && <ArchiveButton planId={plan.id} />}
       </div>
+
+      <MediaPlan d={d} money={money} holidays={holidaysBetween(plan.startsOn, plan.endsOn)} cost={{ image: COST.image, video: COST.videoScript + COST.voice }} />
 
       <Block title="Diagnosis and strategy" icon={<Stethoscope size={17} className="text-zinc-500" />}>
         <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-700">
@@ -200,6 +207,11 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
                         In Planner →
                       </Link>
                     )}
+                    {isVideo(p.format) && (
+                      <Link href={`/app/studio?tab=video&ai=${encodeURIComponent(`${p.caption.slice(0, 400)}\n\nVisual: ${p.visual}`)}`} className="ml-2 font-medium text-fuchsia-700">
+                        Make the video →
+                      </Link>
+                    )}
                   </p>
                   <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-zinc-800">{p.caption}</p>
                   <p className="mt-1 text-xs text-sky-700">{p.hashtags.map((h) => `#${h}`).join(' ')}</p>
@@ -259,5 +271,65 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
         )}
       </div>
     </div>
+  )
+}
+
+function Cell({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-zinc-200 p-3">
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="mt-0.5 text-lg font-semibold">{value}</p>
+      {sub && <p className="truncate text-xs text-zinc-500">{sub}</p>}
+    </div>
+  )
+}
+
+const isVideo = (format: string) => /reel|video|story|tiktok|short/i.test(format)
+
+// What, how many, where, when and how much — the plan at a glance.
+function MediaPlan({ d, money, holidays, cost }: { d: PlanData; money: (v: number) => string; holidays: Holiday[]; cost: { image: number; video: number } }) {
+  const counts = new Map<string, number>()
+  for (const p of d.posts) {
+    const k = `${p.network === 'FACEBOOK' ? 'Facebook' : 'Instagram'} · ${p.format}`
+    counts.set(k, (counts.get(k) ?? 0) + 1)
+  }
+  const videos = d.posts.filter((p) => isVideo(p.format)).length
+  const slots = new Map<string, number>()
+  for (const p of d.posts) {
+    const day = new Date(`${p.date}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' })
+    slots.set(`${day} ${p.time}`, (slots.get(`${day} ${p.time}`) ?? 0) + 1)
+  }
+  const times = [...slots.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k)
+  const adTotal = d.ads.reduce((s, a) => s + (a.budget ?? 0), 0)
+  const credits = (d.posts.length - videos) * cost.image + videos * cost.video
+  return (
+    <section aria-label="Media plan" className="rounded-2xl border border-indigo-200 bg-indigo-50/40 p-5">
+      <h2 className="font-semibold">Your media plan at a glance</h2>
+      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <Cell label="What" value={`${d.posts.length} posts`} sub={`${Math.round(d.posts.length / 2)} a week, ${videos} video${videos === 1 ? '' : 's'}`} />
+        <Cell label="Where" value={[...new Set(d.posts.map((p) => (p.network === 'FACEBOOK' ? 'Facebook' : 'Instagram')))].join(' + ') || '—'} sub={d.ads.length ? `+ ${d.ads.length} ad campaign${d.ads.length === 1 ? '' : 's'}` : 'organic only'} />
+        <Cell label="When" value={times[0] ?? '—'} sub={times.slice(1).join(' · ')} />
+        <Cell label="Ad budget" value={adTotal ? money(adTotal) : '—'} sub={d.ads.map((a) => a.objective.toLowerCase()).join(', ')} />
+        <Cell label="To make the visuals" value={`≈ ${credits} credits`} sub={`${d.posts.length - videos} images, ${videos} videos`} />
+      </div>
+      <ul className="mt-3 flex flex-wrap gap-1.5 text-xs">
+        {[...counts.entries()].map(([k, n]) => (
+          <li key={k} className="rounded-full bg-white px-2.5 py-1 ring-1 ring-zinc-200">
+            {k} × {n}
+          </li>
+        ))}
+        {d.goals.length > 0 && <li className="rounded-full bg-white px-2.5 py-1 ring-1 ring-zinc-200">{d.goals.length} goals to watch</li>}
+      </ul>
+      {holidays.length > 0 && (
+        <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-rose-800">
+          <PartyPopper size={13} /> In this period: {holidays.map((h) => `${h.name} (${h.date.slice(5)})`).join(', ')}
+        </p>
+      )}
+      {videos > 0 && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-fuchsia-800">
+          <Clapperboard size={13} /> Video posts have a “Make the video” link — Studio writes and voices them from the post.
+        </p>
+      )}
+    </section>
   )
 }

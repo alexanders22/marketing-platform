@@ -247,6 +247,8 @@ const Images = z.discriminatedUnion('mode', [
   }),
   // Photos from the library (media ids) or the templates ("tpl:…"), used in order.
   z.object({ mode: z.literal('photos'), photoIds: z.array(z.string().max(60)).min(1, 'Pick at least one photo').max(30) }),
+  // Library videos, spread evenly over the posts (one video per post).
+  z.object({ mode: z.literal('videos'), videoIds: z.array(z.string().max(40)).min(1, 'Pick at least one video').max(30) }),
 ])
 
 // Pictures for the campaign's posts that have none: AI images made in the
@@ -263,6 +265,16 @@ export async function addCampaignImages(campaignId: string, raw: z.input<typeof 
   if (!campaign) return { error: 'Campaign not found' }
   const posts = campaign.posts
   if (posts.length === 0) return { error: 'Every post already has a picture' }
+
+  if (opt.mode === 'videos') {
+    const own = await prisma.media.findMany({ where: { id: { in: opt.videoIds }, workspaceId: workspace.id, kind: 'VIDEO' }, select: { id: true } })
+    const ids = opt.videoIds.filter((id) => own.some((m) => m.id === id)).slice(0, posts.length)
+    if (ids.length === 0) return { error: 'The videos are not available' }
+    // Evenly spaced: 2 videos over 6 posts → posts 1 and 4.
+    await prisma.$transaction(ids.map((id, i) => prisma.post.update({ where: { id: posts[Math.floor((i * posts.length) / ids.length)].id }, data: { mediaIds: [id] } })))
+    revalidatePath(`/app/campaigns/${campaign.id}`)
+    return { started: 0 }
+  }
 
   if (opt.mode === 'photos') {
     const tpl = await templatePhotos(workspace.id, opt.photoIds)

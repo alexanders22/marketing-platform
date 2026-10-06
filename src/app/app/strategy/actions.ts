@@ -75,6 +75,18 @@ export async function applyPlanGoals(id: string): Promise<{ error?: string; crea
   return { created: res.created, ...(res.errors.length ? { error: res.errors.join(' · ') } : {}) }
 }
 
+// Everything the plan can start on its own: posts into the Planner, goals
+// watched. Ads stay ready-to-copy until Loudpilot can launch them itself.
+export async function launchPlan(id: string): Promise<{ error?: string; posts?: number; goals?: number }> {
+  const plan = await ownPlan(id)
+  if (!plan) return { error: 'Plan not found' }
+  const posts = await applyPosts(plan)
+  const fresh = await prisma.strategyPlan.findUniqueOrThrow({ where: { id: plan.id } })
+  const goals = await applyGoals(fresh)
+  revalidatePath('/app', 'layout')
+  return { posts, goals: goals.created, ...(goals.errors.length ? { error: goals.errors.join(' · ') } : {}) }
+}
+
 export async function markAdLaunched(id: string, adId: string, launched: boolean): Promise<{ error?: string }> {
   const plan = await ownPlan(id)
   if (!plan) return { error: 'Plan not found' }

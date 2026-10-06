@@ -1,7 +1,7 @@
 import { after } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { cronSecret } from '@/lib/cron-secret'
-import { dispatchAlerts } from '@/lib/alerts'
+import { dispatchAlerts, holidayRemindersDue } from '@/lib/alerts'
 import { grantPlanCreditsDue } from '@/lib/billing'
 import { refreshDossiersDue } from '@/lib/dossier'
 import { checkAllGoals } from '@/lib/goals'
@@ -20,6 +20,7 @@ let lastInsights = 0
 let lastGoals = 0
 let lastDossiers = 0
 let lastPlanCredits = 0
+let lastHolidays = 0
 
 export async function POST(req: Request) {
   const given = Buffer.from(req.headers.get('x-khma-cron') ?? '')
@@ -65,6 +66,12 @@ export async function POST(req: Request) {
     lastPlanCredits = Date.now()
     planCredits = await grantPlanCreditsDue()
   }
+  // Holiday reminders: checked hourly, raised once per holiday.
+  let holidays = 0
+  if (Date.now() - lastHolidays > 60 * 60 * 1000) {
+    lastHolidays = Date.now()
+    holidays = await holidayRemindersDue()
+  }
   const alerts = await dispatchAlerts()
-  return Response.json({ published, insights, ads, website, inbox, clips, goals, dossiers, planCredits, alerts })
+  return Response.json({ published, insights, ads, website, inbox, clips, goals, dossiers, planCredits, holidays, alerts })
 }

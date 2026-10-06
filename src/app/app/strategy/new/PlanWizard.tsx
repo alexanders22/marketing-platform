@@ -25,10 +25,22 @@ const EXAMPLES = [
 const field = 'w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400'
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-export function PlanWizard({ offerings, currency, hasAds, hasDossier }: { offerings: string[]; currency: string | null; hasAds: boolean; hasDossier: boolean }) {
+export function PlanWizard({
+  offerings,
+  currency,
+  hasAds,
+  hasDossier,
+  initialGoal = '',
+}: {
+  offerings: string[]
+  currency: string | null
+  hasAds: boolean
+  hasDossier: boolean
+  initialGoal?: string
+}) {
   const P = usePrices()
   const router = useRouter()
-  const [goal, setGoal] = useState('')
+  const [goal, setGoal] = useState(initialGoal)
   const [objective, setObjective] = useState<(typeof OBJECTIVES)[number]['id']>('SALES')
   const [budget, setBudget] = useState('')
   const [{ start, end }] = useState(() => {

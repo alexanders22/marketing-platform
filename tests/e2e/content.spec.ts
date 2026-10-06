@@ -52,8 +52,9 @@ test.afterEach(async () => {
 const sidebarCreate = () => page.locator('aside').getByRole('button', { name: 'Create new' })
 const createMenu = () => page.locator('div.fixed.z-\\[60\\]')
 
-test('Create-new menu: 7 items navigate; closes on outside click and Escape', async () => {
+test('Create-new menu: 8 items navigate; closes on outside click and Escape', async () => {
   const items: [string, RegExp][] = [
+    ['Plan my marketing with AI', /\/app\/strategy\/new$/],
     ['New post or thread', /\/app\/posts\/new$/],
     ['New AI social post', /\/app\/create$/],
     ['New AI social campaign', /\/app\/campaigns\/new\?kind=social$/],
@@ -65,7 +66,7 @@ test('Create-new menu: 7 items navigate; closes on outside click and Escape', as
   await page.goto('/app/planner')
   for (const [label, url] of items) {
     await sidebarCreate().click()
-    await expect(createMenu().getByRole('link')).toHaveCount(7)
+    await expect(createMenu().getByRole('link')).toHaveCount(8)
     await createMenu().getByRole('link', { name: label, exact: false }).filter({ hasText: new RegExp(`^${label}(NEW)?$`) }).click()
     await expect(page).toHaveURL(url)
     await expect(createMenu()).toHaveCount(0)

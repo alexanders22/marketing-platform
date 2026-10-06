@@ -151,3 +151,29 @@ test('campaign pictures made by AI in a chosen style, with progress, charged per
   expect(sql(`select "imageStatus"||':'||"imagesDone"||':'||"imagesTotal" from "Campaign" where id='${id}'`)).toBe('DONE:2:2')
   expect(sql(`select count(*) from "CreditEntry" e join "Campaign" c on c.id='${id}' join "Workspace" w on w.id=c."workspaceId" where e."accountId"=w."accountId" and e.action='image'`)).toBe('2')
 })
+
+test('library videos are offered for a campaign and spread over its posts', async ({ page }) => {
+  const { id, ws } = await campaignWithPosts(page, 'cvids', 6)
+  for (const n of [1, 2]) {
+    sql(`insert into "Media"(id,"workspaceId",kind,mime,path,bytes,prompt,"durationMs") values ('vid-${n}-${Date.now()}','${ws}','VIDEO','video/mp4','${ws}/clip${n}.mp4',1000,'Clip ${n}',8000)`)
+  }
+  await page.goto(`/app/campaigns/${id}`)
+  await page.getByRole('button', { name: 'Add pictures' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Pictures for your posts' })
+  await expect(dialog.getByText(/You have 2 videos in your library/)).toBeVisible()
+  await dialog.getByRole('button', { name: 'Use them in this campaign' }).click()
+  await dialog.getByRole('button', { name: 'Pick videos from my library' }).click()
+  const pick = page.getByRole('button', { name: 'Select video' })
+  await expect(pick).toHaveCount(2)
+  await pick.nth(1).click()
+  await expect(page.getByRole('button', { name: 'Deselect video' })).toHaveCount(1)
+  await page.getByRole('button', { name: 'Select video' }).first().click()
+  await expect(page.getByRole('button', { name: 'Deselect video' })).toHaveCount(2)
+  await page.getByRole('button', { name: /^Use .*selected$/ }).click()
+  await dialog.getByRole('button', { name: 'Add pictures' }).click()
+  await expect(page.getByText('4 posts without a picture.')).toBeVisible()
+  // Evenly spaced: posts 1 and 4 of 6.
+  const order = sql(`select string_agg(case when cardinality("mediaIds")>0 then 'V' else '-' end, '' order by "scheduledAt") from "Post" where "campaignId"='${id}'`)
+  expect(order).toBe('V--V--')
+  await expect(page.getByRole('link', { name: 'Make a Reel' })).toHaveAttribute('href', /\/app\/studio\?tab=video&ai=Sell/)
+})

@@ -2,8 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { Check, Copy } from 'lucide-react'
-import { applyPlanGoals, applyPlanPosts, archivePlan, markAdLaunched } from '../actions'
+import { Check, Copy, Rocket } from 'lucide-react'
+import { applyPlanGoals, applyPlanPosts, archivePlan, launchPlan, markAdLaunched } from '../actions'
 
 function useAction() {
   const router = useRouter()
@@ -98,5 +98,37 @@ export function ArchiveButton({ planId }: { planId: string }) {
     >
       Archive
     </button>
+  )
+}
+
+// One click: the plan's posts into the Planner and its goals watched.
+export function LaunchPlan({ planId, left }: { planId: string; left: number }) {
+  const router = useRouter()
+  const [pending, start] = useTransition()
+  const [msg, setMsg] = useState<string>()
+  if (left === 0) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+        <Check size={15} /> Plan launched
+      </span>
+    )
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <button
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            const res = await launchPlan(planId)
+            setMsg(res.error ?? `${res.posts ?? 0} posts in the Planner, ${res.goals ?? 0} goals watched.`)
+            router.refresh()
+          })
+        }
+        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+      >
+        <Rocket size={15} /> {pending ? 'Launching…' : 'Launch the plan'}
+      </button>
+      {msg && <span className="text-sm text-zinc-600">{msg}</span>}
+    </span>
   )
 }

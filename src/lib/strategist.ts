@@ -8,6 +8,7 @@ import { createGoalFor } from './goal-input'
 import { METRICS } from './goal-metrics'
 import { prisma } from './prisma'
 import { zonedToUtc } from './time'
+import { holidaysBetween } from './holidays'
 
 // Goal → plan: gathers what Loudpilot knows, asks the AI strategist, then checks
 // and completes its answer (budgets in money, forecasts from history, only
@@ -77,6 +78,8 @@ export async function buildPlan(workspaceId: string, input: PlanInput, createdBy
     },
     runningCampaigns: campaigns,
     existingGoals: goals,
+    // Holidays and marketing moments in the period: plan posts and offers for them.
+    holidaysInPeriod: holidaysBetween(input.startsOn, input.endsOn).map((h) => ({ date: h.date, name: h.name, idea: h.idea })),
   }
   const brand = await withDossier(ws.brandKit, workspaceId)
   const draft = await generateStrategy(ws.name, brand, brief, input.language)

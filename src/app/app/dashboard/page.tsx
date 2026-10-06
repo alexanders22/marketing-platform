@@ -149,6 +149,21 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
               <span className="ml-auto font-medium">Review →</span>
             </Link>
           )}
+          <form action="/app/strategy/new" className="flex flex-col gap-2 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-violet-50 p-4 sm:flex-row sm:items-center">
+            <label htmlFor="want" className="shrink-0 text-sm font-semibold text-indigo-950">
+              What do you want to achieve?
+            </label>
+            <input
+              id="want"
+              name="goal"
+              required
+              minLength={5}
+              placeholder="e.g. 50 enquiries for the new building this month"
+              className="min-w-0 flex-1 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+            />
+            <button className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Make me a plan →</button>
+          </form>
+
           <GoalsCard goals={allGoals} currency={d.currency} />
 
           <SummaryCard key={range ? `${range.from}-${range.to}` : period} period={period} range={range} initial={summary} createdAt={last?.createdAt.toISOString() ?? null} />

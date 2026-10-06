@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, ImageIcon, ImageOff, Loader2, Sparkles } from 'lucide-react'
+import Link from 'next/link'
+import { Check, Film, ImageIcon, ImageOff, Loader2, Sparkles } from 'lucide-react'
 import { Modal } from '@/components/ui/Popover'
 import { usePrices } from '@/components/Prices'
 import { TEMPLATE_PHOTO, TEMPLATE_PHOTO_LIBRARY, templatePhotoUrl } from '@/lib/design'
@@ -9,7 +10,11 @@ import { ImageStylePicker } from '@/components/ImageStylePicker'
 import type { ImageStyle } from '@/lib/image-styles'
 import { VideoMediaPicker } from '../studio/video/VideoMediaPicker'
 
-export type ImagesChoice = null | { mode: 'ai'; prompt: string | null; style: ImageStyle } | { mode: 'photos'; photoIds: string[] }
+export type ImagesChoice =
+  | null
+  | { mode: 'ai'; prompt: string | null; style: ImageStyle }
+  | { mode: 'photos'; photoIds: string[] }
+  | { mode: 'videos'; videoIds: string[] }
 
 type Picked = { id: string; url: string }
 
@@ -24,7 +29,13 @@ export function CampaignImagesModal({
   onConfirm,
   onClose,
   allowNone = true,
+  videos = 0,
+  reelBrief,
 }: {
+  // Videos in the media library: offered as Reels for some of the posts.
+  videos?: number
+  // The campaign's goal, to make a new Reel with AI from it.
+  reelBrief?: string
   posts: number
   confirm: string
   busy: boolean
@@ -34,7 +45,9 @@ export function CampaignImagesModal({
   allowNone?: boolean
 }) {
   const P = usePrices()
-  const [mode, setMode] = useState<'ai' | 'photos' | 'none'>('ai')
+  const [mode, setMode] = useState<'ai' | 'photos' | 'videos' | 'none'>('ai')
+  const [clips, setClips] = useState<Picked[]>([])
+  const [clipPicker, setClipPicker] = useState(false)
   const [source, setSource] = useState<'post' | 'custom'>('post')
   const [prompt, setPrompt] = useState('')
   const [style, setStyle] = useState<ImageStyle>('realistic')
@@ -43,17 +56,33 @@ export function CampaignImagesModal({
 
   const toggle = (p: Picked) => setPicked((cur) => (cur.some((x) => x.id === p.id) ? cur.filter((x) => x.id !== p.id) : [...cur, p].slice(0, 30)))
   const choice = (): ImagesChoice =>
-    mode === 'none' ? null : mode === 'ai' ? { mode: 'ai', prompt: source === 'custom' ? prompt.trim() : null, style } : { mode: 'photos', photoIds: picked.map((p) => p.id) }
-  const ready = mode === 'none' || (mode === 'ai' && (source === 'post' || prompt.trim().length >= 3)) || (mode === 'photos' && picked.length > 0)
+    mode === 'none'
+      ? null
+      : mode === 'ai'
+        ? { mode: 'ai', prompt: source === 'custom' ? prompt.trim() : null, style }
+        : mode === 'videos'
+          ? { mode: 'videos', videoIds: clips.map((c) => c.id) }
+          : { mode: 'photos', photoIds: picked.map((p) => p.id) }
+  const ready =
+    mode === 'none' || (mode === 'ai' && (source === 'post' || prompt.trim().length >= 3)) || (mode === 'photos' && picked.length > 0) || (mode === 'videos' && clips.length > 0)
 
   return (
     <Modal title="Pictures for your posts" onClose={onClose}>
       <div className="space-y-4">
-        <div role="radiogroup" aria-label="Pictures" className="grid grid-cols-3 gap-2">
+        {videos > 0 && mode !== 'videos' && (
+          <p className="rounded-lg bg-fuchsia-50 px-3 py-2 text-sm text-fuchsia-900 ring-1 ring-fuchsia-200">
+            You have {videos} video{videos === 1 ? '' : 's'} in your library — Reels reach about twice as many people as photos.{' '}
+            <button type="button" onClick={() => setMode('videos')} className="font-semibold underline">
+              Use them in this campaign
+            </button>
+          </p>
+        )}
+        <div role="radiogroup" aria-label="Pictures" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {(
             [
               ['ai', Sparkles, 'AI-generated'],
               ['photos', ImageIcon, 'Choose photos'],
+              ['videos', Film, 'Videos'],
               ...(allowNone ? ([['none', ImageOff, 'No pictures']] as const) : []),
             ] as const
           ).map(([m, Icon, label]) => (
@@ -145,6 +174,35 @@ export function CampaignImagesModal({
           </div>
         )}
 
+        {mode === 'videos' && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => setClipPicker(true)} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium hover:bg-zinc-50">
+                {clips.length ? 'Change videos' : 'Pick videos from my library'}
+              </button>
+              {clips.map((c) => (
+                <span key={c.id} className="grid h-10 w-10 place-items-center rounded-lg bg-zinc-900 text-white">
+                  <Film size={14} />
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-zinc-500">
+              {clips.length
+                ? `${clips.length} video${clips.length === 1 ? '' : 's'} spread over the ${posts} posts as Reels; the other posts stay without a picture (add some next).`
+                : 'Each video becomes one post (a Reel on Instagram).'}
+            </p>
+            {reelBrief && (
+              <Link
+                href={`/app/studio?tab=video&ai=${encodeURIComponent(reelBrief.slice(0, 600))}`}
+                target="_blank"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-700 hover:underline"
+              >
+                <Sparkles size={14} /> No video yet? Make a Reel with AI for this campaign ↗
+              </Link>
+            )}
+          </div>
+        )}
+
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100">
@@ -160,6 +218,14 @@ export function CampaignImagesModal({
           </button>
         </div>
       </div>
+      {clipPicker && (
+        <VideoMediaPicker
+          kind="visual"
+          multiple
+          onClose={() => setClipPicker(false)}
+          onPick={(items) => setClips(items.filter((m) => m.kind === 'video').map((m) => ({ id: m.id, url: m.url })).slice(0, 30))}
+        />
+      )}
       {library && (
         <VideoMediaPicker
           kind="visual"

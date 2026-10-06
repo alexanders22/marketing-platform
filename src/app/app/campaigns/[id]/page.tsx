@@ -19,12 +19,21 @@ export default async function CampaignPage({ params, searchParams }: PageProps<'
   })
   if (!c) notFound()
   const q = await searchParams
+  // Video posts show their poster frame.
+  const firsts = await prisma.media.findMany({ where: { id: { in: c.posts.flatMap((p) => p.mediaIds.slice(0, 1)) } }, select: { id: true, kind: true, posterId: true } })
+  const thumb = (id: string | undefined) => {
+    if (!id) return null
+    const m = firsts.find((x) => x.id === id)
+    return m?.kind === 'VIDEO' ? (m.posterId ? mediaUrl(m.posterId) : null) : mediaUrl(id)
+  }
+  const videos = await prisma.media.count({ where: { workspaceId: workspace.id, kind: 'VIDEO', NOT: { prompt: { startsWith: 'Video poster' } } } })
   // A job cut short by a restart counts as finished after half an hour.
   const generating = c.imageStatus === 'GENERATING' && c.updatedAt > minutesAgo(30)
   return (
     <CampaignView
       images={{ generating, done: c.imagesDone, total: c.imagesTotal }}
       imagesError={typeof q.images === 'string' ? q.images : undefined}
+      videos={videos}
       campaign={{
         id: c.id,
         kind: c.kind,
@@ -42,7 +51,8 @@ export default async function CampaignPage({ params, searchParams }: PageProps<'
         outline: p.outline,
         hashtags: p.hashtags,
         channels: p.channels,
-        image: p.mediaIds[0] ? mediaUrl(p.mediaIds[0]) : null,
+        image: thumb(p.mediaIds[0]),
+        hasMedia: p.mediaIds.length > 0,
         scheduledAt: p.scheduledAt?.toISOString() ?? null,
       }))}
     />

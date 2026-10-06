@@ -107,11 +107,11 @@ test('call to action: a UTM-tagged link on Facebook, "link in bio" on Instagram'
   await page.getByRole('button', { name: 'Publish now' }).click()
   await expect(page.getByText('Published to 2 accounts.')).toBeVisible()
   expect(sql(`select cta->>'type' from "Post" where id='${id}'`)).toBe('BOOK')
-  const fb = meta.calls.filter((c) => c.path === '/page-1/photos').at(-1)!
+  const fb = meta.calls.filter((c) => c.method === 'POST' && c.path === '/page-1/photos' && c.params.caption?.includes('birthday')).at(-1)!
   expect(fb.params.caption).toBe(
     `Order your birthday cake\n\n📅 Book now: https://bloom.test/order?ref=promo&utm_source=facebook&utm_medium=social&utm_campaign=loudpilot&utm_content=${id}\n\n#bakery #fresh`,
   )
-  const ig = meta.calls.filter((c) => c.path === '/ig-1/media').at(-1)!
+  const ig = meta.calls.filter((c) => c.method === 'POST' && c.path === '/ig-1/media' && c.params.caption?.includes('birthday')).at(-1)!
   expect(ig.params.caption).toBe('Order your birthday cake\n\n📅 Book now — link in bio\n\n#bakery #fresh')
 })
 

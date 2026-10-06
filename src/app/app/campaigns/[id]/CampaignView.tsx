@@ -21,6 +21,7 @@ type Item = {
   hashtags: string[]
   channels: string[]
   image: string | null
+  hasMedia?: boolean
   scheduledAt: string | null
 }
 
@@ -35,7 +36,9 @@ export function CampaignView({
   posts,
   images,
   imagesError,
+  videos = 0,
 }: {
+  videos?: number
   campaign: Campaign
   posts: Item[]
   images: ImageProgress
@@ -48,7 +51,7 @@ export function CampaignView({
   const [, start] = useTransition()
   const isBlog = c.kind === 'BLOG'
   const written = posts.filter((p) => p.content.trim()).length
-  const bare = posts.filter((p) => !p.image).length
+  const bare = posts.filter((p) => !(p.hasMedia ?? p.image)).length
   const [pics, setPics] = useState(false)
   const [picsError, setPicsError] = useState<string | undefined>(imagesError)
   const [picsBusy, startPics] = useTransition()
@@ -133,6 +136,9 @@ export function CampaignView({
           <button onClick={() => setPics(true)} className="rounded-lg bg-zinc-900 px-3 py-1.5 font-semibold text-white hover:bg-zinc-800">
             Add pictures
           </button>
+          <Link href={`/app/studio?tab=video&ai=${encodeURIComponent(c.brief.slice(0, 600))}`} className="rounded-lg border border-zinc-200 px-3 py-1.5 font-medium hover:bg-zinc-50">
+            Make a Reel
+          </Link>
         </div>
       )}
       {pics && (
@@ -142,6 +148,8 @@ export function CampaignView({
           busy={picsBusy}
           error={picsError}
           allowNone={false}
+          videos={videos}
+          reelBrief={c.brief}
           onConfirm={addPictures}
           onClose={() => setPics(false)}
         />

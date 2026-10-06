@@ -8,6 +8,7 @@ import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
 import { prisma } from '@/lib/prisma'
 import { aiError } from '@/lib/ai-health'
+import { holidaysBetween } from '@/lib/holidays'
 
 // "Suggest what to do": audiences, open questions and ideas for a post or
 // campaign, from the dossier, the owner's answers and the last 30 days.
@@ -26,7 +27,10 @@ export async function getAdvice(input: {
 
   const d = await dashboard(workspace.id, 30).catch(() => null)
   const posts = await prisma.socialPost.count({ where: { workspaceId: workspace.id } })
-  const performance = d && (d.current.spend > 0 || posts > 0) ? summaryFacts(d) : 'No published posts or ads yet.'
+  const today = new Date().toISOString().slice(0, 10)
+  const soon = holidaysBetween(today, new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)).map((h) => `${h.date} ${h.name}`)
+  const facts = d && (d.current.spend > 0 || posts > 0 || d.website) ? summaryFacts(d) : 'No published posts or ads yet.'
+  const performance = soon.length ? { results: facts, upcomingHolidays: soon } : facts
 
   let advice: BriefAdvice
   try {

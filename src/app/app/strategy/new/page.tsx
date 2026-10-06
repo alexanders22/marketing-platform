@@ -6,7 +6,7 @@ import { PlanWizard } from './PlanWizard'
 
 export const metadata: Metadata = { title: 'New plan — Loudpilot' }
 
-export default async function NewPlanPage() {
+export default async function NewPlanPage({ searchParams }: PageProps<'/app/strategy/new'>) {
   const { workspace, account } = await requireContext()
   const [profile, audit, ads, campaign] = await Promise.all([
     prisma.brandProfile.findUnique({ where: { workspaceId: workspace.id } }),
@@ -14,8 +14,15 @@ export default async function NewPlanPage() {
     prisma.socialAccount.count({ where: { workspaceId: workspace.id, network: 'META_ADS' } }),
     prisma.adCampaign.findFirst({ where: { workspaceId: workspace.id, currency: { not: null } }, select: { currency: true } }),
   ])
+  const { goal } = await searchParams
   const offerings = ((profile?.data as CompanyProfile | undefined)?.offerings ?? []).map((o) => o.name).filter(Boolean)
   return (
-    <PlanWizard offerings={offerings} currency={campaign?.currency ?? account.currency} hasAds={ads > 0} hasDossier={Boolean(profile) || audit > 0} />
+    <PlanWizard
+      offerings={offerings}
+      currency={campaign?.currency ?? account.currency}
+      hasAds={ads > 0}
+      hasDossier={Boolean(profile) || audit > 0}
+      initialGoal={typeof goal === 'string' ? goal.slice(0, 1000) : ''}
+    />
   )
 }
