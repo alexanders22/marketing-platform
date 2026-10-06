@@ -2,6 +2,7 @@ import {
   BookUser,
   Bot,
   CalendarDays,
+  Globe,
   Inbox,
   LayoutDashboard,
   LayoutTemplate,
@@ -50,6 +51,12 @@ export const MAIN: Section[] = [
       { label: 'Goals', href: '/app/goals' },
       { label: 'Alerts', href: '/app/alerts', badge: 'alerts' },
     ],
+  },
+  {
+    label: 'Website',
+    href: '/app/website/tracking',
+    icon: Globe,
+    tabs: [{ label: 'Tracking', href: '/app/website/tracking' }],
   },
   {
     label: 'Brand',

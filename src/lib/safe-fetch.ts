@@ -94,7 +94,14 @@ function assertUrl(url: URL) {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('Only http and https links are supported')
   if (url.username || url.password) throw new Error('Links with credentials are not supported')
   const host = url.hostname.replace(/^\[|\]$/g, '')
-  if (isIP(host) && isPrivateAddress(host)) throw new Error('This address is not allowed')
+  if (isIP(host) && isPrivateAddress(host) && !testAllowed(url)) throw new Error('This address is not allowed')
+}
+
+// e2e only: fake websites on 127.0.0.1 listed in KHMA_FETCH_ALLOW ("host:port,…").
+// Never honoured in production.
+function testAllowed(url: URL) {
+  if (process.env.NODE_ENV === 'production') return false
+  return (process.env.KHMA_FETCH_ALLOW ?? '').split(',').includes(url.host)
 }
 
 export async function safeFetchText(

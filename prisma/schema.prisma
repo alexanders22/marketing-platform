@@ -180,6 +180,7 @@ model Workspace {
   adCampaigns      AdCampaign[]
   websiteDays      WebsiteDay[]
   boosts           Boost[]
+  websiteAudits    WebsiteAudit[]
   aiSummaries      AiSummary[]
   goals            Goal[]
   alerts           Alert[]
@@ -1232,4 +1233,19 @@ model Boost {
 
   @@index([deliveryId])
   @@index([workspaceId, createdAt])
+}
+
+// A check of the company website: TRACKING (Meta Pixel, Conversions API,
+// Google tags), SEO (Search Console + page audit) or GEO (visibility in AI
+// answers). The latest one per kind is shown.
+model WebsiteAudit {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kind        String
+  url         String?
+  result      Json
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, kind, createdAt])
 }

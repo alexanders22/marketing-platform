@@ -17,6 +17,8 @@ export function startFakeMeta() {
   let failPath: { re: RegExp; code: number; message: string } | null = null
   let leadsStatus = 'ACTIVE'
   let canManageAds = true
+  // Pixel 1234567890123456: browser events, and server events when on.
+  let serverEvents = false
   const hooks: { headers: Record<string, string | string[] | undefined>; body: string }[] = []
   let n = 0
   const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString()
@@ -114,6 +116,15 @@ export function startFakeMeta() {
       })
     if (path === '/me/adaccounts')
       return json(200, { data: [{ id: 'act_1', name: 'Bloom Ads', account_status: 1, currency: 'GEL', timezone_name: 'Asia/Tbilisi' }] })
+
+    if (req.method === 'GET' && path === '/act_1/adspixels')
+      return json(200, { data: [{ id: '1234567890123456', name: 'Bloom pixel', last_fired_time: ago(90) }] })
+    if (req.method === 'GET' && path === '/1234567890123456/stats') {
+      const hour = (data: { value: string; count: number }[]) => ({ aggregation: 'event', start_time: ago(120), data })
+      if (params.event_source === 'SERVER_ONLY')
+        return json(200, { data: serverEvents ? [hour([{ value: 'Lead', count: 9 }])] : [] })
+      return json(200, { data: [hour([{ value: 'PageView', count: 400 }, { value: 'Lead', count: 10 }]), hour([{ value: 'PageView', count: 100 }])] })
+    }
 
     // Boost: campaign → ad set → creative → ad, then pause/resume or delete.
     if (req.method === 'POST' && path === '/act_1/campaigns') return json(200, { id: `boost-cmp-${++n}` })
@@ -282,6 +293,7 @@ export function startFakeMeta() {
     failNext: (re: RegExp, code: number, message: string) => (failPath = { re, code, message }),
     setLeadsStatus: (s: string) => (leadsStatus = s),
     setCanManageAds: (v: boolean) => (canManageAds = v),
+    setServerEvents: (v: boolean) => (serverEvents = v),
     hooks,
     // Specs that use the fake run in parallel workers: whoever holds the port
     // first goes ahead, the others wait their turn.
