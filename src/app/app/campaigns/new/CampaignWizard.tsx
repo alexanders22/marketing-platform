@@ -9,6 +9,8 @@ import { addCampaignImages, createBlogCampaign, createSocialCampaign } from '../
 import { CampaignImagesModal, type ImagesChoice } from '../CampaignImages'
 import { audienceLine, BriefAssistant } from '@/components/BriefAssistant'
 import { usePrices } from '@/components/Prices'
+import { CtaPicker } from '@/components/CtaPicker'
+import type { Cta } from '@/lib/cta'
 
 const TONES = ['Professional', 'Friendly', 'Educational', 'Bold', 'Founder-led'] as const
 const LANGS = ['English', 'Georgian', 'Russian'] as const
@@ -22,7 +24,7 @@ const tomorrow = () => localDay(1)
 
 const input = 'w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100'
 
-export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; credits: number }) {
+export function CampaignWizard({ kind, credits, website }: { kind: 'social' | 'blog'; credits: number; website?: string | null }) {
   const P = usePrices()
   const router = useRouter()
   const [name, setName] = useState('')
@@ -36,6 +38,7 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
   const [tone, setTone] = useState<(typeof TONES)[number]>(kind === 'blog' ? 'Educational' : 'Friendly')
   const [language, setLanguage] = useState<(typeof LANGS)[number]>('English')
   const [channels, setChannels] = useState<Network[]>(['FACEBOOK', 'INSTAGRAM'])
+  const [cta, setCta] = useState<Cta | null>(null)
   const [error, setError] = useState<string>()
   // Social campaigns ask about pictures before they are written.
   const [askImages, setAskImages] = useState(false)
@@ -51,7 +54,7 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
       const res =
         kind === 'blog'
           ? await createBlogCampaign({ ...base, count, perWeek })
-          : await createSocialCampaign({ ...base, weeks, postsPerWeek: perWeek, channels })
+          : await createSocialCampaign({ ...base, weeks, postsPerWeek: perWeek, channels, cta })
       if (res.error || !res.id) {
         // Back to the form: most errors are about its fields.
         setAskImages(false)
@@ -131,6 +134,11 @@ export function CampaignWizard({ kind, credits }: { kind: 'social' | 'blog'; cre
         {kind === 'social' && (
           <Field label="Channels" group>
             <ChannelPicker value={channels} onChange={setChannels} />
+          </Field>
+        )}
+        {kind === 'social' && (
+          <Field label="Call to action" hint="Every post ends with it — the AI writes up to it. Links get UTM tags, so Google Analytics shows what each post brought." group>
+            <CtaPicker value={cta} onChange={setCta} defaultUrl={website} />
           </Field>
         )}
 

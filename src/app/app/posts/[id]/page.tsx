@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { readCta } from '@/lib/cta'
 import { notFound, redirect } from 'next/navigation'
 import type { Network } from '@/components/channels'
 import { requireContext } from '@/lib/context'
@@ -28,7 +29,7 @@ export default async function EditPostPage({ params }: PageProps<'/app/posts/[id
   })
   return (
     <PostEditor
-      brand={{ name: workspace.name, logoUrl: brand?.logoUrl ?? null }}
+      brand={{ name: workspace.name, logoUrl: brand?.logoUrl ?? null, website: brand?.website ?? null }}
       initial={{
         id: post.id,
         content: post.content,
@@ -43,6 +44,7 @@ export default async function EditPostPage({ params }: PageProps<'/app/posts/[id
         scheduledAt: post.scheduledAt?.toISOString() ?? null,
         aiGenerated: post.aiGenerated,
         campaign: post.campaign,
+        cta: readCta(post.cta),
         status: post.status,
       }}
       connected={[...new Set(accounts.map((a) => a.network))] as Network[]}

@@ -284,6 +284,8 @@ model Post {
   mediaIds    String[]
   // Networks the post is meant for (FACEBOOK, INSTAGRAM, …).
   channels    String[]
+  // Call to action: { type, url?, phone? } — see src/lib/cta.ts.
+  cta         Json?
   scheduledAt DateTime?
   aiGenerated Boolean     @default(false)
   createdById String?
@@ -344,6 +346,8 @@ model Campaign {
   tone         String
   language     String
   status       CampaignStatus @default(DRAFT)
+  // Call to action every post of the campaign ends with.
+  cta          Json?
   // AI images for the posts, made in the background: GENERATING → DONE.
   imageStatus  String?
   imagesDone   Int            @default(0)
@@ -637,10 +641,12 @@ model AiSummary {
 // ─── Goals & alerts ──────────────────────────────────────────────────────────
 
 enum GoalScope {
-  // One ad campaign, all ads of the workspace, or published posts.
+  // One ad campaign, all ads of the workspace, published posts, or the
+  // website (Google Analytics).
   CAMPAIGN
   ADS
   POSTS
+  WEBSITE
 }
 
 enum GoalStatus {
@@ -659,7 +665,8 @@ model Goal {
   scope        GoalScope
   adCampaignId String?
   adCampaign   AdCampaign? @relation(fields: [adCampaignId], references: [id], onDelete: Cascade)
-  // POSTS only: FACEBOOK / INSTAGRAM, or null for both.
+  // POSTS: FACEBOOK / INSTAGRAM, or null for both. WEBSITE: one key event
+  // name (e.g. sign_up), or null for all key events.
   network      String?
   // See src/lib/goals.ts METRICS.
   metric       String

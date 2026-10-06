@@ -14,6 +14,8 @@ import { ImageStylePicker } from '@/components/ImageStylePicker'
 import type { ImageStyle } from '@/lib/image-styles'
 import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
+import { CtaPicker } from '@/components/CtaPicker'
+import { ctaLine, type Cta } from '@/lib/cta'
 
 export type PostDraft = {
   id?: string
@@ -24,6 +26,7 @@ export type PostDraft = {
   scheduledAt: string | null // ISO
   aiGenerated?: boolean
   campaign?: { id: string; name: string } | null
+  cta?: Cta | null
   status?: 'DRAFT' | 'SCHEDULED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED'
 }
 
@@ -69,7 +72,7 @@ export function PostEditor({
   deliveries = [],
 }: {
   initial: PostDraft
-  brand: { name: string; logoUrl: string | null }
+  brand: { name: string; logoUrl: string | null; website?: string | null }
   // Networks with at least one active connected account.
   connected?: Network[]
   deliveries?: Delivery[]
@@ -80,6 +83,7 @@ export function PostEditor({
   const P = usePrices()
   const [content, setContent] = useState(initial.content)
   const [tags, setTags] = useState(initial.hashtags.map((t) => `#${t}`).join(' '))
+  const [cta, setCta] = useState<Cta | null>(initial.cta ?? null)
   const [media, setMedia] = useState(initial.media)
   // Defaults only for a brand-new post; a saved post keeps exactly its channels (even none).
   const [channels, setChannels] = useState<Network[]>(initial.id ? initial.channels : ['FACEBOOK', 'INSTAGRAM'])
@@ -103,7 +107,10 @@ export function PostEditor({
     .split(/[\s,]+/)
     .map((t) => t.replace(/^#+/, ''))
     .filter((t) => /^[\p{L}\p{N}_]{1,60}$/u.test(t))
-  const fullText = [content.trim(), hashtags.map((h) => `#${h}`).join(' ')].filter(Boolean).join('\n\n')
+  // As it will go out on the first picked network (CTA links get UTM tags).
+  const previewNetwork = channels.includes('FACEBOOK') || !channels.length ? 'FACEBOOK' : channels[0]
+  const ctaText = ctaLine(cta, previewNetwork, { campaign: initial.campaign?.name, postId: initial.id })
+  const fullText = [content.trim(), ctaText, hashtags.map((h) => `#${h}`).join(' ')].filter(Boolean).join('\n\n')
   const over = NETWORKS.filter((n) => channels.includes(n.id) && fullText.length > n.limit)
 
   const status = initial.status ?? 'DRAFT'
@@ -121,6 +128,7 @@ export function PostEditor({
         channels,
         scheduledAt: when ? new Date(when).toISOString() : null,
         aiGenerated: initial.aiGenerated,
+        cta,
         schedule,
       })
 
@@ -287,6 +295,15 @@ export function PostEditor({
               placeholder="#brand #campaign"
               className="w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-zinc-400"
             />
+          </section>
+
+          <section>
+            <p className="mb-2 text-sm font-semibold">Call to action</p>
+            <CtaPicker value={cta} onChange={(c) => (setCta(c), setSaved(false))} defaultUrl={brand.website} />
+            <p className="mt-1.5 text-xs text-zinc-500">
+              Added at the end of the post. Links get UTM tags per network, so Google Analytics shows which post brought the visit. On
+              Instagram, where captions can&apos;t hold links, it points to the link in your bio.
+            </p>
           </section>
 
           <section>
@@ -522,6 +539,7 @@ export function PostEditor({
             </div>
             <p className="px-3 py-3 text-sm whitespace-pre-wrap text-zinc-800">
               {content || <span className="text-zinc-400">Your text appears here…</span>}
+              {ctaText && <span className="mt-2 block font-medium break-all text-zinc-900">{ctaText}</span>}
               {hashtags.length > 0 && <span className="mt-2 block text-sky-700">{hashtags.map((h) => `#${h}`).join(' ')}</span>}
             </p>
           </div>

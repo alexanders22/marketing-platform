@@ -1,16 +1,18 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowDownRight, ArrowUpRight, BarChart3, ExternalLink, Globe, Megaphone, Plug } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, BarChart3, ExternalLink, Flag, Globe, Megaphone, Plug } from 'lucide-react'
 import { SiFacebook, SiInstagram } from 'react-icons/si'
 import { DailyChart, Sparkline } from '@/components/charts'
 import { LocalTime } from '@/components/LocalTime'
 import type { PerformanceSummary } from '@/lib/ai'
-import { PERIODS, dashboard, type Period } from '@/lib/analytics'
+import { PERIODS, dashboard, parseRange, type Period } from '@/lib/analytics'
 import { requireContext } from '@/lib/context'
 import { formatMoney, formatNumber, formatPercent } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { SummaryCard } from './SummaryCard'
 import { SyncButton } from './SyncButton'
+import { DateFilter } from './DateFilter'
+import { GoalList } from '../goals/GoalList'
 
 export const metadata: Metadata = { title: 'Dashboard — Loudpilot' }
 
@@ -72,11 +74,18 @@ const ratio = (a: number, b: number) => (b > 0 ? a / b : null)
 export default async function DashboardPage({ searchParams }: PageProps<'/app/dashboard'>) {
   const { workspace } = await requireContext()
   const q = await searchParams
+  const range = parseRange(q.from, q.to)
   const period = (PERIODS.find((p) => String(p) === q.days) ?? 30) as Period
-  const d = await dashboard(workspace.id, period)
-  const last = await prisma.aiSummary.findFirst({ where: { workspaceId: workspace.id, periodDays: period }, orderBy: { createdAt: 'desc' } })
+  const d = await dashboard(workspace.id, range ?? period)
+  // The latest summary for the standard periods; a custom range starts fresh.
+  const last = range ? null : await prisma.aiSummary.findFirst({ where: { workspaceId: workspace.id, periodDays: period }, orderBy: { createdAt: 'desc' } })
   const summary = last ? (JSON.parse(last.text) as PerformanceSummary) : null
-  const [goals, openAlerts, openRecs] = await Promise.all([
+  const [allGoals, goals, openAlerts, openRecs] = await Promise.all([
+    prisma.goal.findMany({
+      where: { workspaceId: workspace.id, active: true },
+      include: { adCampaign: { select: { name: true, currency: true } } },
+      orderBy: { createdAt: 'desc' },
+    }),
     prisma.goal.findMany({ where: { workspaceId: workspace.id, active: true, adCampaignId: { not: null } }, select: { adCampaignId: true, status: true } }),
     prisma.alert.count({ where: { workspaceId: workspace.id, readAt: null, severity: { in: ['CRITICAL', 'WARNING'] } } }),
     prisma.recommendation.count({ where: { workspaceId: workspace.id, status: 'OPEN' } }),
@@ -104,21 +113,10 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
         <div className="mr-auto">
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-zinc-500">
-            {d.from} – {d.to} · ads and posts in one place
+            {d.from} – {d.to} · ads, posts and website in one place
           </p>
         </div>
-        <nav className="flex rounded-lg bg-zinc-100 p-1 text-sm" aria-label="Period">
-          {PERIODS.map((n) => (
-            <Link
-              key={n}
-              href={`/app/dashboard?days=${n}`}
-              aria-current={n === period ? 'page' : undefined}
-              className={`rounded-md px-3 py-1.5 font-medium ${n === period ? 'bg-white shadow-sm' : 'text-zinc-500 hover:text-zinc-800'}`}
-            >
-              {n} days
-            </Link>
-          ))}
-        </nav>
+        <DateFilter period={period} range={range} />
         {d.connected.ads > 0 && <SyncButton />}
       </div>
 
@@ -151,7 +149,9 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
               <span className="ml-auto font-medium">Review →</span>
             </Link>
           )}
-          <SummaryCard period={period} initial={summary} createdAt={last?.createdAt.toISOString() ?? null} />
+          <GoalsCard goals={allGoals} currency={d.currency} />
+
+          <SummaryCard key={range ? `${range.from}-${range.to}` : period} period={period} range={range} initial={summary} createdAt={last?.createdAt.toISOString() ?? null} />
 
           {d.adAccounts.some((a) => a.status !== 'ACTIVE' || a.lastError) && (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -458,6 +458,39 @@ function Website({ d, money }: { d: Awaited<ReturnType<typeof dashboard>>; money
           </ul>
         </div>
       </div>
+    </section>
+  )
+}
+
+// Goals at a glance, the ones off track first.
+function GoalsCard({ goals, currency }: { goals: Parameters<typeof GoalList>[0]['goals']; currency: string | null }) {
+  const RANK = { OFF_TRACK: 0, AT_RISK: 1, ON_TRACK: 2, NO_DATA: 3 } as const
+  const shown = [...goals].sort((a, b) => RANK[a.status] - RANK[b.status]).slice(0, 5)
+  const off = goals.filter((g) => g.status === 'OFF_TRACK' || g.status === 'AT_RISK').length
+  return (
+    <section aria-labelledby="goals-heading">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Flag size={16} className="text-zinc-500" />
+        <h2 id="goals-heading" className="font-semibold">
+          Goals
+        </h2>
+        {goals.length > 0 && (
+          <span className="text-xs text-zinc-500">
+            {goals.length} active{off > 0 ? ` · ${off} need attention` : ' · all on track or waiting for data'}
+          </span>
+        )}
+        <Link href="/app/goals" className="ml-auto text-sm font-medium text-zinc-600 hover:text-zinc-900">
+          {goals.length ? 'All goals →' : 'Set a goal →'}
+        </Link>
+      </div>
+      {goals.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-zinc-300 p-5 text-sm text-zinc-500">
+          No goals yet. Set the numbers that matter — cost per lead, sign-ups a month, reach per post — and Loudpilot checks them every hour and
+          alerts you when they slip.
+        </p>
+      ) : (
+        <GoalList goals={shown} currency={currency} canEdit={false} compact />
+      )}
     </section>
   )
 }

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, Check, Clapperboard, Code2, Coins, Rocket, Sparkles, UserRound, Users } from "lucide-react";
+import { Building2, Check, Clapperboard, Code2, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Sparkles, UserRound, Users } from "lucide-react";
+import { BUNDLES } from "@/lib/plans";
 import { DEFAULT_PRICING } from "@/lib/pricing";
 import { COPY, type Lang } from "./i18n";
 import { SIGNUP } from "./site";
@@ -10,6 +11,7 @@ import { SIGNUP } from "./site";
 const PLANS = [
   {
     name: "Starter",
+    id: "STARTER" as const,
     icon: Rocket,
     tint: "bg-emerald-400/15 text-emerald-300",
     veo: DEFAULT_PRICING.veoSecondsPerMonth.STARTER,
@@ -21,6 +23,7 @@ const PLANS = [
   },
   {
     name: "Team",
+    id: "TEAM" as const,
     icon: Users,
     tint: "bg-sky-400/15 text-sky-300",
     veo: DEFAULT_PRICING.veoSecondsPerMonth.TEAM,
@@ -33,6 +36,7 @@ const PLANS = [
   },
   {
     name: "Agency",
+    id: "AGENCY" as const,
     icon: Building2,
     tint: "bg-violet-400/15 text-violet-300",
     veo: DEFAULT_PRICING.veoSecondsPerMonth.AGENCY,
@@ -44,6 +48,8 @@ const PLANS = [
     api: true,
   },
 ];
+
+const fmt = (n: number) => n.toLocaleString("en-US");
 
 export function Pricing({ lang = "en" }: { lang?: Lang }) {
   const [yearly, setYearly] = useState(false);
@@ -113,10 +119,21 @@ export function Pricing({ lang = "en" }: { lang?: Lang }) {
                 <Row icon={UserRound} label={t.users} value={p.users} />
                 <Row icon={Building2} label={t.companies} value={p.companies} />
                 <Row icon={Sparkles} label={t.profiles} value={p.profiles} />
-                <Row icon={Coins} label={t.credits} value={p.credits} />
-                <Row icon={Clapperboard} label={t.veo} value={`${p.veo}s`} />
                 <Row icon={Code2} label={t.api} value={"api" in p && p.api ? "✓" : "—"} />
               </ul>
+              <p className="mt-6 text-xs font-medium uppercase tracking-wider text-zinc-500">{t.monthHead}</p>
+              <ul className="mt-3 space-y-3 text-sm">
+                <Row icon={PenLine} label={t.posts} value={fmt(BUNDLES[p.id].posts)} />
+                <Row icon={ImageIcon} label={t.images} value={fmt(BUNDLES[p.id].images)} />
+                <Row icon={Film} label={t.videos} value={fmt(BUNDLES[p.id].videos)} />
+                <Row icon={Clapperboard} label={t.veo} value={`${p.veo}s`} />
+                <Row icon={FileText} label={t.articles} value={fmt(BUNDLES[p.id].articles)} />
+                <Row icon={Compass} label={t.strategies} value={fmt(BUNDLES[p.id].strategies)} />
+              </ul>
+              <p className="mt-4 flex items-start gap-1.5 text-xs text-zinc-500">
+                <Coins size={13} className="mt-0.5 shrink-0" />
+                {t.flex.replace("{credits}", p.credits)}
+              </p>
             </div>
           );
         })}

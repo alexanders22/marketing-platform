@@ -1,6 +1,6 @@
 // Goal metrics, shared by the goal form (client) and the evaluator (server).
 
-export type GoalScopeId = 'CAMPAIGN' | 'ADS' | 'POSTS'
+export type GoalScopeId = 'CAMPAIGN' | 'ADS' | 'POSTS' | 'WEBSITE'
 export type MetricKind = 'money' | 'count' | 'percent'
 
 export type MetricDef = {
@@ -36,6 +36,12 @@ export const METRICS: MetricDef[] = [
   { id: 'engagements', label: 'Engagements', kind: 'count', atMost: false, scopes: ['POSTS'], hint: 'Likes + comments + shares + saves.' },
   { id: 'avg_engagements', label: 'Average engagements per post', kind: 'count', atMost: false, scopes: ['POSTS'], hint: 'Engagements ÷ posts.' },
   { id: 'engagement_rate', label: 'Engagement rate', kind: 'percent', atMost: false, scopes: ['POSTS'], hint: 'Engagements ÷ reach.' },
+  // Website (Google Analytics)
+  { id: 'site_key_events', label: 'Key events (sign-ups, leads, sales)', kind: 'count', atMost: false, scopes: ['WEBSITE'], hint: 'All key events, or one of them (e.g. sign_up).' },
+  { id: 'site_cost_per_key_event', label: 'Ad cost per key event', kind: 'money', atMost: true, scopes: ['WEBSITE'], hint: 'Meta ad spend ÷ key events — what one sign-up or lead costs.' },
+  { id: 'site_visits', label: 'Website visits', kind: 'count', atMost: false, scopes: ['WEBSITE'], hint: 'Sessions on the website.' },
+  { id: 'site_new_users', label: 'New visitors', kind: 'count', atMost: false, scopes: ['WEBSITE'], hint: 'People visiting for the first time.' },
+  { id: 'site_conversion_rate', label: 'Conversion rate', kind: 'percent', atMost: false, scopes: ['WEBSITE'], hint: 'Key events ÷ visits.' },
 ]
 
 export const metricDef = (id: string) => METRICS.find((m) => m.id === id)

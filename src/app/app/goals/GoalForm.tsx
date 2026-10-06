@@ -11,6 +11,7 @@ const SCOPES: { id: GoalScopeId; label: string; hint: string }[] = [
   { id: 'CAMPAIGN', label: 'One ad campaign', hint: 'e.g. cost per lead of “Spring sale”' },
   { id: 'ADS', label: 'All ads', hint: 'every campaign together' },
   { id: 'POSTS', label: 'Posts', hint: 'reach, views, likes, engagement' },
+  { id: 'WEBSITE', label: 'Website', hint: 'visits, sign-ups, leads, cost per sign-up' },
 ]
 
 const field = 'w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400'
@@ -20,15 +21,21 @@ export function GoalForm({
   currency,
   hasAds,
   hasPosts,
+  hasWebsite = false,
+  events = [],
 }: {
   campaigns: { id: string; name: string; status: string }[]
   currency: string | null
   hasAds: boolean
   hasPosts: boolean
+  hasWebsite?: boolean
+  // Key events the website reported (Google Analytics), e.g. sign_up.
+  events?: string[]
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [scope, setScope] = useState<GoalScopeId>(hasAds ? 'CAMPAIGN' : 'POSTS')
+  const [scope, setScope] = useState<GoalScopeId>(hasAds ? 'CAMPAIGN' : hasPosts ? 'POSTS' : 'WEBSITE')
+  const [event, setEvent] = useState('')
   const [campaign, setCampaign] = useState(campaigns.find((c) => c.status === 'ACTIVE')?.id ?? campaigns[0]?.id ?? '')
   const [network, setNetwork] = useState<'' | 'FACEBOOK' | 'INSTAGRAM'>('')
   const metrics = METRICS.filter((m) => m.scopes.includes(scope))
@@ -58,6 +65,7 @@ export function GoalForm({
         scope,
         adCampaignId: scope === 'CAMPAIGN' ? campaign : undefined,
         network: scope === 'POSTS' ? network || null : null,
+        event: scope === 'WEBSITE' ? event || null : null,
         metric,
         atMost,
         target: Number(target.replace(',', '.')),
@@ -84,9 +92,13 @@ export function GoalForm({
           <div className="space-y-4">
             <div>
               <p className="mb-2 text-sm font-medium">What to watch</p>
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {SCOPES.map((s) => {
-                  const off = (s.id !== 'POSTS' && !hasAds) || (s.id === 'CAMPAIGN' && campaigns.length === 0) || (s.id === 'POSTS' && !hasPosts)
+                  const off =
+                    ((s.id === 'CAMPAIGN' || s.id === 'ADS') && !hasAds) ||
+                    (s.id === 'CAMPAIGN' && campaigns.length === 0) ||
+                    (s.id === 'POSTS' && !hasPosts) ||
+                    (s.id === 'WEBSITE' && !hasWebsite)
                   return (
                     <button
                       key={s.id}
@@ -125,6 +137,20 @@ export function GoalForm({
                   <option value="">Facebook and Instagram</option>
                   <option value="INSTAGRAM">Instagram only</option>
                   <option value="FACEBOOK">Facebook only</option>
+                </select>
+              </label>
+            )}
+
+            {scope === 'WEBSITE' && (metric === 'site_key_events' || metric === 'site_cost_per_key_event' || metric === 'site_conversion_rate') && (
+              <label className="block text-sm">
+                <span className="mb-1 block font-medium">Key event</span>
+                <select value={event} onChange={(e) => setEvent(e.target.value)} className={field} aria-label="Key event">
+                  <option value="">All key events</option>
+                  {events.map((e) => (
+                    <option key={e} value={e}>
+                      {e}
+                    </option>
+                  ))}
                 </select>
               </label>
             )}

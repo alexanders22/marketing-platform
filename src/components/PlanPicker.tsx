@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, CheckCircle2, Coins, Rocket, Share2, UserRound, Users, X, Code2 } from 'lucide-react'
-import { PLANS, TRIAL_DAYS, yearlyTotal, type PlanId } from '@/lib/plans'
+import { Building2, CheckCircle2, Clapperboard, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Share2, UserRound, Users, X, Code2 } from 'lucide-react'
+import { DEFAULT_PRICING } from '@/lib/pricing'
+import { BUNDLES, PLANS, TRIAL_DAYS, yearlyTotal, type PlanId } from '@/lib/plans'
 import { choosePlan } from '@/app/app/plan/actions'
 
 const ICON = { STARTER: Rocket, TEAM: Users, AGENCY: Building2 }
@@ -127,9 +128,20 @@ export function PlanPicker({ current, after = '/app' }: { current?: PlanId | nul
                   <Row icon={UserRound} label="Users" value={p.users} />
                   <Row icon={Building2} label="Companies" value={p.companies} />
                   <Row icon={Share2} label="Social profiles" value={p.profiles} />
-                  <Row icon={Coins} label="Credits" value={p.credits.toLocaleString()} />
                   <Row icon={Code2} label="API & webhooks" value={p.id === 'AGENCY' ? 'Included' : '—'} />
                 </ul>
+                <p className="mt-4 text-xs font-semibold tracking-wide text-zinc-500">EVERY MONTH</p>
+                <ul className="mt-2 space-y-2.5 text-sm text-zinc-700">
+                  <Row icon={PenLine} label="AI-written posts" value={BUNDLES[p.id].posts.toLocaleString()} />
+                  <Row icon={ImageIcon} label="AI images" value={BUNDLES[p.id].images.toLocaleString()} />
+                  <Row icon={Film} label="AI videos with voice-over" value={BUNDLES[p.id].videos.toLocaleString()} />
+                  <Row icon={Clapperboard} label="AI clips (Veo)" value={`${DEFAULT_PRICING.veoSecondsPerMonth[p.id]}s`} />
+                  <Row icon={FileText} label="Blog articles" value={BUNDLES[p.id].articles.toLocaleString()} />
+                  <Row icon={Compass} label="Strategy plans" value={BUNDLES[p.id].strategies.toLocaleString()} />
+                </ul>
+                <p className="mt-3 flex items-start gap-1.5 text-xs text-zinc-500">
+                  <Coins size={13} className="mt-0.5 shrink-0" /> Runs on {p.credits.toLocaleString()} AI credits — use them for any mix you like.
+                </p>
               </div>
             )
           })}

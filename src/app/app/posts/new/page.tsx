@@ -18,7 +18,7 @@ export default async function NewPostPage({ searchParams }: PageProps<'/app/post
   const defaultWhen = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T10:00` : undefined
   return (
     <PostEditor
-      brand={{ name: workspace.name, logoUrl: brand?.logoUrl ?? null }}
+      brand={{ name: workspace.name, logoUrl: brand?.logoUrl ?? null, website: brand?.website ?? null }}
       initial={{ content: '', hashtags: [], media: [], channels: [], scheduledAt: null }}
       defaultWhen={defaultWhen}
       connected={[...new Set(accounts.map((a) => a.network))] as Network[]}

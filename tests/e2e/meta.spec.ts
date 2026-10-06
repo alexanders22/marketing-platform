@@ -95,6 +95,26 @@ test('publish now: text-only goes to Facebook, Instagram needs an image', async 
   expect(feed.params.message).toBe('Fresh croissants today\n\n#bakery #fresh')
 })
 
+test('call to action: a UTM-tagged link on Facebook, "link in bio" on Instagram', async () => {
+  const img = addImage()
+  const id = addPost('Order your birthday cake', { mediaIds: [img] })
+  await page.goto(`/app/posts/${id}`)
+  await page.getByLabel('Call to action', { exact: true }).selectOption('BOOK')
+  await page.getByLabel('Call to action link').fill('https://bloom.test/order?ref=promo')
+  // The preview shows the line as Facebook will get it.
+  await expect(page.getByText(/📅 Book now: https:\/\/bloom\.test\/order\?ref=promo&utm_source=facebook/)).toBeVisible()
+  page.once('dialog', (d) => d.accept())
+  await page.getByRole('button', { name: 'Publish now' }).click()
+  await expect(page.getByText('Published to 2 accounts.')).toBeVisible()
+  expect(sql(`select cta->>'type' from "Post" where id='${id}'`)).toBe('BOOK')
+  const fb = meta.calls.filter((c) => c.path === '/page-1/photos').at(-1)!
+  expect(fb.params.caption).toBe(
+    `Order your birthday cake\n\n📅 Book now: https://bloom.test/order?ref=promo&utm_source=facebook&utm_medium=social&utm_campaign=loudpilot&utm_content=${id}\n\n#bakery #fresh`,
+  )
+  const ig = meta.calls.filter((c) => c.path === '/ig-1/media').at(-1)!
+  expect(ig.params.caption).toBe('Order your birthday cake\n\n📅 Book now — link in bio\n\n#bakery #fresh')
+})
+
 test('publish with an image: both networks fetch it through a signed link', async () => {
   const img = addImage()
   const id = addPost('Pistachio week', { mediaIds: [img] })

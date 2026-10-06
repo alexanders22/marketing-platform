@@ -47,6 +47,16 @@ export const PLANS: {
   },
 ]
 
+// What a plan's monthly credits buy, in things people count — shown instead
+// of credits. Each bundle fits in the plan's credits at the default prices
+// (checked in tests); credits stay the mechanism, so the mix is flexible.
+export type Bundle = { posts: number; images: number; videos: number; articles: number; strategies: number }
+export const BUNDLES: Record<PlanId, Bundle> = {
+  STARTER: { posts: 100, images: 100, videos: 10, articles: 4, strategies: 2 },
+  TEAM: { posts: 400, images: 400, videos: 50, articles: 20, strategies: 10 },
+  AGENCY: { posts: 1500, images: 1500, videos: 150, articles: 60, strategies: 30 },
+}
+
 export const TRIAL_DAYS = 7
 // Credits granted once when a trial starts, whatever plan is picked.
 export const TRIAL_CREDITS = 50

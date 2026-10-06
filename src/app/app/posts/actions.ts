@@ -11,6 +11,8 @@ import { withDossier } from '@/lib/dossier'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 import { aiError } from '@/lib/ai-health'
 import { IMAGE_STYLES, type ImageStyle } from '@/lib/image-styles'
+import { Prisma } from '@prisma/client'
+import { CtaInput } from '@/lib/cta'
 
 const NETWORKS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST'] as const
 
@@ -31,6 +33,7 @@ const PostInput = z.object({
   schedule: z.boolean().optional(),
   // Saved on the way to the Studio: an empty draft is fine then.
   allowEmpty: z.boolean().optional(),
+  cta: CtaInput.nullable().optional(),
 })
 
 export type PostInput = z.input<typeof PostInput>
@@ -79,6 +82,7 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
     mediaIds: p.mediaIds,
     channels: p.channels,
     scheduledAt: p.scheduledAt ? new Date(p.scheduledAt) : null,
+    ...(p.cta !== undefined ? { cta: p.cta ?? Prisma.DbNull } : {}),
   }
 
   let id = p.id

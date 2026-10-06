@@ -21,6 +21,7 @@ import { aiError } from '@/lib/ai-health'
 import { generateCampaignImages } from '@/lib/campaign-images'
 import { IMAGE_STYLE_IDS, type ImageStyle } from '@/lib/image-styles'
 import { templatePhotos } from '@/lib/template-photos'
+import { CTA_TYPES, CtaInput } from '@/lib/cta'
 
 const NETWORKS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST'] as const
 
@@ -39,6 +40,8 @@ const Social = Base.extend({
   weeks: z.number().int().min(1).max(8),
   postsPerWeek: z.number().int().min(1).max(7),
   channels: z.array(z.enum(NETWORKS)).max(NETWORKS.length),
+  // Every post ends with it (links tagged with UTM at publish time).
+  cta: CtaInput.nullable().optional(),
 })
 
 const Blog = Base.extend({
@@ -65,7 +68,10 @@ export async function createSocialCampaign(raw: z.input<typeof Social>): Promise
   const made: { post: PlannedPost; date: Date }[] = []
   try {
     for (const [i, chunk] of chunks(dates, BATCH).entries()) {
-      const brief = i === 0 ? c.brief : `${c.brief}\n\nThis continues the campaign; earlier angles: ${made.map((m) => m.post.angle).join('; ')}`
+      const base = c.cta
+        ? `${c.brief}\n\nEvery post leads to this action: ${CTA_TYPES[c.cta.type].label}. The button line with the link is added automatically after the text — build up to it, don't write the link.`
+        : c.brief
+      const brief = i === 0 ? base : `${base}\n\nThis continues the campaign; earlier angles: ${made.map((m) => m.post.angle).join('; ')}`
       const posts = await generateCampaignPosts(workspace.name, await withDossier(brand, workspace.id), {
         brief,
         dates: chunk.map((d) => dayIn(d, c.timeZone)),
@@ -96,6 +102,7 @@ export async function createSocialCampaign(raw: z.input<typeof Social>): Promise
       tone: c.tone,
       language: c.language,
       status: 'ACTIVE',
+      ...(c.cta ? { cta: c.cta } : {}),
       posts: {
         create: made.map(({ post: p, date }) => ({
           workspaceId: workspace.id,
@@ -104,6 +111,7 @@ export async function createSocialCampaign(raw: z.input<typeof Social>): Promise
           content: p.caption,
           hashtags: p.hashtags.filter((h) => /^[\p{L}\p{N}_]{1,60}$/u.test(h)),
           channels: c.channels,
+          ...(c.cta ? { cta: c.cta } : {}),
           scheduledAt: date,
           aiGenerated: true,
           createdById: user.id,

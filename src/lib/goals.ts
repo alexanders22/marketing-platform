@@ -97,6 +97,8 @@ export async function measureGoal(goal: Goal, now = new Date()): Promise<GoalRes
   if (!def) return { status: 'NO_DATA', actual: null, target: goal.target, hint: '', currency: null }
   const n = goal.windowDays
 
+  if (goal.scope === 'WEBSITE') return measureWebsite(goal, now)
+
   if (goal.scope === 'POSTS') {
     const accounts = await prisma.socialAccount.count({
       where: { workspaceId: goal.workspaceId, network: goal.network ? (goal.network as 'FACEBOOK' | 'INSTAGRAM') : { in: ['FACEBOOK', 'INSTAGRAM'] } },
@@ -186,17 +188,77 @@ export async function measureGoal(goal: Goal, now = new Date()): Promise<GoalRes
   return { status, actual: Number.isFinite(actual) ? actual : null, target, hint: status === 'ON_TRACK' ? '' : adHint(cur, prev), currency }
 }
 
+// Website goals (Google Analytics): complete days in the window vs the one
+// before; "cost per key event" divides all Meta ad spend by key events.
+async function measureWebsite(goal: Goal, now: Date): Promise<GoalResult> {
+  const none = { status: 'NO_DATA' as const, actual: null, target: goal.target, hint: '', currency: null }
+  const n = goal.windowDays
+  const last = shift(now.toISOString().slice(0, 10), -1)
+  const from = shift(last, -(n - 1))
+  const prevFrom = shift(from, -n)
+  const days = await prisma.websiteDay.findMany({ where: { workspaceId: goal.workspaceId, date: { gte: prevFrom, lte: last } } })
+  if (!days.some((d) => d.date >= from)) return none
+  const keyEvents = (d: (typeof days)[number]) => (goal.network ? (((d.events ?? {}) as Record<string, number>)[goal.network] ?? 0) : d.keyEvents)
+  const sum = (list: typeof days) => ({
+    visits: list.reduce((s, d) => s + d.sessions, 0),
+    newUsers: list.reduce((s, d) => s + d.newUsers, 0),
+    keyEvents: list.reduce((s, d) => s + keyEvents(d), 0),
+  })
+  const cur = sum(days.filter((d) => d.date >= from))
+  const prev = sum(days.filter((d) => d.date < from))
+
+  let actual: number | null = null
+  let currency: string | null = null
+  switch (goal.metric) {
+    case 'site_visits':
+      actual = cur.visits
+      break
+    case 'site_new_users':
+      actual = cur.newUsers
+      break
+    case 'site_key_events':
+      actual = cur.keyEvents
+      break
+    case 'site_conversion_rate':
+      actual = cur.visits > 0 ? cur.keyEvents / cur.visits : null
+      break
+    case 'site_cost_per_key_event': {
+      const ads = await prisma.adInsightDay.findMany({
+        where: { campaign: { workspaceId: goal.workspaceId }, date: { gte: from, lte: last } },
+        select: { spend: true, campaign: { select: { currency: true } } },
+      })
+      const spend = ads.reduce((s, d) => s + d.spend, 0)
+      currency = ads[0]?.campaign.currency ?? null
+      if (spend === 0) return { ...none, currency }
+      actual = cur.keyEvents > 0 ? spend / cur.keyEvents : spend >= goal.target ? Infinity : null
+      break
+    }
+  }
+  if (actual === null) return { ...none, currency }
+  const status = classify(actual, goal.target, goal.atMost)
+  let hint = ''
+  if (status !== 'ON_TRACK') {
+    if (prev.visits > 0 && cur.visits < prev.visits * 0.8) hint = `Visits fell ${Math.round((1 - cur.visits / prev.visits) * 100)}% — check which channel dropped on the dashboard.`
+    else if (cur.visits > 0 && prev.visits > 0 && cur.keyEvents / cur.visits < (prev.keyEvents / prev.visits) * 0.8)
+      hint = 'Visitors still come but convert less — check the sign-up or lead form and the landing page.'
+    else if (cur.keyEvents === 0) hint = 'No key events in this window — check that sign-ups or leads are marked as key events in Google Analytics.'
+  }
+  return { status, actual: Number.isFinite(actual) ? actual : null, target: goal.target, hint, currency }
+}
+
 async function contextName(goal: Goal) {
   if (goal.scope === 'CAMPAIGN') {
     const c = goal.adCampaignId ? await prisma.adCampaign.findUnique({ where: { id: goal.adCampaignId }, select: { name: true } }) : null
     return c?.name ?? 'Ad campaign'
   }
   if (goal.scope === 'ADS') return 'All ads'
+  if (goal.scope === 'WEBSITE') return goal.network ? `Website · ${goal.network}` : 'Website'
   return goal.network === 'INSTAGRAM' ? 'Instagram posts' : goal.network === 'FACEBOOK' ? 'Facebook posts' : 'Posts'
 }
 
 export function goalHref(goal: Goal) {
-  return goal.scope === 'CAMPAIGN' && goal.adCampaignId ? `/app/dashboard/ads/${goal.adCampaignId}` : '/app/goals'
+  if (goal.scope === 'CAMPAIGN' && goal.adCampaignId) return `/app/dashboard/ads/${goal.adCampaignId}`
+  return goal.scope === 'WEBSITE' ? '/app/dashboard' : '/app/goals'
 }
 
 // Measure, store and alert on status changes. The first check of a new goal

@@ -9,6 +9,15 @@ import { dayIn, isValidTimeZone } from './time'
 
 export const PERIODS = [7, 30, 90] as const
 export type Period = (typeof PERIODS)[number]
+// A chosen range (YYYY-MM-DD, both days included), up to a year.
+export type DateRange = { from: string; to: string }
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+export function parseRange(from: unknown, to: unknown): DateRange | null {
+  if (typeof from !== 'string' || typeof to !== 'string' || !DAY.test(from) || !DAY.test(to)) return null
+  if (Number.isNaN(Date.parse(from)) || Number.isNaN(Date.parse(to)) || from > to) return null
+  if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 366) return null
+  return { from, to }
+}
 
 const shift = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
 const daysBetween = (from: string, to: string) => {
@@ -34,7 +43,7 @@ export type Totals = {
 type Metrics = { reach?: number; views?: number; interactions?: number; likes?: number; comments?: number; shares?: number; saves?: number }
 const engagementOf = (m: Metrics) => m.interactions ?? (m.likes ?? 0) + (m.comments ?? 0) + (m.shares ?? 0) + (m.saves ?? 0)
 
-export async function dashboard(workspaceId: string, period: Period, now = new Date()) {
+export async function dashboard(workspaceId: string, range: Period | DateRange, now = new Date()) {
   const ads = await prisma.socialAccount.findMany({
     where: { workspaceId, network: 'META_ADS' },
     select: { id: true, name: true, status: true, syncedAt: true, lastError: true, meta: true },
@@ -45,8 +54,10 @@ export async function dashboard(workspaceId: string, period: Period, now = new D
   // with Meta's own reports.
   const tzRaw = (ads[0]?.meta as { timeZone?: string } | null)?.timeZone
   const tz = tzRaw && isValidTimeZone(tzRaw) ? tzRaw : 'UTC'
-  const to = dayIn(now, tz)
-  const from = shift(to, -(period - 1))
+  const to = typeof range === 'number' ? dayIn(now, tz) : range.to
+  const from = typeof range === 'number' ? shift(to, -(range - 1)) : range.from
+  // Compared with the same number of days just before.
+  const period = daysBetween(from, to).length
   const prevFrom = shift(from, -period)
   const prevTo = shift(from, -1)
 

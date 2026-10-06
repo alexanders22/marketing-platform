@@ -13,6 +13,7 @@ import {
 import { accountExpiredAlert, raiseAlert } from './alerts'
 import { prisma } from './prisma'
 import { ACTIVE_WORKSPACE } from './pause'
+import { ctaLine, readCta } from './cta'
 
 // Networks Loudpilot can publish to today.
 export const PUBLISHABLE = ['FACEBOOK', 'INSTAGRAM'] as const
@@ -24,9 +25,12 @@ const STUCK_MS = 15 * 60 * 1000
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 500)
 
-function outgoingText(post: { content: string; hashtags: string[] }) {
+// The text for one network: the post, its call to action (links tagged
+// with UTM for that network), then the hashtags.
+function outgoingText(post: { id: string; content: string; hashtags: string[]; cta: unknown; campaign?: { name: string } | null }, network: string) {
   const tags = post.hashtags.map((t) => `#${t.replace(/^#/, '')}`).join(' ')
-  return [post.content.trim(), tags].filter(Boolean).join('\n\n')
+  const cta = ctaLine(readCta(post.cta), network, { campaign: post.campaign?.name, postId: post.id })
+  return [post.content.trim(), cta, tags].filter(Boolean).join('\n\n')
 }
 
 // Signed links the networks fetch: the images in the author's order, or the
@@ -63,15 +67,14 @@ async function sendTo(account: SocialAccount, text: string, media: { images: str
 // the given accounts. Accounts that already have it are skipped, so a retry
 // only resends what failed.
 export async function deliver(postId: string, targets: SocialAccount[]) {
-  const post = await prisma.post.findUniqueOrThrow({ where: { id: postId }, include: { deliveries: true } })
-  const text = outgoingText(post)
+  const post = await prisma.post.findUniqueOrThrow({ where: { id: postId }, include: { deliveries: true, campaign: { select: { name: true } } } })
   const media = await outgoingMedia(post.workspaceId, post.mediaIds)
 
   for (const account of targets) {
     if (post.deliveries.some((d) => d.socialAccountId === account.id && d.status === 'PUBLISHED')) continue
     let data: Prisma.PostDeliveryUncheckedCreateInput
     try {
-      const r = await sendTo(account, text, media)
+      const r = await sendTo(account, outgoingText(post, account.network), media)
       data = { postId, socialAccountId: account.id, status: 'PUBLISHED', externalId: r.id, permalink: r.permalink, error: null }
     } catch (e) {
       data = { postId, socialAccountId: account.id, status: 'FAILED', error: errorText(e) }

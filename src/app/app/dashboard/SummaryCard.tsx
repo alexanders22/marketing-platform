@@ -11,10 +11,13 @@ import { usePrices } from '@/components/Prices'
 
 export function SummaryCard({
   period,
+  range,
   initial,
   createdAt,
 }: {
   period: number
+  // A chosen date range instead of the last `period` days.
+  range?: { from: string; to: string } | null
   initial: PerformanceSummary | null
   createdAt: string | null
 }) {
@@ -28,7 +31,7 @@ export function SummaryCard({
   const run = () =>
     start(async () => {
       setError(undefined)
-      const res = await generateSummary(period)
+      const res = await generateSummary(period, range ?? undefined)
       if (res.error) return setError(res.error)
       setSummary(res.summary!)
       setAt(new Date().toISOString())
@@ -53,7 +56,7 @@ export function SummaryCard({
           className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
         >
           <RefreshCw size={13} className={pending ? 'animate-spin' : ''} />
-          {pending ? 'Reading your results…' : summary ? `Refresh · ${creditsLabel(P.summary)}` : `Summarise last ${period} days · ${creditsLabel(P.summary)}`}
+          {pending ? 'Reading your results…' : summary ? `Refresh · ${creditsLabel(P.summary)}` : `${range ? `Summarise ${range.from} – ${range.to}` : `Summarise last ${period} days`} · ${creditsLabel(P.summary)}`}
         </button>
       </div>
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -69,7 +72,7 @@ export function SummaryCard({
       ) : (
         !error && (
           <p className="mt-3 text-sm text-zinc-600">
-            Loudpilot reads your ads and posts for this period and tells you what worked, what to watch and what to do next.
+            Loudpilot reads your ads, posts and website for this period and tells you what worked, what to watch and what to do next.
           </p>
         )
       )}
