@@ -3,17 +3,17 @@ import Link from 'next/link'
 import { Flag } from 'lucide-react'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
+import { metricDef } from '@/lib/goal-metrics'
+import { momentumOf } from '@/lib/momentum'
+import { Celebrate } from './Celebrate'
+import { GoalCards, STATUS } from './GoalCards'
 import { GoalForm } from './GoalForm'
-import { GoalList } from './GoalList'
+import { goalName } from './GoalList'
+import { Badges, MomentumHero } from './Momentum'
+import { Quests } from './Quests'
 
 export const metadata: Metadata = { title: 'Goals — Loudpilot' }
 
-const STATUS = {
-  ON_TRACK: { label: 'On track', dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700', bar: 'bg-emerald-500' },
-  AT_RISK: { label: 'At risk', dot: 'bg-amber-500', pill: 'bg-amber-50 text-amber-700', bar: 'bg-amber-500' },
-  OFF_TRACK: { label: 'Off track', dot: 'bg-red-500', pill: 'bg-red-50 text-red-700', bar: 'bg-red-500' },
-  NO_DATA: { label: 'No data yet', dot: 'bg-zinc-300', pill: 'bg-zinc-100 text-zinc-600', bar: 'bg-zinc-300' },
-} as const
 
 export default async function GoalsPage() {
   const { workspace, role } = await requireContext()
@@ -39,58 +39,68 @@ export default async function GoalsPage() {
   const events = [...new Set(recent.flatMap((d) => Object.keys((d.events ?? {}) as Record<string, number>)))].sort()
   const currency = campaigns.find((c) => c.currency)?.currency ?? null
   const canEdit = role !== 'EDITOR'
+  const active = goals.filter((g) => g.active)
   const counts = { OFF_TRACK: 0, AT_RISK: 0, ON_TRACK: 0, NO_DATA: 0 }
-  for (const g of goals.filter((g) => g.active)) counts[g.status]++
+  for (const g of active) counts[g.status]++
+  const m = await momentumOf(workspace.id)
+  const has = { ads: ads > 0, posts: posts > 0, website: website > 0 }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <div className="mr-auto">
           <h1 className="text-2xl font-semibold tracking-tight">Goals</h1>
-          <p className="text-sm text-zinc-500">Set the numbers that matter. Loudpilot checks them every hour and alerts you when they slip.</p>
+          <p className="text-sm text-zinc-500">Set the numbers that matter. Loudpilot checks them every hour, alerts you when they slip — and keeps score.</p>
         </div>
         {canEdit && (ads > 0 || posts > 0 || website > 0) && (
           <GoalForm campaigns={campaigns} currency={currency} hasAds={ads > 0} hasPosts={posts > 0} hasWebsite={website > 0} events={events} />
         )}
       </div>
 
+      <MomentumHero m={m} onTrack={counts.ON_TRACK} active={active.length} />
+
       {ads === 0 && posts === 0 && website === 0 ? (
-        <section className="rounded-2xl border border-dashed border-zinc-300 p-10 text-center">
-          <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-zinc-100">
+        <section className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/40 p-10 text-center">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-500 text-white">
             <Flag size={22} />
           </span>
           <h2 className="mt-4 text-lg font-semibold">Connect an ad account, a page or Google Analytics first</h2>
-          <p className="mx-auto mt-2 max-w-md text-sm text-zinc-500">
-            Goals watch real results — cost per lead, reach, views, likes and more.
-          </p>
-          <Link href="/app/channels" className="mt-5 inline-flex rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white">
+          <p className="mx-auto mt-2 max-w-md text-sm text-zinc-500">Goals watch real results — cost per lead, reach, views, sign-ups and more.</p>
+          <Link href="/app/channels" className="mt-5 inline-flex rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white">
             Connect channels
           </Link>
         </section>
-      ) : goals.length === 0 ? (
-        <section className="rounded-2xl border border-dashed border-zinc-300 p-8 text-sm text-zinc-600">
-          <p className="font-medium text-zinc-900">Ideas to start with</p>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li>Cost per lead at most ₾5 over the last 7 days</li>
-            <li>At least 80 leads over the last 7 days for your main campaign</li>
-            <li>Average reach per Instagram post at least 1,000</li>
-            <li>Engagement rate at least 3% over the last 30 days</li>
-            <li>At least 3 posts a week</li>
-            <li>At least 50 sign-ups a month from the website, at most ₾8 of ads per sign-up</li>
-          </ul>
-        </section>
       ) : (
         <>
-          <div className="flex flex-wrap gap-2 text-sm">
-            {(['OFF_TRACK', 'AT_RISK', 'ON_TRACK', 'NO_DATA'] as const).map((k) => (
-              <span key={k} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 ${STATUS[k].pill}`}>
-                <span className={`h-2 w-2 rounded-full ${STATUS[k].dot}`} /> {counts[k]} {STATUS[k].label.toLowerCase()}
-              </span>
-            ))}
-          </div>
-          <GoalList goals={goals} currency={currency} canEdit={canEdit} />
+          {goals.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <h2 className="mr-2 font-semibold">Your goals</h2>
+                {(['ON_TRACK', 'AT_RISK', 'OFF_TRACK', 'NO_DATA'] as const)
+                  .filter((k) => counts[k] > 0)
+                  .map((k) => {
+                    const S = STATUS[k]
+                    return (
+                      <span key={k} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${S.pill}`}>
+                        <S.icon size={12} /> {counts[k]} {S.label.toLowerCase()}
+                      </span>
+                    )
+                  })}
+              </div>
+              <GoalCards goals={goals} currency={currency} canEdit={canEdit} history={m.history} streaks={m.goalStreaks} />
+            </section>
+          )}
+          {active.length < 6 && <Quests has={has} canEdit={canEdit} taken={active.map((g) => g.metric)} />}
         </>
       )}
+
+      <Badges badges={m.badges} />
+      <Celebrate
+        workspaceId={workspace.id}
+        goals={active.map((g) => ({ id: g.id, name: `${metricDef(g.metric)?.label ?? g.metric} — ${goalName(g)}`, status: g.status }))}
+        level={m.level}
+        levelName={m.levelName}
+      />
     </div>
   )
 }

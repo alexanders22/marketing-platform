@@ -15,8 +15,9 @@ export async function telegramBotName() {
   if (!platformBot()) return null
   if (botName && Date.now() - botName.at < 3_600_000) return botName.name
   const me = await tg<{ username: string }>(platformBot(), 'getMe', {}).catch(() => null)
-  botName = { name: me?.username ?? null, at: Date.now() }
-  return botName.name
+  // Only a real answer is kept; a failure is asked again next time.
+  if (me) botName = { name: me.username, at: Date.now() }
+  return me?.username ?? null
 }
 
 const botToken = (stored: string) => (stored === PLATFORM_BOT ? platformBot() : stored)

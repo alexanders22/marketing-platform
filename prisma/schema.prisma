@@ -701,8 +701,24 @@ model Goal {
   updatedAt    DateTime    @updatedAt
 
   alerts Alert[]
+  days   GoalDay[]
 
   @@index([workspaceId])
+}
+
+// A goal's status on one day (the last check of that day): streaks, the
+// history strip and Momentum points on the Goals page.
+model GoalDay {
+  id      String     @id @default(cuid())
+  goalId  String
+  goal    Goal       @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  // YYYY-MM-DD (UTC).
+  date    String
+  status  GoalStatus
+  actual  Float?
+
+  @@unique([goalId, date])
+  @@index([date])
 }
 
 enum AlertSeverity {

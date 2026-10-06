@@ -266,6 +266,13 @@ export function goalHref(goal: Goal) {
 export async function checkGoal(goal: Goal, now = new Date()) {
   const r = await measureGoal(goal, now)
   await prisma.goal.update({ where: { id: goal.id }, data: { status: r.status, actual: r.actual, checkedAt: now } })
+  // Keep the day's last result for streaks and the history strip.
+  const today = now.toISOString().slice(0, 10)
+  await prisma.goalDay.upsert({
+    where: { goalId_date: { goalId: goal.id, date: today } },
+    create: { goalId: goal.id, date: today, status: r.status, actual: r.actual },
+    update: { status: r.status, actual: r.actual },
+  })
   if (!goal.checkedAt || r.status === goal.status) return r
 
   const def = metricDef(goal.metric)!

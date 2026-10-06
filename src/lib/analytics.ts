@@ -70,7 +70,7 @@ export async function dashboard(workspaceId: string, range: Period | DateRange, 
   const total = (): Totals => ({ spend: 0, impressions: 0, clicks: 0, results: 0, revenue: 0, posts: 0, organicReach: 0, organicViews: 0, engagements: 0 })
   const cur = total()
   const prev = total()
-  const series = new Map(daysBetween(from, to).map((d) => [d, { date: d, spend: 0, results: 0, organicReach: 0, engagements: 0 }]))
+  const series = new Map(daysBetween(from, to).map((d) => [d, { date: d, spend: 0, results: 0, impressions: 0, clicks: 0, organicReach: 0, engagements: 0, posts: 0 }]))
   // Per result type (leads, purchases …): spend and results, to pick the
   // main one — summing leads with reach would mean nothing.
   const byType = new Map<string, { spend: number; results: number; prevSpend: number; prevResults: number; days: Map<string, number> }>()
@@ -97,7 +97,11 @@ export async function dashboard(workspaceId: string, range: Period | DateRange, 
     }
     for (const d of inPeriod) {
       const s = series.get(d.date)
-      if (s) s.spend += d.spend
+      if (s) {
+        s.spend += d.spend
+        s.impressions += d.impressions
+        s.clicks += d.clicks
+      }
     }
     const type = c.days.find((d) => d.resultType)?.resultType ?? null
     if (type) {
@@ -171,6 +175,7 @@ export async function dashboard(workspaceId: string, range: Period | DateRange, 
       if (s) {
         s.organicReach += m.reach ?? 0
         s.engagements += engagementOf(m)
+        s.posts++
       }
       posts.push({
         id: d.post.id,

@@ -78,7 +78,7 @@ test('review page: summary, numbers, recommendations by impact, badges', async (
   await page.goto('/app/weekly')
   await expect(page.getByRole('heading', { name: 'Leads halved in price, posting slowed down' })).toBeVisible()
   await expect(page.getByText('· 4 open')).toBeVisible()
-  const titles = await page.locator('li p.font-medium').allTextContents()
+  const titles = await page.getByRole('list', { name: 'Open recommendations' }).getByRole('heading', { level: 3 }).allTextContents()
   expect(titles.slice(0, 2).sort()).toEqual(['Post an evening reel on Thursday', 'Raise the lead campaign to ₾30/day'])
   expect(titles.at(-1)).toBe('Answer last week comments')
   await expect(page.getByLabel('4 open recommendations')).toBeVisible()

@@ -47,14 +47,15 @@ test('connecting an ad account reads its campaigns and 12 months of results', as
 
 test('30-day KPIs: leads only from lead campaigns, deltas vs previous 30 days', async () => {
   await page.goto('/app/dashboard?days=30')
-  const kpi = (label: string) => page.locator('div.rounded-xl', { has: page.getByText(label, { exact: true }) }).first()
+  const kpi = (label: string) => page.getByRole('group', { name: label, exact: true }).first()
   await expect(kpi('Spend')).toContainText('₾900')
   await expect(kpi('Leads')).toContainText('120')
   await expect(kpi('Leads')).toContainText('100%') // 120 vs 60
   await expect(kpi('Cost per lead')).toContainText('₾5.00') // 600 / 120
   await expect(kpi('Cost per lead')).toContainText('50.0%') // was 10.00
   await expect(kpi('CTR')).toContainText('0.73%') // 2400 / 330000
-  await expect(page.getByRole('img', { name: 'Daily spend and results' })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Daily ad spend', exact: true })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Daily leads', exact: true })).toBeVisible()
 })
 
 test('campaign table and detail page', async () => {
@@ -73,7 +74,7 @@ test('campaign table and detail page', async () => {
 
 test('period switch and sync now', async () => {
   await page.goto('/app/dashboard?days=7')
-  await expect(page.locator('div.rounded-xl', { has: page.getByText('Spend', { exact: true }) }).first()).toContainText('₾210')
+  await expect(page.getByRole('group', { name: 'Spend', exact: true })).toContainText('₾210')
   const before = meta.calls.filter((c) => c.path === '/act_1/insights').length
   await page.getByRole('button', { name: 'Sync now' }).click()
   await expect.poll(() => meta.calls.filter((c) => c.path === '/act_1/insights').length).toBeGreaterThan(before)

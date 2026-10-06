@@ -19,7 +19,7 @@ export function GoalRowActions({ id, active, label }: { id: string; active: bool
       <button
         disabled={pending}
         onClick={() => run(() => setGoalActive(id, !active))}
-        className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 disabled:opacity-50"
+        className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 disabled:opacity-50"
         aria-label={`${active ? 'Pause' : 'Resume'} ${label}`}
         title={active ? 'Pause' : 'Resume'}
       >
@@ -28,7 +28,7 @@ export function GoalRowActions({ id, active, label }: { id: string; active: bool
       <button
         disabled={pending}
         onClick={() => confirm('Delete this goal?') && run(() => deleteGoal(id))}
-        className="rounded-lg p-2 text-zinc-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+        className="rounded-lg p-1.5 text-zinc-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
         aria-label={`Delete ${label}`}
         title="Delete"
       >

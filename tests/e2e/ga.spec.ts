@@ -40,7 +40,7 @@ test('connect one property: read right away, numbers on the dashboard', async ()
   const site = page.getByRole('region', { name: 'Website' })
   await expect(site).toBeVisible()
   // 14 days of 100…113 visits, 3 key events a day (2 sign-ups, 1 lead).
-  await expect(site.getByText('1,491')).toBeVisible()
+  await expect(site.getByRole('group', { name: 'Visits', exact: true })).toContainText('1,491')
   await expect(site.getByText('42', { exact: true })).toBeVisible()
   await expect(site.getByText('sign_up')).toBeVisible()
   await expect(site.getByText('generate_lead')).toBeVisible()
@@ -96,7 +96,7 @@ test('a website goal: sign-ups a week, checked against Google Analytics, shown o
   // each: 28 over the last 7 complete days, under 85% of 40.
   const goals = page.getByRole('list', { name: 'Goals' })
   await expect(goals.getByText('Key events (sign-ups, leads, sales) — Website · sign_up')).toBeVisible()
-  await expect(goals.getByRole('listitem').first()).toContainText(/28\s*of 40/)
+  await expect(goals.getByRole('listitem').first()).toContainText(/28\s*\/\s*≥\s*40/)
   await expect(goals.getByText('Off track')).toBeVisible()
 
   await page.goto('/app/dashboard')
@@ -117,7 +117,7 @@ test('dashboard date filter: presets and a custom range compared with the days b
   await expect(page.getByText(`${day(6)} – ${day(2)} · ads, posts and website in one place`)).toBeVisible()
   await expect(page.getByRole('button', { name: `${day(6)} – ${day(2)}`, exact: true })).toBeVisible()
   // Five days of the fake: 107…111 visits = 545 per property, two properties.
-  await expect(page.getByRole('region', { name: 'Website' }).getByText('1,090')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Website' }).getByRole('group', { name: 'Visits', exact: true }).getByText('1,090')).toBeVisible()
   // A preset.
   await page.getByRole('button', { name: `${day(6)} – ${day(2)}`, exact: true }).click()
   await page.getByRole('dialog', { name: 'Choose dates' }).getByRole('button', { name: 'This month' }).click()

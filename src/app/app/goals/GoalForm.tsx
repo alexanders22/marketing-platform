@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { Plus } from 'lucide-react'
 import { Modal } from '@/components/ui/Popover'
 import { METRICS, WINDOWS, type GoalScopeId } from '@/lib/goal-metrics'
@@ -15,6 +15,9 @@ const SCOPES: { id: GoalScopeId; label: string; hint: string }[] = [
 ]
 
 const field = 'w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400'
+
+export const GOAL_PRESET_EVENT = 'loudpilot:goal-preset'
+export type GoalPreset = { scope: GoalScopeId; metric: string; target: number; windowDays: number; network?: 'FACEBOOK' | 'INSTAGRAM' | null }
 
 export function GoalForm({
   campaigns,
@@ -46,6 +49,25 @@ export function GoalForm({
   const [windowDays, setWindowDays] = useState(7)
   const [error, setError] = useState<string>()
   const [pending, start] = useTransition()
+
+  // A quest card on the Goals page opens the form filled in.
+  useEffect(() => {
+    const onPreset = (e: Event) => {
+      const p = (e as CustomEvent<GoalPreset>).detail
+      const m = METRICS.find((x) => x.id === p.metric)
+      if (!m) return
+      setScope(p.scope)
+      setMetric(m.id)
+      setAtMost(m.atMost)
+      setNetwork(p.network ?? '')
+      setTarget(String(p.target))
+      setWindowDays(p.windowDays)
+      setError(undefined)
+      setOpen(true)
+    }
+    window.addEventListener(GOAL_PRESET_EVENT, onPreset)
+    return () => window.removeEventListener(GOAL_PRESET_EVENT, onPreset)
+  }, [])
 
   const pickScope = (s: GoalScopeId) => {
     setScope(s)
@@ -83,7 +105,7 @@ export function GoalForm({
     <>
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800"
+        className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_-8px_rgba(124,58,237,0.6)] transition hover:brightness-110"
       >
         <Plus size={16} /> New goal
       </button>
