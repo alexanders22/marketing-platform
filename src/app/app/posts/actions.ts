@@ -34,6 +34,20 @@ const PostInput = z.object({
   // Saved on the way to the Studio: an empty draft is fine then.
   allowEmpty: z.boolean().optional(),
   cta: CtaInput.nullable().optional(),
+  networkOptions: z
+    .object({
+      TIKTOK: z
+        .object({
+          privacy: z.enum(['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY']).optional(),
+          comments: z.boolean().optional(),
+          duet: z.boolean().optional(),
+          stitch: z.boolean().optional(),
+          brand: z.enum(['none', 'own', 'branded']).optional(),
+        })
+        .refine((t) => !(t.brand === 'branded' && t.privacy === 'SELF_ONLY'), 'Branded content on TikTok can’t be “Only me”')
+        .optional(),
+    })
+    .optional(),
 })
 
 export type PostInput = z.input<typeof PostInput>
@@ -67,7 +81,7 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
     if (!p.scheduledAt) return { error: 'Pick a date and time to schedule' }
     if (new Date(p.scheduledAt).getTime() < Date.now() - 60_000) return { error: 'Pick a time in the future — or publish now' }
     const targets = await targetsFor({ workspaceId: workspace.id, channels: p.channels })
-    if (targets.length === 0) return { error: 'Connect a Facebook Page or Instagram account in Channels to schedule' }
+    if (targets.length === 0) return { error: 'Connect an account for the picked networks in Channels to schedule' }
   }
 
   const data = {
@@ -83,6 +97,7 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
     channels: p.channels,
     scheduledAt: p.scheduledAt ? new Date(p.scheduledAt) : null,
     ...(p.cta !== undefined ? { cta: p.cta ?? Prisma.DbNull } : {}),
+    ...(p.networkOptions !== undefined ? { networkOptions: p.networkOptions } : {}),
   }
 
   let id = p.id

@@ -18,6 +18,7 @@ import { CtaPicker } from '@/components/CtaPicker'
 import { ctaLine, type Cta } from '@/lib/cta'
 import type { AdAccountChoice, BoostView } from '@/lib/boost'
 import { BoostPanel } from './BoostPanel'
+import { TikTokSettings, type TikTokOptions } from './TikTokSettings'
 
 export type PostDraft = {
   id?: string
@@ -29,6 +30,7 @@ export type PostDraft = {
   aiGenerated?: boolean
   campaign?: { id: string; name: string } | null
   cta?: Cta | null
+  networkOptions?: { TIKTOK?: TikTokOptions } | null
   status?: 'DRAFT' | 'SCHEDULED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED'
 }
 
@@ -89,6 +91,7 @@ export function PostEditor({
   const [content, setContent] = useState(initial.content)
   const [tags, setTags] = useState(initial.hashtags.map((t) => `#${t}`).join(' '))
   const [cta, setCta] = useState<Cta | null>(initial.cta ?? null)
+  const [tiktok, setTiktok] = useState<TikTokOptions>(initial.networkOptions?.TIKTOK ?? {})
   const [media, setMedia] = useState(initial.media)
   // Defaults only for a brand-new post; a saved post keeps exactly its channels (even none).
   const [channels, setChannels] = useState<Network[]>(initial.id ? initial.channels : ['FACEBOOK', 'INSTAGRAM'])
@@ -134,6 +137,7 @@ export function PostEditor({
         scheduledAt: when ? new Date(when).toISOString() : null,
         aiGenerated: initial.aiGenerated,
         cta,
+        ...(channels.includes('TIKTOK') ? { networkOptions: { TIKTOK: tiktok } } : {}),
         schedule,
       })
 
@@ -301,6 +305,15 @@ export function PostEditor({
               className="w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-zinc-400"
             />
           </section>
+
+          {channels.includes('TIKTOK') && connected.includes('TIKTOK') && (
+            <TikTokSettings
+              value={tiktok}
+              onChange={(v) => (setTiktok(v), setSaved(false))}
+              video={media.some((m) => m.kind === 'video')}
+              seconds={null}
+            />
+          )}
 
           <section>
             <p className="mb-2 text-sm font-semibold">Call to action</p>

@@ -5,6 +5,7 @@ import { META_STATE_COOKIE, exchangeMetaCode, listAdAccounts, listPages, metaEna
 import { refreshDossier } from '@/lib/dossier'
 import { syncAdAccount } from '@/lib/meta-ads'
 import { prisma } from '@/lib/prisma'
+import { PROFILE_NETWORKS } from '@/lib/profiles'
 import { unseal } from '@/lib/signed'
 import { terminalUrl } from '@/lib/hosts'
 import { planLimits } from '@/lib/plans'
@@ -122,7 +123,7 @@ export async function GET(req: NextRequest) {
   if (ws?.account) {
     const limit = planLimits(ws.account.plan).profiles
     const existing = await prisma.socialAccount.findMany({
-      where: { workspace: { accountId: ws.account.id }, network: { in: ['FACEBOOK', 'INSTAGRAM'] } },
+      where: { workspace: { accountId: ws.account.id }, network: { in: PROFILE_NETWORKS } },
       select: { workspaceId: true, network: true, externalId: true },
     })
     const known = new Set(existing.filter((e) => e.workspaceId === workspaceId).map((e) => `${e.network}:${e.externalId}`))

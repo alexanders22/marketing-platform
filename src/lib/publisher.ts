@@ -13,10 +13,13 @@ import {
 import { accountExpiredAlert, raiseAlert } from './alerts'
 import { prisma } from './prisma'
 import { ACTIVE_WORKSPACE } from './pause'
-import { ctaLine, readCta } from './cta'
+import { ctaLine, readCta, withUtm } from './cta'
+import { connectorFor, NetworkError, tokenFor, type OutMedia, type Outgoing } from './networks'
+import { titleOf } from './networks/types'
+import { readMedia } from './storage'
 
-// Networks Loudpilot can publish to today.
-export const PUBLISHABLE = ['FACEBOOK', 'INSTAGRAM'] as const
+// Networks Loudpilot can publish to: Meta's (meta.ts) and the connectors.
+export const PUBLISHABLE = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'X', 'THREADS', 'TELEGRAM', 'PINTEREST'] as const
 
 // A scheduled post more than this late (server down) is not sent on its own.
 const MAX_LATE_MS = 24 * 60 * 60 * 1000
@@ -33,15 +36,31 @@ function outgoingText(post: { id: string; content: string; hashtags: string[]; c
   return [post.content.trim(), cta, tags].filter(Boolean).join('\n\n')
 }
 
-// Signed links the networks fetch: the images in the author's order, or the
-// post's video. Videos get a longer link — Meta downloads them later.
+// The post's media for the networks: the images in the author's order, or
+// its video. Each has a signed link the network can fetch (videos a longer
+// one — networks download them later) and its bytes for upload APIs.
 async function outgoingMedia(workspaceId: string, mediaIds: string[]) {
-  if (mediaIds.length === 0) return { images: [] as string[] }
-  const media = await prisma.media.findMany({ where: { workspaceId, id: { in: mediaIds } } })
-  const video = media.find((m) => m.kind === 'VIDEO')
-  if (video) return { images: [] as string[], video: signedMediaUrl(video.id, 6 * 3600) }
-  return { images: mediaIds.filter((id) => media.some((m) => m.id === id && m.mime.startsWith('image/'))).map((id) => signedMediaUrl(id)) }
+  if (mediaIds.length === 0) return { images: [] as OutMedia[], video: null }
+  const rows = await prisma.media.findMany({ where: { workspaceId, id: { in: mediaIds } } })
+  const out = (m: (typeof rows)[number]): OutMedia => ({
+    id: m.id,
+    kind: m.kind === 'VIDEO' ? 'VIDEO' : 'IMAGE',
+    mime: m.mime,
+    bytes: m.bytes,
+    width: m.width,
+    height: m.height,
+    durationMs: m.durationMs,
+    url: signedMediaUrl(m.id, m.kind === 'VIDEO' ? 6 * 3600 : 3600),
+    poster: m.posterId ? signedMediaUrl(m.posterId, 6 * 3600) : null,
+    read: () => readMedia(m.path),
+  })
+  const video = rows.find((m) => m.kind === 'VIDEO')
+  if (video) return { images: [] as OutMedia[], video: out(video) }
+  const images = mediaIds.flatMap((id) => rows.filter((m) => m.id === id && m.mime.startsWith('image/')).map(out))
+  return { images, video: null }
 }
+
+type PostForNetworks = { id: string; content: string; hashtags: string[]; cta: unknown; networkOptions?: unknown; campaign?: { name: string } | null }
 
 // Connected accounts a post goes to: every active account of each network
 // picked on the post.
@@ -54,14 +73,30 @@ export async function targetsFor(post: { workspaceId: string; channels: string[]
   })
 }
 
-async function sendTo(account: SocialAccount, text: string, media: { images: string[]; video?: string }) {
-  if (!account.accessTokenEnc) throw new MetaError('This account has no access token — reconnect it')
-  const token = decrypt(account.accessTokenEnc)
-  const out = { text, imageUrls: media.images, videoUrl: media.video }
-  if (account.network === 'FACEBOOK') return publishToFacebook(account.externalId, token, out)
-  if (account.network === 'INSTAGRAM') return publishToInstagram(account.externalId, token, out)
-  throw new Error(`Publishing to ${account.network} is not supported yet`)
+async function sendTo(account: SocialAccount, post: PostForNetworks, media: { images: OutMedia[]; video: OutMedia | null }) {
+  const text = outgoingText(post, account.network)
+  if (account.network === 'FACEBOOK' || account.network === 'INSTAGRAM') {
+    if (!account.accessTokenEnc) throw new MetaError('This account has no access token — reconnect it')
+    const token = decrypt(account.accessTokenEnc)
+    const out = { text, imageUrls: media.images.map((m) => m.url), videoUrl: media.video?.url }
+    return account.network === 'FACEBOOK' ? publishToFacebook(account.externalId, token, out) : publishToInstagram(account.externalId, token, out)
+  }
+  const c = connectorFor(account.network)
+  if (!c?.enabled()) throw new Error(`Publishing to ${account.network} is not turned on`)
+  const cta = readCta(post.cta)
+  const out: Outgoing = {
+    text,
+    title: titleOf(post.content, 100),
+    link: cta?.url ? withUtm(cta.url, account.network, { campaign: post.campaign?.name, postId: post.id }) : null,
+    ...media,
+    options: ((post.networkOptions ?? {}) as Record<string, Record<string, unknown>>)[account.network] ?? {},
+  }
+  const problem = c.check?.(out)
+  if (problem) throw new NetworkError(problem)
+  return c.publish(account, await tokenFor(account), out)
 }
+
+const needsReconnect = (e: unknown) => (e instanceof MetaError && e.needsReconnect) || (e instanceof NetworkError && e.reconnect)
 
 // Publish a post that the caller has already claimed (status PUBLISHING) to
 // the given accounts. Accounts that already have it are skipped, so a retry
@@ -74,11 +109,11 @@ export async function deliver(postId: string, targets: SocialAccount[]) {
     if (post.deliveries.some((d) => d.socialAccountId === account.id && d.status === 'PUBLISHED')) continue
     let data: Prisma.PostDeliveryUncheckedCreateInput
     try {
-      const r = await sendTo(account, outgoingText(post, account.network), media)
+      const r = await sendTo(account, post, media)
       data = { postId, socialAccountId: account.id, status: 'PUBLISHED', externalId: r.id, permalink: r.permalink, error: null }
     } catch (e) {
       data = { postId, socialAccountId: account.id, status: 'FAILED', error: errorText(e) }
-      if (e instanceof MetaError && e.needsReconnect) {
+      if (needsReconnect(e)) {
         await prisma.socialAccount.update({ where: { id: account.id }, data: { status: 'EXPIRED', lastError: errorText(e) } })
         await accountExpiredAlert(account, errorText(e))
       }
@@ -157,15 +192,18 @@ export async function publishDue(now = new Date()) {
 export async function refreshDelivery(id: string) {
   const d = await prisma.postDelivery.findUnique({ where: { id }, include: { socialAccount: true } })
   if (!d || d.status !== 'PUBLISHED' || !d.externalId || !d.socialAccount.accessTokenEnc) return null
-  const token = decrypt(d.socialAccount.accessTokenEnc)
+  const a = d.socialAccount
+  const c = connectorFor(a.network)
+  if (c && !c.metrics) return null
   let metrics: PostMetrics
   try {
-    metrics =
-      d.socialAccount.network === 'INSTAGRAM'
-        ? await instagramPostMetrics(d.externalId, token)
-        : await facebookPostMetrics(d.externalId, token)
+    if (c) metrics = (await c.metrics!(a, await tokenFor(a), d.externalId)) as PostMetrics
+    else {
+      const token = decrypt(a.accessTokenEnc!)
+      metrics = a.network === 'INSTAGRAM' ? await instagramPostMetrics(d.externalId, token) : await facebookPostMetrics(d.externalId, token)
+    }
   } catch (e) {
-    if (e instanceof MetaError && e.needsReconnect) {
+    if (needsReconnect(e)) {
       await prisma.socialAccount.update({ where: { id: d.socialAccountId }, data: { status: 'EXPIRED', lastError: errorText(e) } })
       await accountExpiredAlert(d.socialAccount, errorText(e))
     }
@@ -204,7 +242,7 @@ export async function publishPostNow(workspaceId: string, postId: string): Promi
   const post = await prisma.post.findFirst({ where: { id: postId, workspaceId } })
   if (!post || post.kind !== 'SOCIAL') return { error: 'Post not found' }
   const targets = await targetsFor(post)
-  if (targets.length === 0) return { error: 'Connect a Facebook Page or Instagram account in Channels first' }
+  if (targets.length === 0) return { error: 'Connect an account for the networks picked on this post in Channels first' }
   const claimed = await prisma.post.updateMany({
     where: { id: postId, status: { in: ['DRAFT', 'SCHEDULED', 'FAILED', 'PUBLISHED'] } },
     data: { status: 'PUBLISHING' },

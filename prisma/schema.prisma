@@ -291,6 +291,8 @@ model Post {
   channels    String[]
   // Call to action: { type, url?, phone? } — see src/lib/cta.ts.
   cta         Json?
+  // Per-network settings, e.g. { TIKTOK: { privacy, comments, duet, stitch, brand } }.
+  networkOptions Json?
   scheduledAt DateTime?
   aiGenerated Boolean     @default(false)
   createdById String?
@@ -427,6 +429,8 @@ enum SocialNetwork {
   YOUTUBE
   TELEGRAM
   X
+  THREADS
+  PINTEREST
 }
 
 enum ConnectionStatus {
@@ -455,6 +459,8 @@ model SocialAccount {
   accessTokenEnc  String?
   refreshTokenEnc String?
   expiresAt       DateTime?
+  // When the refresh token itself runs out (TikTok, Pinterest, X…).
+  refreshExpiresAt DateTime?
   scopes          String[]
   status          ConnectionStatus @default(ACTIVE)
   lastError       String?

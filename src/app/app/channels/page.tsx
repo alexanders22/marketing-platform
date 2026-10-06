@@ -6,9 +6,14 @@ import { requireContext } from '@/lib/context'
 import { metaEnabled } from '@/lib/meta'
 import { planLimits } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
+import { countProfiles } from '@/lib/profiles'
 import { DisconnectButton } from './DisconnectButton'
 import { GoogleAnalyticsSection } from './GoogleAnalytics'
 import { gaEnabled } from '@/lib/ga'
+import { CONNECTORS, slugOf } from '@/lib/networks'
+import { boardOf, boardsOf } from '@/lib/networks/pinterest'
+import { telegramBotName } from '@/lib/networks/telegram'
+import { BoardPicker, TelegramConnect } from './NetworkForms'
 
 export const metadata: Metadata = { title: 'Channels — Loudpilot' }
 
@@ -19,15 +24,27 @@ const META = {
 } as const
 
 const LATER = [
-  { name: 'TikTok', icon: SiTiktok, color: '#000000', note: 'Videos and TikTok Ads' },
-  { name: 'LinkedIn Page', icon: FaLinkedinIn, color: '#0A66C2', note: 'Company page posts' },
-  { name: 'YouTube', icon: SiYoutube, color: '#FF0000', note: 'Shorts and videos' },
-  { name: 'X', icon: SiX, color: '#000000', note: 'Posts' },
-  { name: 'Threads', icon: SiThreads, color: '#000000', note: 'Posts' },
-  { name: 'Telegram channel', icon: SiTelegram, color: '#26A5E4', note: 'Channel posts' },
-  { name: 'Pinterest', icon: SiPinterest, color: '#BD081C', note: 'Pins' },
+  { name: 'TikTok Ads', icon: SiTiktok, color: '#000000', note: 'Ad results next to Meta' },
   { name: 'Google Ads', icon: SiGoogleads, color: '#4285F4', note: 'Search and display campaigns' },
 ]
+
+const ICONS = {
+  TIKTOK: { icon: SiTiktok, color: '#000000', button: 'bg-black hover:bg-zinc-800' },
+  LINKEDIN: { icon: FaLinkedinIn, color: '#0A66C2', button: 'bg-[#0A66C2] hover:bg-[#0959aa]' },
+  YOUTUBE: { icon: SiYoutube, color: '#FF0000', button: 'bg-[#FF0000] hover:bg-[#e00000]' },
+  X: { icon: SiX, color: '#000000', button: 'bg-black hover:bg-zinc-800' },
+  THREADS: { icon: SiThreads, color: '#000000', button: 'bg-black hover:bg-zinc-800' },
+  TELEGRAM: { icon: SiTelegram, color: '#26A5E4', button: 'bg-[#26A5E4] hover:bg-[#1f95cf]' },
+  PINTEREST: { icon: SiPinterest, color: '#BD081C', button: 'bg-[#BD081C] hover:bg-[#a30718]' },
+} as const
+
+// What a network allows before its app review: shown under the card.
+const NOTES: Partial<Record<keyof typeof ICONS, string>> = {
+  TIKTOK: 'Until TikTok approves Loudpilot, posts go out as private ("Only me") from private accounts.',
+  YOUTUBE: 'Until Google approves Loudpilot, uploaded videos stay private.',
+  PINTEREST: 'Until Pinterest approves Loudpilot, pins are visible only to you.',
+  X: 'X charges per post; a post with a link costs more.',
+}
 
 const ERRORS: Record<string, string> = {
   'meta-off': 'Meta connections are not configured yet.',
@@ -37,6 +54,11 @@ const ERRORS: Record<string, string> = {
   'meta-api': 'Facebook did not accept the connection. Please try again.',
   'meta-empty': 'No Pages or ad accounts were shared. Reconnect and pick at least one Page.',
   'ga-off': 'Google Analytics connections are not configured yet.',
+  'network-off': 'This network is not turned on yet.',
+  'network-denied': 'Connection cancelled.',
+  'network-state': 'The connection expired — please try again.',
+  'network-api': 'The network did not accept the connection. Please try again.',
+  'network-empty': 'No account was shared. Try again and allow access.',
   'ga-denied': 'Connection cancelled on Google.',
   'ga-state': 'The connection expired — please try again.',
   'ga-api': 'Google did not accept the connection. Please try again.',
@@ -45,13 +67,14 @@ const ERRORS: Record<string, string> = {
 }
 
 export default async function ChannelsPage({ searchParams }: PageProps<'/app/channels'>) {
-  const { workspace, role, account } = await requireContext()
+  const { workspace, role, account, user } = await requireContext()
   const q = await searchParams
   const all = await prisma.socialAccount.findMany({
     where: { workspaceId: workspace.id },
     orderBy: [{ network: 'asc' }, { name: 'asc' }],
   })
   const accounts = all.filter((a) => a.network in META)
+  const tgBot = await telegramBotName()
   const analytics = all.filter((a) => a.network === 'GOOGLE_ANALYTICS')
   const enabled = metaEnabled()
   const canEdit = role !== 'EDITOR'
@@ -59,7 +82,7 @@ export default async function ChannelsPage({ searchParams }: PageProps<'/app/cha
   const error = typeof q.error === 'string' ? ERRORS[q.error] : undefined
   const skipped = typeof q.skipped === 'string' ? Number(q.skipped) : 0
   const limit = planLimits(account.plan).profiles
-  const profiles = await prisma.socialAccount.count({ where: { workspace: { accountId: account.id }, network: { in: ['FACEBOOK', 'INSTAGRAM'] } } })
+  const profiles = await countProfiles(account.id)
 
   return (
     <>
@@ -160,6 +183,68 @@ export default async function ChannelsPage({ searchParams }: PageProps<'/app/cha
         canEdit={canEdit}
         pick={q.ga === 'pick'}
       />
+
+      <h2 className="mt-8 mb-3 text-sm font-semibold text-zinc-500">More channels</h2>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {CONNECTORS.map((c) => {
+          const look = ICONS[c.network as keyof typeof ICONS]
+          const mine = all.filter((a) => a.network === c.network)
+          const on = c.enabled()
+          const note = NOTES[c.network as keyof typeof ICONS]
+          return (
+            <section key={c.network} className="flex min-w-0 flex-col rounded-xl border border-zinc-200 p-4" aria-label={c.label}>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-zinc-50 ring-1 ring-zinc-200">
+                  <look.icon size={20} color={look.color} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{c.label}</p>
+                  <p className="text-sm text-zinc-500">{c.about}</p>
+                </div>
+                {!on ? (
+                  <span className="shrink-0 rounded-lg bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-500">Soon</span>
+                ) : !canEdit ? (
+                  <span className="shrink-0 rounded-lg bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-500">Owners and admins connect</span>
+                ) : c.network === 'TELEGRAM' ? (
+                  <TelegramConnect platformBot={tgBot} />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-html-link-for-pages
+                  <a href={`/auth/connect/${slugOf(c)}`} className={`shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold text-white ${look.button}`}>
+                    {mine.length ? 'Add or refresh' : 'Connect'}
+                  </a>
+                )}
+              </div>
+              {!on && user.role === 'SUPER_ADMIN' && c.setup.length > 0 && <p className="mt-2 text-xs text-zinc-400">Admin: set {c.setup.join(', ')} on the server.</p>}
+              {on && note && <p className="mt-2 text-xs text-zinc-500">{note}</p>}
+              {mine.length > 0 && (
+                <ul className="mt-3 divide-y divide-zinc-100 rounded-lg border border-zinc-200">
+                  {mine.map((a) => (
+                    <li key={a.id} className="flex min-w-0 flex-wrap items-center gap-2 p-2.5">
+                      {a.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={a.avatarUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-zinc-200" />
+                      ) : (
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-zinc-50 ring-1 ring-zinc-200">
+                          <look.icon size={14} color={look.color} />
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {a.name} {a.handle && <span className="text-zinc-400">@{a.handle}</span>}
+                        </p>
+                        {a.status !== 'ACTIVE' && <p className="truncate text-xs font-medium text-red-600">Needs reconnecting{a.lastError ? ` — ${a.lastError}` : ''}</p>}
+                        {a.network === 'LINKEDIN' && <p className="text-xs text-zinc-500">{a.externalId.includes(':organization:') ? 'Company Page' : 'Personal profile'}</p>}
+                      </div>
+                      {a.network === 'PINTEREST' && canEdit && <BoardPicker accountId={a.id} boards={boardsOf(a)} current={boardOf(a)} />}
+                      {canEdit && <DisconnectButton id={a.id} name={a.name} />}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )
+        })}
+      </div>
 
       <h2 className="mt-8 mb-3 text-sm font-semibold text-zinc-500">Coming next</h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">

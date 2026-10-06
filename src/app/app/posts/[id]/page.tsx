@@ -6,7 +6,7 @@ import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 import { PUBLISHABLE } from '@/lib/publisher'
 import { mediaUrl } from '@/lib/storage'
-import { PostEditor } from '../PostEditor'
+import { PostEditor, type PostDraft } from '../PostEditor'
 import { boostAccounts, boostsFor } from '@/lib/boost'
 
 export const metadata: Metadata = { title: 'Edit post — Loudpilot' }
@@ -48,6 +48,7 @@ export default async function EditPostPage({ params }: PageProps<'/app/posts/[id
         aiGenerated: post.aiGenerated,
         campaign: post.campaign,
         cta: readCta(post.cta),
+        networkOptions: (post.networkOptions ?? null) as PostDraft['networkOptions'],
         status: post.status,
       }}
       connected={[...new Set(accounts.map((a) => a.network))] as Network[]}
