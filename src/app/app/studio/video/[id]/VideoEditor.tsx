@@ -46,6 +46,7 @@ import {
 } from '@/lib/video'
 import { clipStatus, generateVoices, renderVideo, saveVideo, startClip, videoStatus, videoToPost } from '../actions'
 import { VideoMediaPicker, type LibraryItem } from '../VideoMediaPicker'
+import { MusicPicker } from '../MusicPicker'
 import { clipAction, creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
 
@@ -538,10 +539,16 @@ export function VideoEditor({
 
       {picker === 'scene' && <VideoMediaPicker kind="visual" onClose={() => setPicker(null)} onPick={pickForScene} />}
       {picker === 'music' && (
-        <VideoMediaPicker
-          kind="audio"
+        <MusicPicker
           onClose={() => setPicker(null)}
-          onPick={(items) => items[0] && setDoc({ ...doc, music: { mediaId: items[0].id, url: items[0].url, name: items[0].name, volume: 0.6 } })}
+          onPick={(m) =>
+            setDoc({
+              ...doc,
+              music: { mediaId: m.id, url: m.url, name: m.name, volume: 0.6 },
+              // CC BY music must be credited: the line goes into the post text.
+              caption: m.credit && !(doc.caption ?? '').includes(m.credit) ? [doc.caption?.trim(), m.credit].filter(Boolean).join('\n\n') : doc.caption,
+            })
+          }
         />
       )}
     </div>

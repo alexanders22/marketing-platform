@@ -803,6 +803,26 @@ export async function speak(text: string, voiceName: string): Promise<{ wav: Buf
   return { wav: Buffer.concat([header, pcm]), ms: Math.round((pcm.length / 2 / rate) * 1000) }
 }
 
+// Background music with Lyria 3 (Gemini API): a ~30-second instrumental MP3.
+const MUSIC_MODEL = process.env.GEMINI_MUSIC_MODEL || 'lyria-3-clip-preview'
+
+export async function generateMusic(prompt: string): Promise<{ data: Buffer; mime: string }> {
+  if (!client) throw new Error('AI is not configured')
+  const res = await client.models.generateContent({
+    model: MUSIC_MODEL,
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: `Background music for a short social media video. Instrumental only, no vocals, no lyrics. Loops cleanly, steady energy. ${prompt}` }],
+      },
+    ],
+    config: { responseModalities: ['AUDIO', 'TEXT'], abortSignal: AbortSignal.timeout(120_000) },
+  })
+  const part = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)
+  if (!part?.inlineData?.data) throw new Error('No music returned')
+  return { data: Buffer.from(part.inlineData.data, 'base64'), mime: part.inlineData.mimeType?.split(';')[0] || 'audio/mpeg' }
+}
+
 const ADVICE_SCHEMA = (() => {
   const str = { type: 'string' }
   const obj = (props: Record<string, unknown>) => ({ type: 'object', properties: props, required: Object.keys(props) })
