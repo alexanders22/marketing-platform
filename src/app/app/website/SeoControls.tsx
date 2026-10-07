@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react'
 import { Loader2, Sparkles } from 'lucide-react'
 import { usePrices } from '@/components/Prices'
 import { disconnectSearchConsole, pickSearchSite, planSeo } from './actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 export function SitePicker({ sites, current }: { sites: string[]; current: string }) {
   const router = useRouter()
@@ -31,8 +32,8 @@ export function SitePicker({ sites, current }: { sites: string[]; current: strin
       </select>
       <button
         disabled={pending}
-        onClick={() =>
-          confirm('Disconnect Google Search Console?') &&
+        onClick={async () =>
+          (await confirmDialog('Disconnect Google Search Console?', { confirm: 'Disconnect', danger: true })) &&
           start(async () => {
             await disconnectSearchConsole()
             router.refresh()

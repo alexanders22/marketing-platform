@@ -98,3 +98,11 @@ body {
   animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
   animation-fill-mode: forwards;
 }
+
+/* In-app dialogs (src/components/ui/Dialog.tsx). */
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}

@@ -11,6 +11,7 @@ import { deletePost, savePost } from '../posts/actions'
 import { writeArticle } from './actions'
 import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 export type BlogDraft = {
   id?: string
@@ -215,9 +216,9 @@ export function BlogEditor({ initial }: { initial: BlogDraft }) {
         {saved && <span className="text-sm text-emerald-600">Saved</span>}
         {initial.id && (
           <button
-            onClick={() =>
+            onClick={async () =>
+              (await confirmDialog('Delete this article?', { confirm: 'Delete', danger: true })) &&
               start(async () => {
-                if (!confirm('Delete this article?')) return
                 await deletePost(initial.id!)
                 router.push('/app/planner?view=list')
               })

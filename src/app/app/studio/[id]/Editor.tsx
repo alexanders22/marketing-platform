@@ -42,6 +42,7 @@ import {
   type TextLayer,
 } from '@/lib/design'
 import { exportDesign, saveDesign } from '../actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 type Brand = { name: string; colors: string[]; logoUrl: string | null }
 type Drag = { id: string; mode: 'move' | 'nw' | 'ne' | 'sw' | 'se'; px: number; py: number; orig: Layer; moved: boolean }
@@ -499,8 +500,8 @@ export function Editor({
               TEMPLATES.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => {
-                    if (doc.layers.length && !confirm('Replace the current design with this template?')) return
+                  onClick={async () => {
+                    if (doc.layers.length && !(await confirmDialog('Replace the current design with this template?', { confirm: 'Replace' }))) return
                     commit(resizeDoc(t.build(pal, brand.name), { w: 1080, h: 1080 }, size))
                     setSel(null)
                   }}

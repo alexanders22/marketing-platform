@@ -13,6 +13,7 @@ import { VideoMediaPicker, type LibraryItem } from './VideoMediaPicker'
 import { VeoMeter } from './[id]/VideoEditor'
 import { clipAction } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 export type VideoCard = { id: string; name: string; format: string; status: string; poster: string | null; seconds: number; updatedAt: string }
 
@@ -152,7 +153,7 @@ export function VideoSection({
                 </p>
               </Link>
               <button
-                onClick={() => confirm(`Delete “${v.name}”?`) && start(() => deleteVideo(v.id))}
+                onClick={async () => (await confirmDialog(`Delete “${v.name}”?`, { confirm: 'Delete', danger: true })) && start(() => deleteVideo(v.id))}
                 aria-label={`Delete ${v.name}`}
                 className="absolute top-1.5 right-1.5 hidden rounded-md bg-white/90 p-1 text-zinc-700 group-hover:block hover:text-red-600"
               >

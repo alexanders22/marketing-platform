@@ -7,6 +7,7 @@ import { Copy, LayoutTemplate, Loader2, Search, Trash2 } from 'lucide-react'
 import { DesignPreview } from '@/components/DesignCanvas'
 import { palette, resizeDoc, SIZES, TEMPLATE_CATEGORIES, TEMPLATES, type DesignDoc, type TemplateCategory } from '@/lib/design'
 import { createDesign, deleteDesign, duplicateDesign } from './actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 type Design = { id: string; name: string; width: number; height: number; data: DesignDoc; preview: string | null; updatedAt: string }
 
@@ -158,7 +159,7 @@ export function StudioHome({
                   <Copy size={13} />
                 </button>
                 <button
-                  onClick={() => confirm(`Delete "${d.name}"?`) && start(async () => { await deleteDesign(d.id); router.refresh() })}
+                  onClick={async () => (await confirmDialog(`Delete “${d.name}”?`, { confirm: 'Delete', danger: true })) && start(async () => { await deleteDesign(d.id); router.refresh() })}
                   className="grid h-7 w-7 place-items-center rounded-lg bg-white text-red-600 shadow"
                   aria-label="Delete"
                 >

@@ -13,6 +13,7 @@ import { ComparisonCard } from '../../results/Comparison'
 import type { Comparison } from '@/lib/actuals'
 import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 type Campaign = { id: string; kind: 'SOCIAL' | 'BLOG'; name: string; brief: string; startsOn: string; endsOn: string; tone: string; language: string }
 type Item = {
@@ -104,8 +105,8 @@ export function CampaignView({
           </p>
         </div>
         <button
-          onClick={() => {
-            if (!confirm(`Delete "${c.name}" and all its ${isBlog ? 'articles' : 'posts'}?`)) return
+          onClick={async () => {
+            if (!(await confirmDialog(`Delete “${c.name}”?`, { body: `All its ${isBlog ? 'articles' : 'posts'} are deleted too.`, confirm: 'Delete', danger: true }))) return
             run('delete', async () => {
               const res = await deleteCampaign(c.id, true)
               if (!res.error) router.push('/app/campaigns')

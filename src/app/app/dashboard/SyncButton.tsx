@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { syncAds } from './actions'
+import { alertDialog } from '@/components/ui/Dialog'
 
 export function SyncButton() {
   const router = useRouter()
@@ -13,7 +14,7 @@ export function SyncButton() {
       onClick={() =>
         start(async () => {
           const res = await syncAds()
-          if (res.error) alert(res.error)
+          if (res.error) alertDialog('Sync failed', res.error)
           router.refresh()
         })
       }

@@ -19,6 +19,7 @@ import { ctaLine, type Cta } from '@/lib/cta'
 import type { AdAccountChoice, BoostView } from '@/lib/boost'
 import { BoostPanel } from './BoostPanel'
 import { TikTokSettings, type TikTokOptions } from './TikTokSettings'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 export type PostDraft = {
   id?: string
@@ -152,11 +153,11 @@ export function PostEditor({
       router.refresh()
     })
 
-  const publish = () =>
+  const publish = async () => {
+    if (!(await confirmDialog('Publish now?', { body: `The post goes out to ${reachable.map((r) => NETWORKS.find((n) => n.id === r)?.name).join(' and ')} right away.`, confirm: 'Publish' }))) return
     start(async () => {
       setError(undefined)
       setNotice(undefined)
-      if (!confirm(`Publish now to ${reachable.map((r) => NETWORKS.find((n) => n.id === r)?.name).join(' and ')}?`)) return
       const res = status === 'PUBLISHED' ? { id: initial.id } : await persist(false)
       if ('error' in res && res.error) return setError(res.error)
       const out = await publishNow(res.id!)
@@ -166,6 +167,7 @@ export function PostEditor({
       if (!initial.id && res.id) router.replace(`/app/posts/${res.id}`)
       router.refresh()
     })
+  }
 
   const hasVideo = media.some((m) => m.kind === 'video')
 
@@ -219,12 +221,13 @@ export function PostEditor({
     router.refresh()
   }
 
-  const remove = () =>
+  const remove = async () => {
+    if (!initial.id || !(await confirmDialog('Delete this post?', { confirm: 'Delete', danger: true }))) return
     start(async () => {
-      if (!initial.id || !confirm('Delete this post?')) return
-      await deletePost(initial.id)
+      await deletePost(initial.id!)
       router.push('/app/planner')
     })
+  }
 
   return (
     <div>

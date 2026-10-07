@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { Compass, Sparkles } from 'lucide-react'
+import { Check, Compass, Sparkles } from 'lucide-react'
 import { createPlan } from '../actions'
 import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
@@ -49,6 +49,8 @@ export function PlanWizard({
   })
   const [startsOn, setStartsOn] = useState(start)
   const [endsOn, setEndsOn] = useState(end)
+  // Offerings picked (none = everything), or what was typed when the dossier lists none.
+  const [picked, setPicked] = useState<string[]>([])
   const [focus, setFocus] = useState('')
   const [language, setLanguage] = useState<'English' | 'Georgian' | 'Russian'>('English')
   const [error, setError] = useState<string>()
@@ -63,7 +65,7 @@ export function PlanWizard({
         budget: budget ? Number(budget.replace(',', '.')) : null,
         startsOn,
         endsOn,
-        focus: focus || undefined,
+        focus: offerings.length ? picked : focus.trim() ? [focus] : [],
         language,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       })
@@ -131,20 +133,38 @@ export function PlanWizard({
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">No ad account connected — the plan will include ad setups, but without forecasts from your history.</p>
       )}
 
+      {offerings.length > 0 && (
+        <fieldset>
+          <legend className="mb-1 block text-sm font-medium">
+            Focus on <span className="font-normal text-zinc-400">— pick one or more</span>
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {[null, ...offerings].map((o) => {
+              const on = o === null ? picked.length === 0 : picked.includes(o)
+              return (
+                <button
+                  key={o ?? ''}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setPicked(o === null ? [] : on ? picked.filter((x) => x !== o) : [...picked, o])}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm ${on ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 hover:border-zinc-300'}`}
+                >
+                  {on && <Check size={14} />}
+                  {o ?? 'Everything'}
+                </button>
+              )
+            })}
+          </div>
+        </fieldset>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Focus on</span>
-          {offerings.length ? (
-            <select value={focus} onChange={(e) => setFocus(e.target.value)} className={field} aria-label="Focus on">
-              <option value="">Everything</option>
-              {offerings.map((o) => (
-                <option key={o}>{o}</option>
-              ))}
-            </select>
-          ) : (
-            <input value={focus} onChange={(e) => setFocus(e.target.value)} placeholder="a product or service (optional)" className={field} aria-label="Focus on" />
-          )}
-        </label>
+        {offerings.length === 0 && (
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium">Focus on</span>
+            <input value={focus} onChange={(e) => setFocus(e.target.value)} placeholder="products or services (optional)" className={field} aria-label="Focus on" />
+          </label>
+        )}
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Language of posts and ads</span>
           <select value={language} onChange={(e) => setLanguage(e.target.value as typeof language)} className={field} aria-label="Language">

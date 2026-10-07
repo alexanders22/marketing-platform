@@ -6,6 +6,7 @@ import { BookOpen, Check, FileUp, Loader2, Printer, RotateCcw, Sparkles, Wand2 }
 import { usePrices } from '@/components/Prices'
 import type { BrandbookData } from '@/lib/ai'
 import { applyBrandbook, chooseDirection, deleteBrandbook, designDirections, uploadBrandbook } from './actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 const TRAITS = ['Trustworthy', 'Premium', 'Friendly', 'Bold', 'Playful', 'Calm', 'Modern', 'Traditional', 'Expert', 'Caring', 'Energetic', 'Minimal']
 
@@ -73,7 +74,7 @@ export function BrandbookView({
             <Printer size={15} /> Print / PDF
           </button>
           <button
-            onClick={() => confirm('Replace the brandbook? The current one is removed.') && start(async () => (await deleteBrandbook(), router.refresh()))}
+            onClick={async () => (await confirmDialog('Replace the brandbook?', { body: 'The current one is removed.', confirm: 'Start over', danger: true })) && start(async () => (await deleteBrandbook(), router.refresh()))}
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-100"
           >
             <RotateCcw size={15} /> Start over

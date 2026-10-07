@@ -9,6 +9,7 @@ import { LocalTime } from '@/components/LocalTime'
 import { usePrices } from '@/components/Prices'
 import type { CompetitorReportData, FoundCompetitor } from '@/lib/ai'
 import { addCompetitor, compareNow, deleteCompetitor, suggestCompetitors, updateCompetitor } from './actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 type Rival = {
   id: string
@@ -224,7 +225,7 @@ export function Competitors({ brand, competitors, report }: { brand: string; com
                     <Pencil size={14} />
                   </button>
                   <button
-                    onClick={() => confirm(`Remove ${c.name}?`) && run(`del-${c.id}`, () => deleteCompetitor(c.id))}
+                    onClick={async () => (await confirmDialog(`Remove ${c.name}?`, { confirm: 'Remove', danger: true })) && run(`del-${c.id}`, () => deleteCompetitor(c.id))}
                     aria-label={`Remove ${c.name}`}
                     className="rounded-md p-1 text-zinc-500 hover:bg-red-50 hover:text-red-600"
                   >
