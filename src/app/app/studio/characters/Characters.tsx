@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react'
 import { ImagePlus, Loader2, Plus, Trash2, UserRound, X } from 'lucide-react'
 import { VideoMediaPicker } from '../video/VideoMediaPicker'
 import { deleteCharacter, saveCharacter } from './actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 export type CharacterCard = { id: string; name: string; description: string; person: boolean; photos: { id: string; url: string }[] }
 
@@ -136,7 +137,7 @@ export function Characters({ characters, paid }: { characters: CharacterCard[]; 
                 </p>
               </button>
               <button
-                onClick={() => confirm(`Delete “${c.name}”?`) && start(async () => { await deleteCharacter(c.id); router.refresh() })}
+                onClick={async () => (await confirmDialog(`Delete “${c.name}”?`, { confirm: 'Delete', danger: true })) && start(async () => { await deleteCharacter(c.id); router.refresh() })}
                 aria-label={`Delete ${c.name}`}
                 className="absolute top-1.5 right-1.5 hidden rounded-md bg-white/90 p-1 text-zinc-700 group-hover:block hover:text-red-600"
               >

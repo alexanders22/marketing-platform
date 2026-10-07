@@ -1,9 +1,37 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
-import { Check, Copy, Rocket } from 'lucide-react'
-import { applyPlanGoals, applyPlanPosts, archivePlan, launchPlan, markAdLaunched } from '../actions'
+import { useEffect, useState, useTransition } from 'react'
+import { Check, Copy, ImagePlus, Loader2, Rocket } from 'lucide-react'
+import { applyPlanGoals, applyPlanPosts, archivePlan, launchPlan, makePlanVisuals, markAdLaunched } from '../actions'
+import { ask } from '@/components/ui/Dialog'
+import { creditsLabel } from '@/lib/pricing'
+
+export type VisualsNeed = { posts: number; images: number; videos: number; credits: number }
+
+// Before the plan's posts go to the Planner: with AI pictures and videos, or text only?
+async function askVisuals(v: VisualsNeed): Promise<'visuals' | 'text' | null> {
+  if (v.posts === 0) return 'text'
+  const parts = [v.images && `${v.images} image${v.images === 1 ? '' : 's'}`, v.videos && `${v.videos} short video${v.videos === 1 ? '' : 's'}`].filter(Boolean).join(' and ')
+  const id = await ask({
+    title: 'Publish the posts without pictures and videos?',
+    body: (
+      <>
+        <p>
+          {v.posts} post{v.posts === 1 ? ' has' : 's have'} only text so far. Loudpilot can make {parts} for them first, then put them in the Planner.
+        </p>
+        <p className="mt-2 text-xs text-zinc-500">Videos are vertical Reels from AI images with motion — open one in Studio → Video to add text or a voice-over.</p>
+      </>
+    ),
+    choices: [
+      { id: 'cancel', label: 'Cancel', tone: 'plain' },
+      { id: 'text', label: 'Text only', tone: 'plain' },
+      { id: 'visuals', label: `Make them · ${creditsLabel(v.credits)}`, tone: 'primary' },
+    ],
+  })
+  return id === 'visuals' || id === 'text' ? id : null
+}
+import { confirmDialog } from '@/components/ui/Dialog'
 
 function useAction() {
   const router = useRouter()
@@ -19,19 +47,21 @@ function useAction() {
   return { pending, msg, run }
 }
 
-export function ApplyButton({ planId, kind, count, done }: { planId: string; kind: 'posts' | 'goals'; count: number; done: number }) {
+export function ApplyButton({ planId, kind, count, done, visuals }: { planId: string; kind: 'posts' | 'goals'; count: number; done: number; visuals?: VisualsNeed }) {
   const { pending, msg, run } = useAction()
   const left = count - done
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button
         disabled={pending || left === 0}
-        onClick={() =>
+        onClick={async () => {
+          const how = kind === 'posts' && visuals ? await askVisuals(visuals) : 'text'
+          if (!how) return
           run(
-            () => (kind === 'posts' ? applyPlanPosts(planId) : applyPlanGoals(planId)),
-            (n) => (kind === 'posts' ? `${n} posts added to the Planner as drafts.` : `${n} goals are now being watched.`),
+            () => (kind === 'posts' ? applyPlanPosts(planId, undefined, how === 'visuals') : applyPlanGoals(planId)),
+            (n) => (kind === 'posts' ? `${n} posts added to the Planner as drafts${how === 'visuals' ? ' — pictures and videos are on the way' : ''}.` : `${n} goals are now being watched.`),
           )
-        }
+        }}
         className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:bg-zinc-200 disabled:text-zinc-500"
       >
         {left === 0 ? <Check size={15} /> : null}
@@ -125,7 +155,7 @@ export function ArchiveButton({ planId }: { planId: string }) {
   return (
     <button
       disabled={pending}
-      onClick={() => confirm('Archive this plan? Posts and goals already applied stay.') && run(() => archivePlan(planId), () => '')}
+      onClick={async () => (await confirmDialog('Archive this plan?', { body: 'Posts and goals already applied stay.', confirm: 'Archive' })) && run(() => archivePlan(planId), () => '')}
       className="rounded-lg px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-100"
     >
       Archive
@@ -134,7 +164,7 @@ export function ArchiveButton({ planId }: { planId: string }) {
 }
 
 // One click: the plan's posts into the Planner and its goals watched.
-export function LaunchPlan({ planId, left }: { planId: string; left: number }) {
+export function LaunchPlan({ planId, left, visuals }: { planId: string; left: number; visuals: VisualsNeed }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [msg, setMsg] = useState<string>()
@@ -152,18 +182,74 @@ export function LaunchPlan({ planId, left }: { planId: string; left: number }) {
     <span className="flex flex-wrap items-center gap-2">
       <button
         disabled={pending}
-        onClick={() =>
+        onClick={async () => {
+          const how = await askVisuals(visuals)
+          if (!how) return
           start(async () => {
-            const res = await launchPlan(planId)
-            setMsg(res.error ?? `${res.posts ?? 0} posts in the Planner, ${res.goals ?? 0} goals watched.`)
+            const res = await launchPlan(planId, how === 'visuals')
+            setMsg(res.error ?? `${res.posts ?? 0} posts in the Planner, ${res.goals ?? 0} goals watched${how === 'visuals' && res.posts ? ' — pictures and videos are on the way' : ''}.`)
             router.refresh()
           })
-        }
+        }}
         className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
       >
         <Rocket size={15} /> {pending ? 'Launching…' : 'Launch the plan'}
       </button>
       {msg && <span className="text-sm text-zinc-600">{msg}</span>}
     </span>
+  )
+}
+
+// Pictures and videos for the plan's posts: progress while they are made
+// (the page refreshes itself), or a button for posts still without any.
+export function PlanVisuals({ planId, running, total, left, credits, outOfCredits, canEdit }: { planId: string; running: boolean; total: number; left: number; credits: number; outOfCredits: boolean; canEdit: boolean }) {
+  const router = useRouter()
+  const [pending, start] = useTransition()
+  const [error, setError] = useState<string>()
+  useEffect(() => {
+    if (!running) return
+    const t = setInterval(() => router.refresh(), 5000)
+    return () => clearInterval(t)
+  }, [running, router])
+
+  if (running) {
+    const done = Math.max(0, total - left)
+    return (
+      <div className="mb-3 rounded-xl bg-violet-50 px-4 py-3 text-sm text-violet-900" role="status">
+        <p className="flex items-center gap-2 font-medium">
+          <Loader2 size={15} className="animate-spin" /> Making pictures and videos… {done} of {total}
+        </p>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-violet-100">
+          <div className="h-full rounded-full bg-gradient-to-r from-[#7b3ff2] to-[#ff2e6e] transition-all" style={{ width: `${Math.max(4, (done / Math.max(1, total)) * 100)}%` }} />
+        </div>
+        <p className="mt-1.5 text-xs text-violet-700">They appear on the posts in the Planner as they are ready — you can leave this page.</p>
+      </div>
+    )
+  }
+  if (left === 0) return null
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <ImagePlus size={16} className="shrink-0" />
+      <span className="min-w-0 flex-1">
+        {left} post{left === 1 ? '' : 's'} in the Planner {left === 1 ? 'has' : 'have'} no picture or video yet.
+        {outOfCredits && ' Credits ran out last time.'}
+      </span>
+      {canEdit && (
+        <button
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const res = await makePlanVisuals(planId)
+              setError(res.error)
+              router.refresh()
+            })
+          }
+          className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
+        >
+          {pending ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} Make them · {creditsLabel(credits)}
+        </button>
+      )}
+      {error && <span className="w-full text-xs text-red-700">{error}</span>}
+    </div>
   )
 }

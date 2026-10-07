@@ -9,7 +9,8 @@ import { formatMoney, formatNumber } from '@/lib/format'
 import { WINDOWS, formatMetric, metricDef } from '@/lib/goal-metrics'
 import { prisma } from '@/lib/prisma'
 import { OBJECTIVES, type PlanData } from '@/lib/strategist'
-import { ApplyButton, ArchiveButton, CopyText, LaunchPlan, LaunchedToggle, LinkCampaign } from './PlanActions'
+import { ApplyButton, ArchiveButton, CopyText, LaunchPlan, LaunchedToggle, LinkCampaign, PlanVisuals } from './PlanActions'
+import { isVideoFormat as isVideo, postsWithoutVisuals, visualsCost, visualsRunning } from '@/lib/plan-visuals'
 import { ComparisonCard } from '../../results/Comparison'
 import { planActuals } from '@/lib/actuals'
 import { holidaysBetween, type Holiday } from '@/lib/holidays'
@@ -49,6 +50,12 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
   const started = d.posts.some((p) => p.postId) || d.goals.some((g) => g.goalId) || d.ads.some((a) => a.launched)
   const comparison = started ? await planActuals(plan) : null
   const audienceName = (aid: string) => d.audiences.find((a) => a.id === aid)?.name ?? '—'
+  // Pictures and videos: what the posts not yet in the Planner would need, and
+  // the ones in the Planner still without any.
+  const toApply = d.posts.filter((p) => !p.postId)
+  const need = { posts: toApply.length, ...visualsCost(toApply, COST) }
+  const bare = await postsWithoutVisuals(plan.id)
+  const making = visualsRunning(d.visuals)
 
   return (
     <div className="space-y-6">
@@ -65,13 +72,13 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-balance">{d.headline}</h1>
           <p className="mt-2 text-sm text-zinc-500">“{plan.goal}”</p>
         </div>
-        {canEdit && <LaunchPlan planId={plan.id} left={d.posts.filter((p) => !p.postId).length + d.goals.filter((g) => !g.goalId).length} />}
+        {canEdit && <LaunchPlan planId={plan.id} left={toApply.length + d.goals.filter((g) => !g.goalId).length} visuals={need} />}
         {canEdit && <ArchiveButton planId={plan.id} />}
       </div>
 
       {comparison && <ComparisonCard kind="plan" id={plan.id} data={comparison} />}
 
-      <MediaPlan d={d} money={money} holidays={holidaysBetween(plan.startsOn, plan.endsOn)} cost={{ image: COST.image, video: COST.videoScript + COST.voice }} />
+      <MediaPlan d={d} money={money} holidays={holidaysBetween(plan.startsOn, plan.endsOn)} cost={visualsCost(d.posts, COST)} />
 
       <Block title="Diagnosis and strategy" icon={<Stethoscope size={17} className="text-zinc-500" />}>
         <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-700">
@@ -197,8 +204,17 @@ export default async function PlanPage({ params }: PageProps<'/app/strategy/[id]
         <Block
           title="Posts for the first two weeks"
           icon={<CalendarDays size={17} className="text-zinc-500" />}
-          action={canEdit && <ApplyButton planId={plan.id} kind="posts" count={d.posts.length} done={d.posts.filter((p) => p.postId).length} />}
+          action={canEdit && <ApplyButton planId={plan.id} kind="posts" count={d.posts.length} done={d.posts.filter((p) => p.postId).length} visuals={need} />}
         >
+          <PlanVisuals
+            planId={plan.id}
+            running={making}
+            total={d.visuals?.total ?? 0}
+            left={bare.length}
+            credits={visualsCost(bare, COST).credits}
+            outOfCredits={d.visuals?.outOfCredits ?? false}
+            canEdit={canEdit}
+          />
           <ul className="divide-y divide-zinc-100">
             {d.posts.map((p) => (
               <li key={p.id} className="flex gap-3 py-3 text-sm">
@@ -293,10 +309,8 @@ function Cell({ label, value, sub }: { label: string; value: string; sub?: strin
   )
 }
 
-const isVideo = (format: string) => /reel|video|story|tiktok|short/i.test(format)
-
 // What, how many, where, when and how much — the plan at a glance.
-function MediaPlan({ d, money, holidays, cost }: { d: PlanData; money: (v: number) => string; holidays: Holiday[]; cost: { image: number; video: number } }) {
+function MediaPlan({ d, money, holidays, cost }: { d: PlanData; money: (v: number) => string; holidays: Holiday[]; cost: { images: number; videos: number; credits: number } }) {
   const counts = new Map<string, number>()
   for (const p of d.posts) {
     const k = `${p.network === 'FACEBOOK' ? 'Facebook' : 'Instagram'} · ${p.format}`
@@ -310,7 +324,6 @@ function MediaPlan({ d, money, holidays, cost }: { d: PlanData; money: (v: numbe
   }
   const times = [...slots.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k)
   const adTotal = d.ads.reduce((s, a) => s + (a.budget ?? 0), 0)
-  const credits = (d.posts.length - videos) * cost.image + videos * cost.video
   return (
     <section aria-label="Media plan" className="rounded-2xl border border-indigo-200 bg-indigo-50/40 p-5">
       <h2 className="font-semibold">Your media plan at a glance</h2>
@@ -319,7 +332,7 @@ function MediaPlan({ d, money, holidays, cost }: { d: PlanData; money: (v: numbe
         <Cell label="Where" value={[...new Set(d.posts.map((p) => (p.network === 'FACEBOOK' ? 'Facebook' : 'Instagram')))].join(' + ') || '—'} sub={d.ads.length ? `+ ${d.ads.length} ad campaign${d.ads.length === 1 ? '' : 's'}` : 'organic only'} />
         <Cell label="When" value={times[0] ?? '—'} sub={times.slice(1).join(' · ')} />
         <Cell label="Ad budget" value={adTotal ? money(adTotal) : '—'} sub={d.ads.map((a) => a.objective.toLowerCase()).join(', ')} />
-        <Cell label="To make the visuals" value={`≈ ${credits} credits`} sub={`${d.posts.length - videos} images, ${videos} videos`} />
+        <Cell label="To make the visuals" value={`≈ ${cost.credits} credits`} sub={`${cost.images} images, ${cost.videos} videos`} />
       </div>
       <ul className="mt-3 flex flex-wrap gap-1.5 text-xs">
         {[...counts.entries()].map(([k, n]) => (

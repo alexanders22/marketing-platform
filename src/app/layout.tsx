@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Noto_Sans_Georgian } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
+import { DialogHost } from "@/components/ui/Dialog";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -34,7 +35,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" data-scroll-behavior="smooth" className={`${inter.variable} ${georgian.variable} ${bog.variable} h-full scroll-smooth antialiased`}>
-      <body className="min-h-full font-sans">{children}</body>
+      <body className="min-h-full font-sans">
+        {children}
+        <DialogHost />
+      </body>
     </html>
   );
 }

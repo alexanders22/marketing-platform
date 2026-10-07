@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 import { disconnectAccount } from './actions'
+import { confirmDialog, alertDialog } from '@/components/ui/Dialog'
 
 export function DisconnectButton({ id, name }: { id: string; name: string }) {
   const router = useRouter()
@@ -10,11 +11,11 @@ export function DisconnectButton({ id, name }: { id: string; name: string }) {
   return (
     <button
       disabled={pending}
-      onClick={() =>
+      onClick={async () =>
+        (await confirmDialog(`Disconnect ${name}?`, { body: 'Its token and the results Loudpilot read from it are deleted.', confirm: 'Disconnect', danger: true })) &&
         start(async () => {
-          if (!confirm(`Disconnect ${name}? Its token and the results Loudpilot read from it are deleted.`)) return
           const res = await disconnectAccount(id)
-          if (res.error) alert(res.error)
+          if (res.error) alertDialog('Could not disconnect', res.error)
           router.refresh()
         })
       }

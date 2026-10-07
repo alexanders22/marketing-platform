@@ -26,6 +26,7 @@ import { BioView } from '@/components/BioView'
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker'
 import { bioUid, type BioBlock, type BioTheme } from '@/lib/bio'
 import { deleteBioPage, saveBioPage } from '../actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 type Initial = {
   id: string
@@ -319,8 +320,8 @@ export function BioEditor({
           </section>
 
           <button
-            onClick={() =>
-              confirm('Delete this bio page? Its link will stop working.') &&
+            onClick={async () =>
+              (await confirmDialog('Delete this bio page?', { body: 'Its link will stop working.', confirm: 'Delete', danger: true })) &&
               start(async () => {
                 await deleteBioPage(initial.id)
                 router.push('/app/bio')

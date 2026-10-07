@@ -31,9 +31,11 @@ import { formatMoney, formatNumber, formatPercent } from '@/lib/format'
 import { formatMetric, metricDef } from '@/lib/goal-metrics'
 import { momentumOf } from '@/lib/momentum'
 import { prisma } from '@/lib/prisma'
+import { readinessOf } from '@/lib/readiness'
 import { STATUS as GOAL_STATUS, progressOf } from '../goals/GoalCards'
 import { goalName } from '../goals/GoalList'
 import { DateFilter } from './DateFilter'
+import { ProfileReadiness } from './ProfileReadiness'
 import { SummaryCard } from './SummaryCard'
 import { SyncButton } from './SyncButton'
 
@@ -90,7 +92,7 @@ function ChartCard({ title, children, right }: { title: string; children: ReactN
 const IDEAS = ['50 enquiries for the new building this month', 'Fill the weekend workshop', 'More orders for the holiday menu']
 
 export default async function DashboardPage({ searchParams }: PageProps<'/app/dashboard'>) {
-  const { workspace } = await requireContext()
+  const { workspace, brand } = await requireContext()
   const q = await searchParams
   const range = parseRange(q.from, q.to)
   const period = (PERIODS.find((p) => String(p) === q.days) ?? 30) as Period
@@ -98,7 +100,7 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
   // The latest summary for the standard periods; a custom range starts fresh.
   const last = range ? null : await prisma.aiSummary.findFirst({ where: { workspaceId: workspace.id, periodDays: period }, orderBy: { createdAt: 'desc' } })
   const summary = last ? (JSON.parse(last.text) as PerformanceSummary) : null
-  const [allGoals, openAlerts, openRecs, m] = await Promise.all([
+  const [allGoals, openAlerts, openRecs, m, ready] = await Promise.all([
     prisma.goal.findMany({
       where: { workspaceId: workspace.id, active: true },
       include: { adCampaign: { select: { name: true, currency: true } } },
@@ -107,6 +109,7 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
     prisma.alert.count({ where: { workspaceId: workspace.id, readAt: null, severity: { in: ['CRITICAL', 'WARNING'] } } }),
     prisma.recommendation.count({ where: { workspaceId: workspace.id, status: 'OPEN' } }),
     momentumOf(workspace.id),
+    readinessOf(workspace.id, brand),
   ])
   // Worst goal status per ad campaign, for the campaigns table.
   const RANK = { OFF_TRACK: 3, AT_RISK: 2, ON_TRACK: 1, NO_DATA: 0 } as const
@@ -251,6 +254,8 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
           </span>
         </Link>
       </div>
+
+      <ProfileReadiness r={ready} />
 
       {nothing ? (
         <section className="rounded-3xl border border-dashed border-violet-200 bg-violet-50/40 p-10 text-center">

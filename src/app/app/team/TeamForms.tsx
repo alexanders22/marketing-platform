@@ -4,6 +4,7 @@ import { useActionState, useTransition } from 'react'
 import { useFormStatus } from 'react-dom'
 import type { MemberRole } from '@prisma/client'
 import { inviteMember, removeMember, revokeInvite, setRole } from './actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 function Send({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus()
@@ -77,8 +78,8 @@ export function MemberActions({
       )}
       <button
         disabled={pending}
-        onClick={() => {
-          if (confirm(canLeave ? 'Leave this team?' : `Remove ${name} from the team?`)) start(() => removeMember(id))
+        onClick={async () => {
+          if (await confirmDialog(canLeave ? 'Leave this team?' : `Remove ${name} from the team?`, { confirm: canLeave ? 'Leave' : 'Remove', danger: true })) start(() => removeMember(id))
         }}
         className="rounded-lg px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
       >

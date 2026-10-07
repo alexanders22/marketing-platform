@@ -8,6 +8,7 @@ import type { AdAccountChoice, BoostView } from '@/lib/boost'
 import { AD_CATEGORIES, BOOST_COUNTRIES, BOOST_GOAL_IDS, BOOST_GOALS, type AdCategory, type BoostGoal } from '@/lib/boost-options'
 import { formatMetric } from '@/lib/goal-metrics'
 import { boostPost, changeBoost } from './boost-actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 const money = (v: number, cur: string | null) => formatMetric(v, 'money', cur)
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -133,16 +134,17 @@ export function BoostPanel({
   const special = s.category !== 'NONE'
   const running = boosts.some((b) => !b.ended && (b.status === 'ACTIVE' || b.status === 'PAUSED'))
 
-  const submit = () =>
+  const submit = async () => {
+    const total = money(s.dailyBudget * s.days, currency)
+    if (!s.paused && !(await confirmDialog('Start the boost?', { body: `Meta charges your ad account up to ${total}.`, confirm: 'Start boost' }))) return
     start(async () => {
-      const total = money(s.dailyBudget * s.days, currency)
-      if (!s.paused && !confirm(`Start the boost? Meta charges your ad account up to ${total}.`)) return
       const r = await boostPost({ deliveryId, ...s, startsOn: s.startsOn || null })
       if (r.error) return setErr(r.error)
       setErr(undefined)
       setOpen(false)
       router.refresh()
     })
+  }
 
   return (
     <div>

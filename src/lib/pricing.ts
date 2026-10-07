@@ -15,6 +15,7 @@ export const ACTIONS = {
   reply: { label: 'Inbox reply draft', unit: 'reply', credits: 1, costUsd: 0.001 },
   videoScript: { label: 'Video script', unit: 'script', credits: 1, costUsd: 0.004 },
   voice: { label: 'Voice-over', unit: 'video', credits: 1, costUsd: 0.01 },
+  music: { label: 'AI music (Lyria 3)', unit: 'track', credits: 1, costUsd: 0.04 },
   clipQuick: { label: 'AI clip · Quick (Veo 3.1 Lite)', unit: 'second', credits: 1, costUsd: 0.05 },
   clipPro: { label: 'AI clip · Pro (Veo 3.1 Fast)', unit: 'second', credits: 4, costUsd: 0.15 },
   clipCinema: { label: 'AI clip · Cinema (Veo 3.1)', unit: 'second', credits: 5, costUsd: 0.4 },

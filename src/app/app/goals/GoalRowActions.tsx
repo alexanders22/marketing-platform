@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 import { Pause, Play, Trash2 } from 'lucide-react'
 import { deleteGoal, setGoalActive } from './actions'
+import { confirmDialog, alertDialog } from '@/components/ui/Dialog'
 
 export function GoalRowActions({ id, active, label }: { id: string; active: boolean; label: string }) {
   const router = useRouter()
@@ -11,7 +12,7 @@ export function GoalRowActions({ id, active, label }: { id: string; active: bool
   const run = (fn: () => Promise<{ error?: string }>) =>
     start(async () => {
       const res = await fn()
-      if (res.error) alert(res.error)
+      if (res.error) alertDialog('Something went wrong', res.error)
       router.refresh()
     })
   return (
@@ -27,7 +28,7 @@ export function GoalRowActions({ id, active, label }: { id: string; active: bool
       </button>
       <button
         disabled={pending}
-        onClick={() => confirm('Delete this goal?') && run(() => deleteGoal(id))}
+        onClick={async () => (await confirmDialog('Delete this goal?', { confirm: 'Delete', danger: true })) && run(() => deleteGoal(id))}
         className="rounded-lg p-1.5 text-zinc-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
         aria-label={`Delete ${label}`}
         title="Delete"

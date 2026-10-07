@@ -46,6 +46,7 @@ import {
 } from '@/lib/video'
 import { clipStatus, generateVoices, renderVideo, saveVideo, startClip, videoStatus, videoToPost } from '../actions'
 import { VideoMediaPicker, type LibraryItem } from '../VideoMediaPicker'
+import { MusicPicker } from '../MusicPicker'
 import { clipAction, creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
 
@@ -272,6 +273,11 @@ export function VideoEditor({
           {saveState === 'saving' ? 'Saving…' : saveState === 'dirty' ? 'Unsaved' : saveState === 'error' ? 'Not saved' : 'Saved'} · {total.toFixed(1)}s
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {status.status === 'READY' && status.output && (
+            <button onClick={toPost} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60">
+              {busy && busyWhat === 'post' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Add to Planner
+            </button>
+          )}
           {needVoice && (
             <button onClick={makeVoices} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-800 hover:bg-violet-100 disabled:opacity-60">
               {busy && busyWhat === 'voice' ? <Loader2 size={15} className="animate-spin" /> : <Mic size={15} />} Generate voice-over · {creditsLabel(P.voice)}
@@ -351,10 +357,10 @@ export function VideoEditor({
                   <Download size={15} /> Download MP4
                 </a>
                 <button onClick={toPost} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60">
-                  {busy && busyWhat === 'post' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Use in post
+                  {busy && busyWhat === 'post' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Add to Planner
                 </button>
               </div>
-              <p className="mt-2 text-center text-xs text-zinc-500">Changed something? Render again.</p>
+              <p className="mt-2 text-center text-xs text-zinc-500">“Add to Planner” makes a post with this video and its caption — pick the date there. Changed something? Render again.</p>
             </div>
           ) : (
             <Player doc={doc} format={format} brand={brand} scene={scene} />
@@ -533,10 +539,16 @@ export function VideoEditor({
 
       {picker === 'scene' && <VideoMediaPicker kind="visual" onClose={() => setPicker(null)} onPick={pickForScene} />}
       {picker === 'music' && (
-        <VideoMediaPicker
-          kind="audio"
+        <MusicPicker
           onClose={() => setPicker(null)}
-          onPick={(items) => items[0] && setDoc({ ...doc, music: { mediaId: items[0].id, url: items[0].url, name: items[0].name, volume: 0.6 } })}
+          onPick={(m) =>
+            setDoc({
+              ...doc,
+              music: { mediaId: m.id, url: m.url, name: m.name, volume: 0.6 },
+              // CC BY music must be credited: the line goes into the post text.
+              caption: m.credit && !(doc.caption ?? '').includes(m.credit) ? [doc.caption?.trim(), m.credit].filter(Boolean).join('\n\n') : doc.caption,
+            })
+          }
         />
       )}
     </div>

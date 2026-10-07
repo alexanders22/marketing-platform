@@ -39,6 +39,8 @@ export type PlanData = Omit<StrategyDraft, 'ads' | 'posts' | 'goals'> & {
   ads: (StrategyDraft['ads'][number] & { budget: number | null; dailyBudget: number | null; forecast: Forecast | null; launched?: boolean; adCampaignId?: string | null })[]
   posts: (StrategyDraft['posts'][number] & { postId?: string })[]
   goals: (StrategyDraft['goals'][number] & { goalId?: string })[]
+  // Pictures and videos being made for the posts (src/lib/plan-visuals.ts).
+  visuals?: { status: 'RUNNING' | 'DONE'; total: number; startedAt: string; outOfCredits: boolean }
 }
 
 const shift = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)

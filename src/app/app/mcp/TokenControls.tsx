@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Check, Copy, KeyRound } from 'lucide-react'
 import { createToken, revokeToken } from './actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 export function NewToken() {
   const router = useRouter()
@@ -72,8 +73,8 @@ export function RevokeButton({ id, label }: { id: string; label: string }) {
   return (
     <button
       disabled={pending}
-      onClick={() =>
-        confirm(`Disconnect ${label}? It stops working right away.`) &&
+      onClick={async () =>
+        (await confirmDialog(`Disconnect ${label}?`, { body: 'It stops working right away.', confirm: 'Disconnect', danger: true })) &&
         start(async () => {
           await revokeToken(id)
           router.refresh()

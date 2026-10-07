@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
-import { aiEnabled, generateImage, LANGUAGES, speak, videoScript } from '@/lib/ai'
+import { aiEnabled, generateImage, generateMusic, LANGUAGES, speak, videoScript } from '@/lib/ai'
+import { importFreeMusic, saveGeneratedMusic, searchFreeMusic, type FreeTrack } from '@/lib/music'
 import { requireContext } from '@/lib/context'
 import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
@@ -229,8 +230,65 @@ export async function listVideoMedia(kind: 'visual' | 'audio') {
       url: mediaUrl(m.id),
       posterUrl: m.posterId ? mediaUrl(m.posterId) : null,
       durationMs: m.durationMs,
-      name: m.prompt ?? '',
+      ...musicName(m.prompt ?? ''),
     }))
+}
+
+// Library tracks keep where they came from in the prompt (src/lib/music.ts):
+// a short name, and the credit line CC BY tracks need.
+function musicName(prompt: string): { name: string; credit?: string | null } {
+  const free = prompt.match(/^Music: (.+) — (.+?) · (CC0|Public domain|CC BY[^·]*?)(?: · .*)?$/)
+  if (free) return { name: `${free[1]} — ${free[2]}`, credit: free[3].startsWith('CC BY') ? `Music: “${free[1]}” by ${free[2]} (${free[3].trim()})` : null }
+  if (prompt.startsWith('Music (AI): ')) return { name: `AI: ${prompt.slice(12)}` }
+  return { name: prompt }
+}
+
+/* ─── Music: AI (Lyria) and the free library (Openverse) ─────────────── */
+
+type MusicItem = { id: string; kind: 'audio'; url: string; posterUrl: null; durationMs: number | null; name: string; credit?: string | null }
+
+export async function generateTrack(raw: string): Promise<{ item?: MusicItem; error?: string }> {
+  const { account, workspace } = await requireContext()
+  const COST = await prices()
+  const prompt = String(raw ?? '').trim().slice(0, 500)
+  if (prompt.length < 3) return { error: 'Describe the music' }
+  if (!aiEnabled()) return { error: 'AI is not connected yet.' }
+  if (account.creditBalance < COST.music) return { error: notEnough(COST.music, account.creditBalance) }
+  let media
+  try {
+    const track = await generateMusic(prompt)
+    media = await saveGeneratedMusic(workspace.id, track.data, track.mime, prompt)
+  } catch (e) {
+    console.error('music failed', e)
+    return { error: aiError(e, 'The AI could not make this track. Try again or describe it differently.') }
+  }
+  const ok = await charge(account.id, workspace.id, [{ amount: COST.music, reason: 'AI_VIDEO', note: `AI music: ${prompt.slice(0, 120)}`, action: 'music', units: 1 }])
+  if (!ok) {
+    await prisma.media.delete({ where: { id: media.id } })
+    return { error: notEnough(COST.music, (await prisma.account.findUniqueOrThrow({ where: { id: account.id } })).creditBalance) }
+  }
+  return { item: { id: media.id, kind: 'audio', url: mediaUrl(media.id), posterUrl: null, durationMs: media.durationMs, name: `AI: ${prompt.slice(0, 80)}` } }
+}
+
+export async function findFreeMusic(q: string): Promise<{ tracks?: FreeTrack[]; error?: string }> {
+  await requireContext()
+  try {
+    return { tracks: await searchFreeMusic(String(q ?? '').trim().slice(0, 100)) }
+  } catch (e) {
+    console.error('free music search failed', e)
+    return { error: e instanceof Error && e.message.startsWith('The free library') ? e.message : 'The free library is not reachable right now.' }
+  }
+}
+
+export async function addFreeMusic(id: string): Promise<{ item?: MusicItem; error?: string }> {
+  const { workspace } = await requireContext()
+  try {
+    const { media, name, credit } = await importFreeMusic(workspace.id, String(id))
+    return { item: { id: media.id, kind: 'audio', url: mediaUrl(media.id), posterUrl: null, durationMs: media.durationMs, name, credit } }
+  } catch (e) {
+    console.error('free music import failed', e)
+    return { error: e instanceof Error ? e.message : 'Could not add this track' }
+  }
 }
 
 /* ─── AI video ───────────────────────────────────────────────────────── */

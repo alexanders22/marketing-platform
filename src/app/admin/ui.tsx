@@ -4,6 +4,7 @@ import { useActionState, useState, useTransition, type ReactNode } from 'react'
 import { useFormStatus } from 'react-dom'
 import type { MemberRole } from '@prisma/client'
 import type { AdminState } from './actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 type Action = (state: AdminState, f: FormData) => Promise<AdminState>
 
@@ -113,8 +114,8 @@ export function ActionButton({
     <button
       type="button"
       disabled={pending}
-      onClick={() => {
-        if (confirm && !window.confirm(confirm)) return
+      onClick={async () => {
+        if (confirm && !(await confirmDialog(confirm, { confirm: 'Continue', danger: tone === 'danger' }))) return
         start(() => action())
       }}
       className={`rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-60 ${cls}`}

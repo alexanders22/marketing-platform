@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Check, Copy, Eye, KeyRound } from 'lucide-react'
 import { createApiKey, revokeApiKey, saveWebhook } from './actions'
+import { confirmDialog } from '@/components/ui/Dialog'
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
@@ -79,8 +80,8 @@ export function RevokeKey({ id, name }: { id: string; name: string }) {
     <button
       disabled={pending}
       aria-label={`Revoke ${name}`}
-      onClick={() =>
-        confirm(`Revoke "${name}"? Requests with it stop working right away.`) &&
+      onClick={async () =>
+        (await confirmDialog(`Revoke “${name}”?`, { body: 'Requests with it stop working right away.', confirm: 'Revoke', danger: true })) &&
         start(async () => {
           await revokeApiKey(id)
           router.refresh()
