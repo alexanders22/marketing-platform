@@ -125,6 +125,8 @@ export function startFakeSocial() {
     if (path === '/linkedin/oauth/accessToken')
       return json(200, { access_token: `li-access-${++n}`, expires_in: 5184000, scope: 'openid,profile,w_member_social,w_organization_social,r_organization_social,rw_organization_admin' })
     if (path === '/linkedin/v2/userinfo') return json(200, { sub: 'li-member-1', name: 'Nino Beridze', picture: `${BASE}/p.png` })
+    // Community Management apps have no OpenID: the profile comes from /v2/me.
+    if (path === '/linkedin/v2/me') return json(200, { id: 'li-member-1', localizedFirstName: 'Nino', localizedLastName: 'Beridze' })
     if (path === '/linkedin/rest/organizationAcls') return json(200, { elements: [{ role: 'ADMINISTRATOR', organization: 'urn:li:organization:5555', state: 'APPROVED' }], paging: {} })
     if (path === '/linkedin/rest/organizations') return json(200, { results: { '5555': { id: 5555, localizedName: 'Bloom Bakery LLC', vanityName: 'bloom-bakery' } }, statuses: { '5555': 200 } })
     if (path === '/linkedin/rest/images' && q.get('action') === 'initializeUpload') return json(200, { value: { uploadUrl: `${BASE}/linkedin/upload/${++n}`, image: `urn:li:image:IMG${n}` } })
