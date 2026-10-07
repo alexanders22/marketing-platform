@@ -50,6 +50,7 @@ export function TelegramConnect({ platformBot }: { platformBot: string | null })
       <label className="block">
         <span className="text-xs text-zinc-500">Channel</span>
         <input value={channel} onChange={(e) => setChannel(e.target.value)} placeholder="@yourchannel or t.me/yourchannel" className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2" />
+        <span className="mt-1 block text-xs text-zinc-500">The channel’s link, not the bot’s. A private channel without a link: its id, e.g. -1001234567890.</span>
       </label>
       <label className="block">
         <span className="text-xs text-zinc-500">{platformBot ? 'Your own bot token (optional — to post as your bot)' : 'Bot token'}</span>
