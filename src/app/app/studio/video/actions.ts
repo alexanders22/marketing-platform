@@ -21,6 +21,7 @@ import { isPaid, PAID_ONLY } from '@/lib/plans'
 import { veoAllowance, veoLimitMessage } from '@/lib/credits'
 import { clipAction } from '@/lib/pricing'
 import { aiError } from '@/lib/ai-health'
+import { IMAGE_STYLES, SKETCH_PAPER } from '@/lib/image-styles'
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/)
 const SceneSchema = z.object({
@@ -306,6 +307,8 @@ const AiInput = z.object({
   mediaIds: z.array(z.string().max(40)).max(20),
   voice: z.boolean(),
   language: z.string(),
+  // sketch: hand-drawn whiteboard explainer (ink on paper).
+  look: z.enum(['standard', 'sketch']).optional(),
 })
 
 // Script → scenes with text and voice lines → visuals (your photos and clips
@@ -320,6 +323,7 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
   const format: Format = isFormat(input.format) ? input.format : '9:16'
   const language = LANGUAGES.find((l) => l === input.language) ?? 'English'
   const veoMode = input.visuals === 'veo' ? (input.veoMode ?? 'text') : null
+  const sketch = input.look === 'sketch'
   // Veo keeps a character only on Pro/Cinema and in 8-second clips.
   const clipQuality: ClipQuality = veoMode === 'character' && (input.clipQuality ?? 'quick') === 'quick' ? 'pro' : (input.clipQuality ?? 'quick')
   const clipSeconds = veoMode === 'character' ? 8 : 4
@@ -351,7 +355,7 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
   const known = await withDossier(brand, workspace.id)
   let script
   try {
-    script = await videoScript(workspace.name, known, { brief: input.brief, scenes: input.scenes, language, voice: input.voice })
+    script = await videoScript(workspace.name, known, { brief: input.brief, scenes: input.scenes, language, voice: input.voice, look: sketch ? 'sketch' : undefined })
   } catch (e) {
     console.error('videoScript failed', e)
     return { error: aiError(e, 'The AI could not write this video. Try again.') }
@@ -375,14 +379,14 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     const aspect = format === '16:9' ? '16:9' : format === '1:1' ? '1:1' : format === '4:5' ? '4:5' : '9:16'
     const res = await Promise.allSettled(
       script.scenes.map((sc, i) =>
-        generateImage(workspace.name, known, sc.visual, `${sc.text}. ${sc.voice}`, i, [], aspect).then((img) => saveMedia(workspace.id, img.data, img.mime, sc.visual)),
+        generateImage(workspace.name, known, sc.visual, `${sc.text}. ${sc.voice}`, i, [], aspect, sketch ? IMAGE_STYLES.sketch : undefined).then((img) => saveMedia(workspace.id, img.data, img.mime, sc.visual)),
       ),
     )
     images = res.map((r) => (r.status === 'fulfilled' ? { id: r.value.id, kind: 'image', url: mediaUrl(r.value.id), durationMs: null, posterUrl: null } : null))
     res.forEach((r) => r.status === 'rejected' && console.error('scene image failed', r.reason))
   }
 
-  const bg = brandColor(brand?.colors)
+  const bg = sketch ? SKETCH_PAPER : brandColor(brand?.colors)
   const doc: VideoDoc = {
     ...emptyDoc(bg),
     scenes: script.scenes.map((sc, i) =>
@@ -392,9 +396,11 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
         duration: sc.seconds,
         text: sc.text,
         voice: sc.voice,
-        style: i === 0 ? 'bold' : 'caption',
+        // White bold text is lost on sketch paper; boxes read on any picture.
+        style: i === 0 ? (sketch ? 'box' : 'bold') : 'caption',
         position: i === 0 ? 'center' : 'bottom',
-        motion: (['zoom-in', 'pan-right', 'zoom-out', 'pan-left'] as const)[i % 4],
+        // Sketches only breathe; pans would cut the drawing off.
+        motion: sketch ? (['zoom-in', 'zoom-out'] as const)[i % 2] : (['zoom-in', 'pan-right', 'zoom-out', 'pan-left'] as const)[i % 4],
       }),
     ),
     caption: [script.caption, script.hashtags.map((h) => `#${h}`).join(' ')].filter(Boolean).join('\n\n'),
@@ -437,7 +443,9 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
       const prompt =
         veoMode === 'photos'
           ? `Bring this photo to life: ${visual}. Gentle, realistic camera and subject motion; keep the place and people as they are. No text on screen.`
-          : `${visual}. Vertical social video, no text on screen.`
+          : sketch
+            ? `${visual}. Hand-drawn whiteboard explainer animation: thin black ink lines draw themselves stroke by stroke on plain warm off-white paper, simple doodle characters move a little, one or two small flat colour accents, static camera. No text on screen.`
+            : `${visual}. Vertical social video, no text on screen.`
       const res = await beginClip(account.id, balance, workspace.id, {
         prompt: input.brief.startsWith('[test]') ? `[test] ${prompt}` : prompt,
         quality: clipQuality,

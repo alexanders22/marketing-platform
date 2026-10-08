@@ -76,7 +76,7 @@ export async function createPost(raw: z.input<typeof Input>): Promise<{ post?: C
 
   const results = await Promise.allSettled(
     Array.from({ length: input.images }, (_, i) =>
-      generateImage(workspace.name, known, input.prompt, text.caption, i, input.attachments, '1:1', input.imageStyle && IMAGE_STYLES[input.imageStyle].prompt).then((img) =>
+      generateImage(workspace.name, known, input.prompt, text.caption, i, input.attachments, '1:1', input.imageStyle && IMAGE_STYLES[input.imageStyle]).then((img) =>
         saveMedia(workspace.id, img.data, img.mime, input.prompt),
       ),
     ),

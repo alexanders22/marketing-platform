@@ -22,7 +22,7 @@ export async function generateCampaignImages(campaignId: string, plan: CampaignI
   const todo = campaign.posts.filter((p) => p.mediaIds.length === 0)
   const known = await withDossier(ws.brandKit, ws.id)
   const COST = await prices()
-  const style = IMAGE_STYLES[plan.style]?.prompt
+  const style = IMAGE_STYLES[plan.style]
   let stop = false
 
   const one = async (post: (typeof todo)[number], i: number) => {

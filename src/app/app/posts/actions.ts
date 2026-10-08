@@ -189,7 +189,7 @@ export async function generatePostImages(input: { prompt: string; caption: strin
   if (account.creditBalance < max) return { error: notEnough(max, account.creditBalance) }
 
   const known = await withDossier(brand, workspace.id)
-  const style = input.style && input.style in IMAGE_STYLES ? IMAGE_STYLES[input.style as ImageStyle].prompt : undefined
+  const style = input.style && input.style in IMAGE_STYLES ? IMAGE_STYLES[input.style as ImageStyle] : undefined
   const results = await Promise.allSettled(
     Array.from({ length: count }, (_, i) =>
       generateImage(workspace.name, known, prompt || input.caption.slice(0, 300), input.caption.slice(0, 2000), i, [], '1:1', style).then((img) =>

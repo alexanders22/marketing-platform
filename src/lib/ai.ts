@@ -2,6 +2,7 @@ import 'server-only'
 import { GoogleGenAI, type Part } from '@google/genai'
 import type { BrandKit } from '@prisma/client'
 import { noteAiFailure } from './ai-health'
+import type { ImageStyleDef } from './image-styles'
 import { COPY_RULES, MARKETING_PLAYBOOK } from './marketing-kb'
 
 // GEMINI_API_KEY enables generation. GEMINI_MODEL / GEMINI_IMAGE_MODEL
@@ -107,18 +108,22 @@ export async function generateImage(
   variant: number,
   attachments: Attachment[],
   aspect: '1:1' | '9:16' | '4:5' | '16:9' = '1:1',
-  // A chosen look (IMAGE_STYLES prompt); default: photo or clean graphic.
-  style?: string,
+  // A chosen look (IMAGE_STYLES); default: photo or clean graphic.
+  style?: ImageStyleDef,
 ): Promise<{ data: Buffer; mime: string }> {
   if (!client) throw new Error('AI is not configured')
   const prompt = [
     `Create a ${aspect === '1:1' ? 'square (1:1)' : aspect === '16:9' ? 'landscape (16:9)' : `vertical (${aspect})`} social media image for the brand "${brandName}".`,
     brand?.description && `About the brand: ${brand.description}`,
-    brand?.colors.length ? `Use the brand colours ${brand.colors.join(', ')} as the dominant palette.` : '',
+    brand?.colors.length
+      ? style?.ownPalette
+        ? `Keep the style's own palette; use the brand colour ${brand.colors[0]} only for a small accent.`
+        : `Use the brand colours ${brand.colors.join(', ')} as the dominant palette.`
+      : '',
     `Post brief: ${brief}`,
     `Post caption: ${caption.slice(0, 600)}`,
     attachments.length ? 'Use the attached images as the product/subject reference — keep it recognisable.' : '',
-    style ? `Make it ${style}. No words, letters, logos or watermarks in the image.` : 'Photorealistic or clean modern graphic style. No words, letters, logos or watermarks in the image.',
+    style ? `Make it ${style.prompt}. No words, letters, logos or watermarks in the image.` : 'Photorealistic or clean modern graphic style. No words, letters, logos or watermarks in the image.',
     variant > 0 ? `This is alternative #${variant + 1}: use a clearly different composition.` : '',
   ]
     .filter(Boolean)
@@ -723,13 +728,16 @@ export type VideoScript = {
 export async function videoScript(
   brandName: string,
   brand: Brand | null,
-  input: { brief: string; scenes: number; language: PostOptions['language']; voice: boolean },
+  // sketch: a hand-drawn whiteboard explainer — each visual is one simple drawing.
+  input: { brief: string; scenes: number; language: PostOptions['language']; voice: boolean; look?: 'sketch' },
 ): Promise<VideoScript> {
   const system = [
     'You write short social videos (Reels, Stories, TikTok) for one brand.',
     `Write exactly ${input.scenes} scenes. Scene 1 is a hook that stops the scroll; the last scene is a clear call to action.`,
     '"text": on-screen text, at most 7 words. ' + (input.voice ? '"voice": the voice-over line for the scene, natural spoken language, 6–18 words.' : '"voice": empty string.'),
-    '"visual": what the footage or image should show (a description for a photographer or an image generator; no text in the image).',
+    input.look === 'sketch'
+      ? '"visual": one simple hand-drawn explainer drawing that shows the idea of the scene as a metaphor — doodle people, everyday objects, arrows, a speech bubble (a description for an illustrator; no text in the image). Keep the same characters across scenes. The voice-over explains step by step, like a calm teacher.'
+      : '"visual": what the footage or image should show (a description for a photographer or an image generator; no text in the image).',
     '"seconds": 2–5.',
     'Also "title" (internal name), "caption" (the post text, ≤ 400 characters) and 3–6 "hashtags" without #.',
     'Never invent prices, offers, dates or facts that are not in the brief or the brand details.',

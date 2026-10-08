@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { Clapperboard, Film, ImageIcon, Loader2, Palette, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { Clapperboard, Film, ImageIcon, Loader2, Palette, PenLine, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Popover'
 import { CLIP_QUALITIES, FORMATS, type ClipQuality, type Format } from '@/lib/video'
 import { createVideo, createVideoFromTemplate, createVideoWithAI, deleteVideo } from './actions'
@@ -40,7 +40,8 @@ export function VideoSection({
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
-  const [ai, setAi] = useState(Boolean(initialAiBrief))
+  // The modal opens with the standard look, or preset to the whiteboard sketch.
+  const [ai, setAi] = useState<'standard' | 'sketch' | null>(initialAiBrief ? 'standard' : null)
   const [, start] = useTransition()
 
   const [tplFormat, setTplFormat] = useState<Format>('9:16')
@@ -70,9 +71,14 @@ export function VideoSection({
           </h2>
           <p className="text-sm text-zinc-500">Reels and Stories from your photos and clips — text, motion, voice-over, music and your logo at the end.</p>
         </div>
-        <button onClick={() => setAi(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
-          <Wand2 size={15} /> Create video with AI
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setAi('sketch')} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-800 ring-1 ring-zinc-200 hover:bg-zinc-50">
+            <PenLine size={15} /> Whiteboard explainer
+          </button>
+          <button onClick={() => setAi('standard')} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+            <Wand2 size={15} /> Create video with AI
+          </button>
+        </div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(Object.keys(FORMATS) as Format[]).map((f) => (
@@ -163,7 +169,7 @@ export function VideoSection({
           ))}
         </ul>
       )}
-      {ai && <AiVideoModal paid={paid} veo={veo} characters={characters} initialBrief={initialAiBrief} onClose={() => setAi(false)} />}
+      {ai && <AiVideoModal paid={paid} veo={veo} characters={characters} initialBrief={initialAiBrief} initialLook={ai} onClose={() => setAi(null)} />}
     </section>
   )
 }
@@ -174,8 +180,10 @@ function AiVideoModal({
   veo,
   characters,
   initialBrief = '',
+  initialLook = 'standard',
 }: {
   initialBrief?: string
+  initialLook?: 'standard' | 'sketch'
   onClose: () => void
   paid: boolean
   veo: { used: number; limit: number; left: number } | null
@@ -185,7 +193,9 @@ function AiVideoModal({
   const [brief, setBrief] = useState(initialBrief)
   const [format, setFormat] = useState<Format>('9:16')
   const [scenes, setScenes] = useState(5)
-  const [visuals, setVisuals] = useState<'library' | 'ai' | 'veo' | 'none'>('library')
+  const [look, setLook] = useState(initialLook)
+  // Sketches are drawn, so the whiteboard look starts with AI images.
+  const [visuals, setVisuals] = useState<'library' | 'ai' | 'veo' | 'none'>(initialLook === 'sketch' ? 'ai' : 'library')
   const [clipQuality, setClipQuality] = useState<ClipQuality>('quick')
   const [veoMode, setVeoMode] = useState<'text' | 'photos' | 'character'>('text')
   const [characterId, setCharacterId] = useState(characters[0]?.id ?? '')
@@ -215,13 +225,14 @@ function AiVideoModal({
         mediaIds: media.map((m) => m.id),
         voice,
         language,
+        look,
       })
       if (res.error || !res.id) return setError(res.error)
       router.push(`/app/studio/video/${res.id}`)
     })
 
   return (
-    <Modal title="Create video with AI" onClose={onClose}>
+    <Modal title={look === 'sketch' ? 'Whiteboard explainer video' : 'Create video with AI'} onClose={onClose}>
       <div className="space-y-4">
         <label className="block text-sm font-medium">
           What is the video about?
@@ -251,6 +262,37 @@ function AiVideoModal({
               ))}
             </select>
           </label>
+        </div>
+        <div>
+          <p className="text-sm font-medium">Look</p>
+          <div role="radiogroup" aria-label="Video look" className="mt-1.5 grid grid-cols-2 gap-2">
+            {(
+              [
+                ['standard', Sparkles, 'Standard', 'Photos, clips or brand colours'],
+                ['sketch', PenLine, 'Whiteboard sketch', 'Hand-drawn ink on paper, explained step by step'],
+              ] as const
+            ).map(([l, Icon, label, hint]) => (
+              <button
+                key={l}
+                role="radio"
+                aria-checked={look === l}
+                onClick={() => {
+                  setLook(l)
+                  if (l === 'sketch' && (visuals === 'library' || visuals === 'none')) setVisuals('ai')
+                }}
+                className={`flex items-start gap-2 rounded-xl p-2.5 text-left ring-1 ${look === l ? 'bg-zinc-900 text-white ring-zinc-900' : 'ring-zinc-200 hover:bg-zinc-50'}`}
+              >
+                <Icon size={16} className="mt-0.5 shrink-0" />
+                <span>
+                  <span className="block text-sm font-medium">{label}</span>
+                  <span className={`block text-xs ${look === l ? 'text-zinc-300' : 'text-zinc-500'}`}>{hint}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          {look === 'sketch' && (visuals === 'library' || (visuals === 'veo' && veoMode === 'photos')) && (
+            <p className="mt-1.5 text-xs text-amber-700">Your own photos stay as they are — pick AI images or AI clips to get the drawings.</p>
+          )}
         </div>
         <div>
           <p className="text-sm font-medium">Pictures</p>
