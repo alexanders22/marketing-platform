@@ -13,7 +13,7 @@ export const IMAGE_STYLES = {
   sketch: {
     label: 'Whiteboard sketch',
     prompt:
-      'a hand-drawn whiteboard explainer sketch: thin black ink line art on a plain warm off-white paper background, simple doodle characters with round heads and minimal faces, simple objects, arrows and speech bubbles explaining one idea, cross-hatched shading, lots of empty space, no gradients or photographic detail, only one or two small flat colour accents (like green banknotes)',
+      'a hand-drawn whiteboard explainer sketch: thin black ink line art on a plain warm off-white paper background, simple doodle characters with round heads and minimal faces, simple objects, arrows and speech bubbles explaining one idea, cross-hatched shading, lots of empty space, no gradients or photographic detail, only one or two small flat colour accents on the key object of the scene; draw only what the scene is about, nothing unrelated',
     ownPalette: true,
   },
 } as const satisfies Record<string, ImageStyleDef>

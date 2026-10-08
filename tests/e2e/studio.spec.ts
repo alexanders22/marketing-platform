@@ -1,7 +1,7 @@
 import { expect, test, type Browser, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import zlib from 'node:zlib'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog, onAppDialog } from './helpers'
 
 // Design Studio QA: gallery, canvas editor, autosave, images, export, isolation.
 // One account per worker (beforeAll); every test creates its own design so a
@@ -297,12 +297,12 @@ test.describe('gallery', () => {
     expect(copyData).toBe(sql(`select data::text from "Design" where id='${a}'`))
     // Delete (dismiss first, then accept)
     const yak = cards.filter({ hasText: `Yak QA ${b}` }).first()
-    page.once('dialog', (d) => d.dismiss())
+    onceAppDialog(page, (d) => d.dismiss())
     await yak.hover()
     await yak.getByRole('button', { name: 'Delete' }).click()
     await page.waitForTimeout(500)
     expect(design(b)).not.toBeNull()
-    page.once('dialog', (d) => d.accept())
+    onceAppDialog(page, (d) => d.accept())
     await yak.hover()
     await yak.getByRole('button', { name: 'Delete' }).click()
     await expect(cards.filter({ hasText: `Yak QA ${b}` })).toHaveCount(0)
@@ -675,7 +675,7 @@ test.describe('templates tab', () => {
     const id = await newDesign(page)
     await page.getByRole('button', { name: 'Templates' }).click()
     let dialogs = 0
-    page.on('dialog', (d) => {
+    onAppDialog(page, (d) => {
       dialogs++
       void (d.message().includes('Replace') && dialogs === 2 ? d.dismiss() : d.accept())
     })
@@ -684,11 +684,11 @@ test.describe('templates tab', () => {
     expect(dialogs).toBe(0)
     // Second application: dialog #1 → accept? Our handler dismisses dialog #2.
     await page.locator('aside').getByRole('button', { name: 'Tip of the day', exact: true }).click()
-    expect(dialogs).toBe(1)
+    await expect.poll(() => dialogs).toBe(1)
     await expect(layerEls(page)).toHaveCount(4) // Tip has 4 layers too; check content
     await expect(canvas(page)).toContainText('TIP #1')
     await page.locator('aside').getByRole('button', { name: 'Sale announcement', exact: true }).click()
-    expect(dialogs).toBe(2)
+    await expect.poll(() => dialogs).toBe(2)
     await expect(canvas(page)).toContainText('TIP #1') // dismissed → unchanged
     await waitSaved(page)
     expect(design(id)!.data.layers.some((l) => l.text === 'TIP #1')).toBe(true)

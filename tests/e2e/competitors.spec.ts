@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Competitors: the list (add, edit, remove), and — with the real model —
 // finding them on Google and the "us vs them" comparison.
@@ -40,7 +40,7 @@ test('add, edit and remove competitors; Brand has a Competitors tab', async () =
   await page.getByPlaceholder('Competitor name').fill('Old Town Cakes')
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(list.getByText('Old Town Cakes')).toBeVisible()
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Remove Old Town Cakes' }).click()
   await expect(list.getByText('Old Town Cakes')).toHaveCount(0)
   // The Ad Library link shows the ads they run now.

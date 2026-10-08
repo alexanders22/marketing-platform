@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Content creation QA (no AI calls in this file): Create-new menu, composer
 // controls, hashtag libraries, post editor + MediaPicker, Planner, manual blog.
@@ -414,7 +414,7 @@ test('Post editor: images via MediaPicker (upload + pick from library), plan, sa
   await expect.poll(() => sql(`select coalesce("scheduledAt"::text,'null') from "Post" where id='${id}'`)).toBe('null')
 
   // Delete.
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Delete' }).click()
   await expect(page).toHaveURL(/\/app\/planner$/)
   expect(sql(`select count(*) from "Post" where id='${id}'`)).toBe('0')
@@ -582,7 +582,7 @@ test('Blog: manual article — title required, markdown preview, cover, keywords
   await expect(page).toHaveURL(new RegExp(`/app/blog/${id}$`))
 
   // Delete.
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Delete' }).click()
   await expect(page).toHaveURL(/\/app\/planner\?view=list$/)
   expect(sql(`select count(*) from "Post" where id='${id}'`)).toBe('0')

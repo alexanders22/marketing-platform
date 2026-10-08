@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { startFakeMeta, signedRequest } from './fake-meta'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Meta connect → publish → insights → token expiry → data deletion, against
 // tests/e2e/fake-meta.ts. Needs the dev server started with the fake Meta env
@@ -85,7 +85,7 @@ test('state mismatch is refused', async () => {
 test('publish now: text-only goes to Facebook, Instagram needs an image', async () => {
   const id = addPost('Fresh croissants today')
   await page.goto(`/app/posts/${id}`)
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Publish now' }).click()
   await expect(page.getByText('failed on 1')).toBeVisible()
   await expect(page.getByText('Instagram posts need an image or a video')).toBeVisible()
@@ -103,7 +103,7 @@ test('call to action: a UTM-tagged link on Facebook, "link in bio" on Instagram'
   await page.getByLabel('Call to action link').fill('https://bloom.test/order?ref=promo')
   // The preview shows the line as Facebook will get it.
   await expect(page.getByText(/📅 Book now: https:\/\/bloom\.test\/order\?ref=promo&utm_source=facebook/)).toBeVisible()
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Publish now' }).click()
   await expect(page.getByText('Published to 2 accounts.')).toBeVisible()
   expect(sql(`select cta->>'type' from "Post" where id='${id}'`)).toBe('BOOK')
@@ -119,7 +119,7 @@ test('publish with an image: both networks fetch it through a signed link', asyn
   const img = addImage()
   const id = addPost('Pistachio week', { mediaIds: [img] })
   await page.goto(`/app/posts/${id}`)
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Publish now' }).click()
   await expect(page.getByText('Published to 2 accounts.')).toBeVisible()
   const fetched = meta.fetchedImages.filter((f) => f.url.includes(img))
@@ -177,7 +177,7 @@ test('insights are read back and shown on the post', async () => {
 async function publishedFacebookPost(text: string) {
   const id = addPost(text)
   await page.goto(`/app/posts/${id}`)
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Publish now' }).click()
   await expect(page.getByText('failed on 1')).toBeVisible()
   const story = sql(`select d."externalId" from "PostDelivery" d join "SocialAccount" a on a.id=d."socialAccountId" where d."postId"='${id}' and a.network='FACEBOOK'`)
@@ -199,7 +199,7 @@ test('boost a published post: campaign, ad set, an ad made from the post', async
   await form.getByRole('button', { name: 'Armenia' }).click()
   await form.getByLabel('Placements').selectOption('NETWORK_ONLY')
   let asked = ''
-  page.once('dialog', (d) => {
+  onceAppDialog(page, (d) => {
     asked = d.message()
     d.accept()
   })
@@ -270,7 +270,7 @@ test('expired token marks the account for reconnecting', async () => {
   const id = addPost('Token test')
   meta.failNextPublish(190, 'Error validating access token: Session has expired')
   await page.goto(`/app/posts/${id}`)
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Publish now' }).click()
   await expect(page.getByText('Session has expired').first()).toBeVisible()
   await page.goto('/app/channels')
@@ -298,7 +298,7 @@ test('disconnect from Channels', async () => {
   await page.goto('/app/channels')
   await page.locator('a[href="/auth/meta"]').click()
   await page.waitForURL(/connected=3/)
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Disconnect Bloom Ads' }).click()
   await expect(page.getByText('Bloom Ads')).toHaveCount(0)
   expect(sql(`select count(*) from "SocialAccount" where "workspaceId"='${workspaceId}'`)).toBe('2')

@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Bio pages: editor, public page, click tracking, stats and security.
 // One account is shared by the whole file (serial) to keep it fast.
@@ -439,7 +439,7 @@ test('bio: stats in editor and list match the DB', async () => {
 
 test('bio: delete page', async ({ browser }) => {
   await page.goto(`/app/bio/${pageA}`)
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Delete page' }).click()
   await page.waitForURL(/\/app\/bio$/)
   await expect(page.locator(`a[href="/app/bio/${pageA}"]`)).toHaveCount(0)

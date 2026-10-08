@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Design Studio QA part 2: workspace isolation, crafted server-action
 // payloads (image layers, foreign ids), edge cases, narrow viewports.
@@ -167,7 +167,7 @@ test.describe('isolation', () => {
     expect(sql(`select count(*) from "Design" where name like '%(copy)' and "workspaceId" in ('${wsA}','${wsB}')`)).toBe('0')
     await B.unrouteAll({ behavior: 'ignoreErrors' })
     st = await rewriteNextAction(B, (b) => b === `["${bId}"]`, () => `["${aId}"]`)
-    B.once('dialog', (d) => d.accept())
+    onceAppDialog(B, (d) => d.accept())
     await card.hover()
     await card.getByRole('button', { name: 'Delete' }).click()
     await B.waitForTimeout(1500)

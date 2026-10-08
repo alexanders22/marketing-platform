@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Social campaigns ask about pictures first: answer, then create.
 async function submitCampaign(page: Page, pictures: 'No pictures' | 'AI-generated' | 'Choose photos' = 'No pictures') {
@@ -116,7 +116,7 @@ test('social campaign: create (Tbilisi time), DB rows, credits, planner, rewrite
   )
 
   // Delete the campaign: campaign + posts gone, no refund, planner empty.
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Delete' }).click()
   await page.waitForURL(/\/app\/campaigns$/)
   await expect(page.getByText('No campaigns yet')).toBeVisible()

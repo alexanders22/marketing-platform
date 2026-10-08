@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onAppDialog } from './helpers'
 
 // QA: multi-tenant isolation. Account B must never see or change account A's
 // resources — neither through pages nor by calling server actions with A's ids.
@@ -153,7 +153,7 @@ test.describe.serial('isolation between accounts', () => {
   })
 
   test("server actions called by B with A's ids change nothing", async () => {
-    pageB.on('dialog', (d) => d.accept())
+    onAppDialog(pageB, (d) => d.accept())
 
     // posts: savePost / deletePost
     await pageB.goto(`/app/posts/${B.post}`)

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import ffmpegPath from 'ffmpeg-static'
 import { startFakeMeta } from './fake-meta'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Video Studio: upload a clip, a photo and music, build scenes with text,
 // render an MP4 on the server, and send it to a post. AI video is gated.
@@ -114,7 +114,7 @@ test('render: an H.264/AAC MP4 of the right size and length', async () => {
 })
 
 test('use the video in a post', async () => {
-  await page.getByRole('button', { name: 'Use in post' }).click()
+  await page.getByRole('button', { name: 'Add to Planner' }).first().click()
   await page.waitForURL(/\/app\/posts\//)
   const postId = page.url().split('/').pop()!
   expect(sql(`select m.kind from "Post" p join "Media" m on m.id=p."mediaIds"[1] where p.id='${postId}'`)).toBe('VIDEO')
@@ -129,7 +129,7 @@ test('publishing the video: Facebook video and Instagram Reel, fetched through a
   await page.waitForURL(/connected=3/)
   await page.goto(`/app/posts/${postId}`)
   await page.waitForLoadState('networkidle')
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Publish now' }).click()
   await expect(page.getByText(/Published to 2 accounts/)).toBeVisible({ timeout: 60_000 })
   const fb = meta.calls.filter((c) => c.method === 'POST' && c.path === '/page-1/videos').at(-1)!
@@ -177,4 +177,40 @@ test('AI video: script, voice-over and scenes from my photos', async () => {
   expect(doc.scenes.every((s: { voiceMediaId: string | null }) => s.voiceMediaId)).toBe(true)
   await page.getByRole('button', { name: 'Render video' }).click()
   await expect(page.getByLabel('Rendered video')).toBeVisible({ timeout: 200_000 })
+})
+
+test('whiteboard explainer: opens with the sketch look and AI pictures; the style is in every image picker', async () => {
+  await page.goto('/app/studio?tab=video')
+  await page.getByRole('button', { name: 'Whiteboard explainer' }).click()
+  const d = page.getByRole('dialog', { name: 'Whiteboard explainer video' })
+  const looks = d.getByRole('radiogroup', { name: 'Video look' })
+  await expect(looks.getByRole('radio', { name: /Whiteboard sketch/ })).toHaveAttribute('aria-checked', 'true')
+  await expect(d.getByRole('button', { name: /AI images/ })).toHaveAttribute('aria-pressed', 'true')
+  // Own photos are not redrawn: a hint says so.
+  await d.getByRole('button', { name: 'My photos & clips' }).click()
+  await expect(d.getByText(/Your own photos stay as they are/)).toBeVisible()
+  // Back to the standard look: the usual title.
+  await looks.getByRole('radio', { name: /Standard/ }).click()
+  await expect(page.getByRole('dialog', { name: 'Create video with AI' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  await page.goto('/app/posts/new')
+  await page.getByRole('button', { name: /Generate with AI/ }).click()
+  await expect(page.getByRole('radiogroup', { name: 'Image style' }).getByRole('radio', { name: 'Whiteboard sketch' })).toBeVisible()
+})
+
+test('whiteboard explainer video: drawn scenes on paper, boxed title, gentle zooms (real AI)', async () => {
+  test.skip(!AI, 'set QA_CONTENT_AI=1 to run against the real model')
+  test.setTimeout(300_000)
+  await page.goto('/app/studio?tab=video')
+  await page.getByRole('button', { name: 'Whiteboard explainer' }).click()
+  const d = page.getByRole('dialog', { name: 'Whiteboard explainer video' })
+  await d.locator('textarea').fill('How a sourdough starter works, in 3 simple steps')
+  await d.getByRole('button', { name: /Create · up to/ }).click()
+  await page.waitForURL(/\/app\/studio\/video\//, { timeout: 240_000 })
+  const id = page.url().split('/').pop()!
+  const doc = JSON.parse(sql(`select data::text from "Video" where id='${id}'`))
+  expect(doc.scenes[0].style).toBe('box')
+  expect(doc.scenes.every((s: { motion: string }) => s.motion === 'zoom-in' || s.motion === 'zoom-out')).toBe(true)
+  expect(doc.scenes.filter((s: { media: { kind: string } | null }) => s.media?.kind === 'image').length).toBeGreaterThan(0)
 })

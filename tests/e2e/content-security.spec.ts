@@ -1,5 +1,5 @@
 import { expect, request as pwRequest, test, type BrowserContext, type Page } from '@playwright/test'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Upload endpoint + cross-workspace checks for content server actions.
 // Server-action bodies are rewritten in flight (page.route) so the real
@@ -188,7 +188,7 @@ test('cross-workspace: media, posts and hashtag libraries of another account are
   await expect(A).toHaveURL(/\/app\/posts\/c/)
   const aPost = A.url().split('/').pop()!
   await rewriteAction(A, (a) => a.length === 1 && a[0] === aPost, () => [bPost])
-  A.once('dialog', (d) => d.accept())
+  onceAppDialog(A, (d) => d.accept())
   await A.getByRole('button', { name: 'Delete' }).click()
   await expect(A).toHaveURL(/\/app\/planner$/)
   await A.unroute('**/*')

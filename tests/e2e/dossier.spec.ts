@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { startFakeMeta } from './fake-meta'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Dossier (history import → stats → AI audit) and the strategist (plan →
 // apply posts and goals). AI steps run only with QA_STRATEGY_AI=1 — they
@@ -77,6 +77,8 @@ test('applying a plan: posts become Planner drafts at local time, goals start wa
   )
   await page.goto(`/app/strategy/${id}`)
   await expect(page.getByRole('heading', { name: data.headline })).toBeVisible()
+  // Text-only drafts: no AI pictures in this test.
+  onceAppDialog(page, (d) => d.choose('Text only'))
   await page.getByRole('button', { name: 'Add 2 posts to Planner' }).click()
   await expect(page.getByText('2 posts added to the Planner as drafts.')).toBeVisible()
   // 19:00 in Tbilisi = 15:00 UTC; drafts, never auto-published.
@@ -128,6 +130,7 @@ test('the media plan at a glance and one-click launch', async () => {
   // Black Friday (27 Nov 2026) falls in the plan.
   await expect(glance.getByText(/Black Friday \(11-27\)/)).toBeVisible()
   await expect(page.getByRole('link', { name: 'Make the video →' })).toHaveAttribute('href', /\/app\/studio\?tab=video&ai=Black%20Friday%20tour/)
+  onceAppDialog(page, (d) => d.choose('Text only'))
   await page.getByRole('button', { name: 'Launch the plan' }).click()
   await expect(page.getByText('3 posts in the Planner, 1 goals watched.')).toBeVisible()
   await expect(page.getByText('Plan launched')).toBeVisible()

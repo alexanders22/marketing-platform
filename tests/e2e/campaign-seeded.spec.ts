@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type Page } from '@playwright/test'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Campaign behaviour on campaigns/posts written straight into the DB, so no AI
 // generation is needed: ordering, editor round-trips, deletes, isolation, time zones.
@@ -98,7 +98,7 @@ test.describe('Asia/Tbilisi (same zone as the dev server)', () => {
       { at: '2026-11-06 05:30:00', title: 'P3' },
     ])
     await page.goto(`/app/posts/${c.postIds[2]}`)
-    page.once('dialog', (d) => d.accept())
+    onceAppDialog(page, (d) => d.accept())
     await page.getByRole('button', { name: 'Delete' }).click()
     await page.waitForURL(/\/app\/planner/)
     expect(sql(`select count(*) from "Post" where id='${c.postIds[2]}'`)).toBe('0')
@@ -128,13 +128,13 @@ test.describe('Asia/Tbilisi (same zone as the dev server)', () => {
     await expect(page.getByText('Outline one')).toBeVisible()
 
     await page.goto(`/app/blog/${blog.postIds[1]}`)
-    page.once('dialog', (d) => d.accept())
+    onceAppDialog(page, (d) => d.accept())
     await page.getByRole('button', { name: 'Delete' }).click()
     await page.waitForURL(/\/app\/planner\?view=list/)
     await page.goto(`/app/campaigns/${blog.id}`)
     await expect(page.getByText(/1 articles \(0 written\)/)).toBeVisible()
 
-    page.once('dialog', (d) => d.accept())
+    onceAppDialog(page, (d) => d.accept())
     await page.getByRole('button', { name: 'Delete' }).click()
     await page.waitForURL(/\/app\/campaigns$/)
     await expect(page.getByRole('link', { name: /QA Blog Del/ })).toHaveCount(0)
@@ -191,7 +191,7 @@ test.describe('Asia/Tbilisi (same zone as the dev server)', () => {
     await pageB.goto(`/app/campaigns/${ownSocial.id}`)
     await pageB.getByRole('button', { name: /Rewrite/ }).click()
     await expect(errorBox).toHaveText('Post not found')
-    pageB.once('dialog', (d) => d.accept())
+    onceAppDialog(pageB, (d) => d.accept())
     await pageB.getByRole('button', { name: 'Delete' }).click()
     await expect(errorBox).toHaveText('Campaign not found')
 
@@ -204,7 +204,7 @@ test.describe('Asia/Tbilisi (same zone as the dev server)', () => {
     await pageB.locator('textarea').first().fill('Overwritten by B')
     await pageB.getByRole('button', { name: 'Save to planner' }).click()
     await expect(errorBox).toHaveText('Post not found')
-    pageB.once('dialog', (d) => d.accept())
+    onceAppDialog(pageB, (d) => d.accept())
     await pageB.getByRole('button', { name: 'Delete' }).click()
     await pageB.waitForURL(/\/app\/planner/)
 

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Several companies per account (switcher, plan limit) and the super admin
 // panel: edit, credits, pause, open as admin, members, block, delete.
@@ -133,7 +133,7 @@ test('block signs the user out; unblock lets them in', async () => {
   await admin.getByRole('link', { name: /^cust-/ }).click()
   // Client button: wait for hydration before clicking under a loaded dev server.
   await admin.waitForLoadState('networkidle')
-  admin.once('dialog', (d) => d.accept())
+  onceAppDialog(admin, (d) => d.accept())
   await admin.getByRole('button', { name: 'Block' }).click()
   await expect(admin.getByText(/Blocked since/)).toBeVisible()
   expect(sql(`select count(*) from "Session" s join "User" u on u.id=s."userId" where u.email='${q(customerEmail)}'`)).toBe('0')

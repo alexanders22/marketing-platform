@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Brandbook: read the owner's PDF, or create three directions with AI;
 // either fills the brand kit.
@@ -59,7 +59,7 @@ test('AI: create three directions and use one', async () => {
   test.skip(!AI, 'set QA_STRATEGY_AI=1 to run against the real model')
   test.setTimeout(240_000)
   await page.goto('/app/brandbook')
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Start over' }).click()
   await page.getByRole('button', { name: /Create one with AI/ }).click()
   for (const t of ['Premium', 'Calm', 'Trustworthy']) await page.getByRole('group', { name: 'Personality' }).getByRole('button', { name: t }).click()

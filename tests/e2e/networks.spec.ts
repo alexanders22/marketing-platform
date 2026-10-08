@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { startFakeGoogle } from './fake-google'
 import { startFakeSocial } from './fake-social'
-import { newAccount, sql } from './helpers'
+import { newAccount, sql, onceAppDialog } from './helpers'
 
 // TikTok, LinkedIn, YouTube, X, Threads, Pinterest and Telegram: connect,
 // publish, read numbers, refresh tokens — against tests/e2e/fake-social.ts
@@ -49,7 +49,7 @@ function addPost(content: string, channels: string[], mediaIds: string[] = [], c
 
 async function publish(id: string) {
   await page.goto(`/app/posts/${id}`)
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Publish now' }).click()
   await expect(page.getByText('Published to', { exact: true })).toBeVisible()
 }
@@ -204,7 +204,7 @@ test('networks that need media say so; TikTok needs the visibility chosen in the
   await page.getByRole('button', { name: /^Save/ }).first().click()
   await expect.poll(() => sql(`select "networkOptions"->'TIKTOK'->>'privacy' from "Post" where id='${v}'`)).toBe('PUBLIC_TO_EVERYONE')
   // YouTube already has it: only what failed is sent again.
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Retry failed' }).click()
   await expect.poll(() => delivery(v, 'TIKTOK')).toMatch(/^PUBLISHED\|7123456789\|https:\/\/www\.tiktok\.com\/@bloombakery\/video\/7123456789\|/)
   const init = social.calls.filter((c) => c.path === '/tiktok/v2/post/publish/video/init/').at(-1)!.body as {

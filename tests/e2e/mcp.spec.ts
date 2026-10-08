@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createHash, randomBytes } from 'node:crypto'
-import { latestMail, linkFrom, newAccount, sql } from './helpers'
+import { latestMail, linkFrom, newAccount, sql, onceAppDialog } from './helpers'
 
 // MCP server: JSON-RPC over HTTP with personal tokens and OAuth (dynamic
 // registration, PKCE, consent, refresh), tools acting in one workspace.
@@ -154,7 +154,7 @@ test('OAuth: register, sign in, consent, PKCE, refresh, revoke', async ({ browse
 
   // Shown under connected apps; revoking cuts it off.
   await page.goto('/app/mcp')
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Revoke Claude', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Revoke Claude', exact: true })).toHaveCount(0)
   expect((await rpc('ping', {}, t2.access_token)).status).toBe(401)
@@ -170,7 +170,7 @@ test('OAuth: register, sign in, consent, PKCE, refresh, revoke', async ({ browse
 
 test('a revoked personal token stops working', async () => {
   await page.goto('/app/mcp')
-  page.once('dialog', (d) => d.accept())
+  onceAppDialog(page, (d) => d.accept())
   await page.getByRole('button', { name: 'Revoke Claude Code laptop' }).click()
   await expect(page.getByRole('button', { name: 'Revoke Claude Code laptop' })).toHaveCount(0)
   expect((await rpc('ping')).status).toBe(401)

@@ -58,3 +58,43 @@ export async function newAccount(page: Page, prefix: string, brand = `${prefix} 
 export function sql(query: string): string {
   return execSync(`psql -h localhost khma -Atc ${JSON.stringify(query)}`, { encoding: 'utf8' }).trim()
 }
+
+// The app's own confirm/alert dialog (components/ui/Dialog.tsx) answered the
+// way a browser dialog is: d.message(), d.accept() (the main, last button) or
+// d.dismiss() (the first one — Cancel). onceAppDialog answers the next one,
+// onAppDialog every one while the page is open.
+export type AppDialog = { message: () => string; accept: () => Promise<void>; dismiss: () => Promise<void>; choose: (label: string | RegExp) => Promise<void> }
+
+// Dialogs already answered, per page (each request has its own data-request).
+const answered = new WeakMap<Page, Set<string>>()
+
+function watchAppDialog(page: Page, handler: (d: AppDialog) => unknown, once: boolean) {
+  const done = answered.get(page) ?? new Set<string>()
+  answered.set(page, done)
+  const loop = async () => {
+    while (!page.isClosed()) {
+      const handle = await page.waitForFunction(
+        (skip) => {
+          const d = document.querySelector<HTMLDialogElement>('dialog[aria-labelledby="app-dialog-title"][open]')
+          return d && !skip.includes(d.dataset.request ?? '') ? d.dataset.request : null
+        },
+        [...done],
+        { timeout: 0, polling: 100 },
+      )
+      const id = String(await handle.jsonValue())
+      done.add(id)
+      const dlg = page.locator(`dialog[data-request="${id}"][open]`)
+      const text = await dlg.innerText()
+      await handler({
+        message: () => text,
+        accept: () => dlg.locator('[data-choice]').last().click(),
+        dismiss: () => dlg.locator('[data-choice]').first().click(),
+        choose: (label) => dlg.getByRole('button', { name: label }).click(),
+      })
+      if (once) return
+    }
+  }
+  void loop().catch(() => {})
+}
+export const onceAppDialog = (page: Page, handler: (d: AppDialog) => unknown) => watchAppDialog(page, handler, true)
+export const onAppDialog = (page: Page, handler: (d: AppDialog) => unknown) => watchAppDialog(page, handler, false)

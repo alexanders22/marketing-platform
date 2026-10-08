@@ -444,7 +444,7 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
         veoMode === 'photos'
           ? `Bring this photo to life: ${visual}. Gentle, realistic camera and subject motion; keep the place and people as they are. No text on screen.`
           : sketch
-            ? `${visual}. Hand-drawn whiteboard explainer animation: thin black ink lines draw themselves stroke by stroke on plain warm off-white paper, simple doodle characters move a little, one or two small flat colour accents, static camera. No text on screen.`
+            ? `${visual}. Hand-drawn whiteboard explainer animation: thin black ink lines draw themselves stroke by stroke on plain warm off-white paper, simple doodle characters move a little, one or two small flat colour accents on the key object, static camera. No text on screen.`
             : `${visual}. Vertical social video, no text on screen.`
       const res = await beginClip(account.id, balance, workspace.id, {
         prompt: input.brief.startsWith('[test]') ? `[test] ${prompt}` : prompt,

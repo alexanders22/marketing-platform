@@ -14,9 +14,13 @@ type Request = {
   tone?: 'default' | 'danger' | 'info'
   choices: Choice[]
   resolve: (id: string | null) => void
+  // Tells two dialogs with the same text apart (tests, screen readers).
+  seq: number
 }
 
 let queue: Request[] = []
+// Unique across page loads, not only within one.
+let seq = Date.now()
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((l) => l())
 const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l))
@@ -28,9 +32,9 @@ function settle(req: Request, id: string | null) {
 }
 
 // Resolves with the id of the button picked, or null when dismissed.
-export function ask(req: Omit<Request, 'resolve'>): Promise<string | null> {
+export function ask(req: Omit<Request, 'resolve' | 'seq'>): Promise<string | null> {
   return new Promise((resolve) => {
-    queue = [...queue, { ...req, resolve }]
+    queue = [...queue, { ...req, resolve, seq: ++seq }]
     emit()
   })
 }
@@ -89,6 +93,7 @@ export function DialogHost() {
   return (
     <dialog
       ref={ref}
+      data-request={req.seq}
       aria-labelledby="app-dialog-title"
       onCancel={(e) => (e.preventDefault(), close(null))}
       onClick={(e) => e.target === e.currentTarget && close(null)}
