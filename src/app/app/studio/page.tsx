@@ -61,7 +61,8 @@ export default async function StudioPage({ searchParams }: PageProps<'/app/studi
             id: v.id,
             name: v.name,
             format: v.format,
-            status: v.status,
+            // A render still waiting for its turn shows as QUEUED.
+            status: v.status === 'RENDERING' && !v.renderStartedAt ? 'QUEUED' : v.status,
             poster: posterOf(v),
             seconds: timeline(v.data as unknown as VideoDoc).total,
             updatedAt: v.updatedAt.toISOString(),

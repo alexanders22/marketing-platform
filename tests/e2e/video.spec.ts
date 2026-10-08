@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -97,8 +97,10 @@ test('render: an H.264/AAC MP4 of the right size and length', async () => {
   test.setTimeout(180_000)
   await page.getByRole('button', { name: 'Render video' }).click()
   await expect(page.getByRole('button', { name: /Rendering/ })).toBeVisible()
+  await expect(page.getByRole('progressbar', { name: 'Render progress' })).toBeVisible()
   await expect(page.getByLabel('Rendered video')).toBeVisible({ timeout: 150_000 })
-  expect(sql(`select status from "Video" where id='${videoId}'`)).toBe('READY')
+  await expect(page.getByRole('progressbar', { name: 'Render progress' })).toBeHidden()
+  expect(sql(`select status||':'||"renderProgress" from "Video" where id='${videoId}'`)).toBe('READY:100')
   const out = sql(`select m.path from "Video" v join "Media" m on m.id=v."outputMediaId" where v.id='${videoId}'`)
   const info = probe(path.resolve('storage', out))
   expect(info).toMatch(/Video: h264.*1080x1920/)
@@ -112,6 +114,49 @@ test('render: an H.264/AAC MP4 of the right size and length', async () => {
   expect(res.status()).toBe(206)
   expect(res.headers()['content-range']).toMatch(/^bytes 0-99\//)
   expect(readFileSync(path.resolve('storage', out)).subarray(4, 8).toString()).toBe('ftyp')
+})
+
+test('render queue: a second video waits its turn; cancel takes renders out', async ({ browser }) => {
+  test.setTimeout(150_000)
+  const original = sql(`select data::text from "Video" where id='${videoId}'`)
+  const firstOutput = sql(`select "outputMediaId" from "Video" where id='${videoId}'`)
+  // 20-second scenes, so this render is still running while the second one waits.
+  sql(`update "Video" set data = jsonb_set(data, '{scenes}', (select jsonb_agg(s || '{"duration": 20}') from jsonb_array_elements(data->'scenes') s)) where id='${videoId}'`)
+  const otherId = `queued${Date.now()}`
+  sql(`insert into "Video" (id, "workspaceId", name, format, data, "updatedAt") select '${otherId}', "workspaceId", 'Queued video', format, data, now() from "Video" where id='${videoId}'`)
+  await page.reload()
+  await page.getByRole('button', { name: 'Render again' }).click()
+  await expect(page.getByText(/^Rendering · \d+%/)).toBeVisible({ timeout: 20_000 })
+
+  // A second tab of the same user.
+  const ctx = await browser.newContext({ storageState: await page.context().storageState() })
+  const other = await ctx.newPage()
+  await other.goto(`/app/studio/video/${otherId}`)
+  await other.getByRole('button', { name: 'Render video' }).click()
+  await expect(other.getByText('In queue · 1 video ahead')).toBeVisible()
+  expect(sql(`select status||':'||("renderStartedAt" is null) from "Video" where id='${otherId}'`)).toBe('RENDERING:true')
+  await other.goto('/app/studio?tab=video')
+  await expect(other.getByRole('link', { name: /Queued video/ }).getByText('In queue')).toBeVisible()
+
+  // Cancelling the waiting one puts it back to a draft.
+  await other.goto(`/app/studio/video/${otherId}`)
+  await other.getByRole('button', { name: 'Cancel render' }).click()
+  await expect(other.getByRole('button', { name: 'Render video' })).toBeEnabled()
+  expect(sql(`select status||':'||("renderQueuedAt" is null) from "Video" where id='${otherId}'`)).toBe('DRAFT:true')
+
+  // The running one moves forward; cancelling stops ffmpeg and keeps the last MP4.
+  await expect.poll(() => Number(sql(`select "renderProgress" from "Video" where id='${videoId}'`)), { timeout: 60_000 }).toBeGreaterThan(0)
+  await expect(page.getByRole('progressbar', { name: 'Render progress' })).not.toHaveAttribute('aria-valuenow', '0')
+  await page.getByRole('button', { name: 'Cancel render' }).click()
+  await expect(page.getByLabel('Rendered video')).toBeVisible()
+  expect(sql(`select status||':'||"outputMediaId" from "Video" where id='${videoId}'`)).toBe(`READY:${firstOutput}`)
+  // Its queued files are gone.
+  await expect.poll(() => readdirSync(path.resolve('storage/.render-jobs')).filter((d) => d.startsWith(videoId) || d.startsWith(otherId))).toEqual([])
+
+  await ctx.close()
+  sql(`delete from "Video" where id='${otherId}'`)
+  sql(`update "Video" set data = '${original.replace(/'/g, "''")}'::jsonb where id='${videoId}'`)
+  await page.reload()
 })
 
 test('use the video in a post', async () => {

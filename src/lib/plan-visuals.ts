@@ -9,7 +9,7 @@ import { prisma } from './prisma'
 import { saveMedia, mediaUrl } from './storage'
 import type { PlanData } from './strategist'
 import { emptyDoc, newScene, type VideoDoc } from './video'
-import { enqueueRender } from './video-render'
+import { enqueueRender, waitForRender } from './video-render'
 
 // Pictures and videos for a plan's posts, made before they go out: a photo
 // post gets one AI image, a Reel / video post a short vertical video (AI
@@ -111,9 +111,10 @@ export async function generatePlanVisuals(planId: string, price: number) {
       caption: p.caption,
     }
     const video = await prisma.video.create({
-      data: { workspaceId: ws.id, name: (p.pillar || 'Plan video').slice(0, 120), format: '9:16', status: 'RENDERING', data: doc as unknown as Prisma.InputJsonValue },
+      data: { workspaceId: ws.id, name: (p.pillar || 'Plan video').slice(0, 120), format: '9:16', data: doc as unknown as Prisma.InputJsonValue },
     })
     await enqueueRender(video.id, doc.scenes.map(() => null))
+    await waitForRender(video.id)
     const done = await prisma.video.findUnique({ where: { id: video.id }, select: { status: true, outputMediaId: true } })
     if (done?.status === 'READY' && done.outputMediaId) await attach(p.postId, done.outputMediaId)
   }

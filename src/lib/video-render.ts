@@ -1,30 +1,137 @@
 import 'server-only'
-import { writeFile, rm } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { ffmpeg, posterFrame, probe } from './ffmpeg'
 import { prisma } from './prisma'
-import { mediaFile, saveMediaFile, tempDir } from './storage'
+import { mediaFile, renderJobDir, saveMediaFile, tempDir } from './storage'
 import { FORMATS, isFormat, timeline, type VideoDoc } from './video'
 
 // Renders a Studio video to an H.264/AAC MP4 with ffmpeg. The browser sends
 // one transparent PNG per scene with its text (and the end card), so the text
-// looks exactly like the editor preview. One render at a time per server.
+// looks exactly like the editor preview.
+//
+// Renders wait in a queue: the job is the Video row (status RENDERING,
+// renderQueuedAt) plus its PNGs on disk, so a restart picks waiting and
+// interrupted renders up again. KHMA_RENDER_CONCURRENCY renders run at once
+// (default 1 — ffmpeg already uses every core). One server process only.
 
 const FPS = 30
-let queue: Promise<unknown> = Promise.resolve()
+const CONCURRENCY = Math.max(1, Number(process.env.KHMA_RENDER_CONCURRENCY) || 1)
+const INTERRUPTED = 'The render was interrupted — render the video again'
 
-export function enqueueRender(videoId: string, overlays: (Buffer | null)[]) {
-  const job = queue.then(() => render(videoId, overlays)).catch((e) => console.error('video render failed', videoId, e))
-  queue = job
-  return job
+type QueueState = { running: Map<string, AbortController>; resumed: boolean; filling: boolean; again: boolean }
+const g = globalThis as { __khmaRenders?: QueueState }
+const state = (g.__khmaRenders ??= { running: new Map(), resumed: false, filling: false, again: false })
+
+const jobOf = (videoId: string, queuedAt: Date) => renderJobDir(`${videoId}-${queuedAt.getTime()}`)
+
+// Puts a video in the render queue. False when it is already waiting or rendering.
+export async function enqueueRender(videoId: string, overlays: (Buffer | null)[]): Promise<boolean> {
+  const queuedAt = new Date()
+  const dir = jobOf(videoId, queuedAt)
+  await mkdir(dir, { recursive: true })
+  await Promise.all(overlays.map((o, i) => (o && o.length > 0 ? writeFile(path.join(dir, `o${i}.png`), o) : null)))
+  await writeFile(path.join(dir, 'job.json'), JSON.stringify({ parts: overlays.length }))
+  const claimed = await prisma.video.updateMany({
+    where: { id: videoId, OR: [{ status: { not: 'RENDERING' } }, { renderQueuedAt: null }] },
+    data: { status: 'RENDERING', error: null, renderQueuedAt: queuedAt, renderStartedAt: null, renderProgress: 0 },
+  })
+  if (claimed.count === 0) {
+    await rm(dir, { recursive: true, force: true })
+    return false
+  }
+  kick()
+  return true
+}
+
+// Waits until a queued render is done (for background jobs).
+export async function waitForRender(videoId: string, timeoutMs = 30 * 60_000) {
+  const until = Date.now() + timeoutMs
+  while (Date.now() < until) {
+    const v = await prisma.video.findUnique({ where: { id: videoId }, select: { status: true } })
+    if (v?.status !== 'RENDERING') return v?.status ?? null
+    await new Promise((r) => setTimeout(r, 2000))
+  }
+  return 'RENDERING'
+}
+
+// Stops a waiting or running render and drops its files; the caller has
+// already moved the video out of RENDERING.
+export async function stopRender(videoId: string) {
+  state.running.get(videoId)?.abort()
+  const root = path.dirname(renderJobDir(videoId))
+  const jobs = await readdir(root).catch(() => [] as string[])
+  await Promise.all(jobs.filter((j) => j.startsWith(`${videoId}-`)).map((j) => rm(path.join(root, j), { recursive: true, force: true })))
+}
+
+// After a restart: renders that were running start over, renders from before
+// the queue existed (no job on disk) fail with a clear message. Then fills the
+// free slots. Called by the minute ticker.
+export async function resumeRenders() {
+  if (!state.resumed) {
+    state.resumed = true
+    const running = [...state.running.keys()]
+    await prisma.video.updateMany({ where: { status: 'RENDERING', renderQueuedAt: null }, data: { status: 'FAILED', error: INTERRUPTED } })
+    await prisma.video.updateMany({
+      where: { status: 'RENDERING', renderStartedAt: { not: null }, id: { notIn: running } },
+      data: { renderStartedAt: null, renderProgress: 0 },
+    })
+  }
+  kick()
+}
+
+// Starts waiting renders, oldest first, while there are free slots.
+function kick() {
+  if (state.filling) {
+    state.again = true
+    return
+  }
+  state.filling = true
+  fill()
+    .catch((e) => console.error('render queue failed', e))
+    .finally(() => {
+      state.filling = false
+      if (state.again) {
+        state.again = false
+        kick()
+      }
+    })
+}
+
+async function fill() {
+  while (state.running.size < CONCURRENCY) {
+    const next = await prisma.video.findFirst({
+      where: { status: 'RENDERING', renderStartedAt: null, renderQueuedAt: { not: null }, id: { notIn: [...state.running.keys()] } },
+      orderBy: { renderQueuedAt: 'asc' },
+      select: { id: true, renderQueuedAt: true },
+    })
+    if (!next?.renderQueuedAt) return
+    const claimed = await prisma.video.updateMany({
+      where: { id: next.id, status: 'RENDERING', renderQueuedAt: next.renderQueuedAt, renderStartedAt: null },
+      data: { renderStartedAt: new Date(), renderProgress: 0 },
+    })
+    if (claimed.count === 0) continue
+    const ctl = new AbortController()
+    state.running.set(next.id, ctl)
+    void render(next.id, next.renderQueuedAt, ctl.signal)
+      .catch((e) => console.error('video render failed', next.id, e))
+      .finally(() => {
+        state.running.delete(next.id)
+        kick()
+      })
+  }
 }
 
 const hex = (c: string) => (/^#[0-9a-fA-F]{6}$/.test(c) ? `0x${c.slice(1)}` : '0x111827')
 const num = (n: number) => n.toFixed(3)
 
-async function render(videoId: string, overlays: (Buffer | null)[]) {
+async function render(videoId: string, queuedAt: Date, signal: AbortSignal) {
   const video = await prisma.video.findUnique({ where: { id: videoId } })
-  if (!video) return
+  // Only this job may write the result: a cancel or a newer render changes queuedAt.
+  const mine = { id: videoId, status: 'RENDERING' as const, renderQueuedAt: queuedAt }
+  const job = jobOf(videoId, queuedAt)
+  if (!video || video.renderQueuedAt?.getTime() !== queuedAt.getTime()) return void (await rm(job, { recursive: true, force: true }))
   const doc = video.data as unknown as VideoDoc
   const format = isFormat(video.format) ? video.format : '9:16'
   const { w: W, h: H } = FORMATS[format]
@@ -37,6 +144,8 @@ async function render(videoId: string, overlays: (Buffer | null)[]) {
   const dir = await tempDir('render')
   try {
     if (ids.some((id) => !byId.has(id))) throw new Error('Some media are no longer available')
+    const { parts: count } = JSON.parse(await readFile(path.join(job, 'job.json'), 'utf8').catch(() => '{}')) as { parts?: number }
+    if (count !== parts.length) throw new Error(INTERRUPTED)
 
     const args: string[] = ['-y']
     const filters: string[] = []
@@ -69,10 +178,8 @@ async function render(videoId: string, overlays: (Buffer | null)[]) {
         filters.push(`[${v}:v]format=yuv420p,setsar=1[b${i}]`)
       }
 
-      const png = overlays[i]
-      if (png && png.length > 0) {
-        const file = path.join(dir, `o${i}.png`)
-        await writeFile(file, png)
+      const file = path.join(job, `o${i}.png`)
+      if (existsSync(file)) {
         const o = input++
         args.push('-loop', '1', '-t', num(d), '-i', file)
         // Text fades in; the end card is the whole frame, no fade.
@@ -152,7 +259,19 @@ async function render(videoId: string, overlays: (Buffer | null)[]) {
       '-movflags', '+faststart', '-t', T,
       out,
     )
-    await ffmpeg(args, 15 * 60_000)
+    // Progress: the share of the timeline written, saved at most every second.
+    let saved = 0
+    let savedAt = 0
+    await ffmpeg(args, 15 * 60_000, {
+      signal,
+      onProgress: (sec) => {
+        const pct = Math.min(97, Math.floor((sec / total) * 100))
+        if (pct <= saved || Date.now() - savedAt < 1000) return
+        saved = pct
+        savedAt = Date.now()
+        prisma.video.updateMany({ where: mine, data: { renderProgress: pct } }).catch(() => {})
+      },
+    })
 
     const info = await probe(out)
     const poster = path.join(dir, 'poster.jpg')
@@ -164,18 +283,17 @@ async function render(videoId: string, overlays: (Buffer | null)[]) {
       durationMs: info.durationMs ?? Math.round(total * 1000),
       posterId: posterMedia.id,
     })
-    await prisma.video.update({
-      where: { id: video.id },
-      data: { status: 'READY', error: null, outputMediaId: media.id, renderedAt: new Date() },
+    await prisma.video.updateMany({
+      where: mine,
+      data: { status: 'READY', error: null, outputMediaId: media.id, renderedAt: new Date(), renderProgress: 100 },
     })
   } catch (e) {
+    if (signal.aborted) return
     console.error('render error', videoId, e)
     const message = e instanceof Error ? e.message : String(e)
-    await prisma.video.update({
-      where: { id: video.id },
-      data: { status: 'FAILED', error: message.slice(0, 1000) },
-    })
+    await prisma.video.updateMany({ where: mine, data: { status: 'FAILED', error: message.slice(0, 1000) } })
   } finally {
     await rm(dir, { recursive: true, force: true })
+    await rm(job, { recursive: true, force: true })
   }
 }

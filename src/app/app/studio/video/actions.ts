@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { after } from 'next/server'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { aiEnabled, generateImage, generateMusic, LANGUAGES, speak, videoScript } from '@/lib/ai'
@@ -15,7 +14,7 @@ import { templatePhotos } from '@/lib/template-photos'
 import { VIDEO_TEMPLATES } from '@/lib/video-templates'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 import { emptyDoc, FORMATS, isFormat, MAX_SCENES, MOTIONS, newScene, POSITIONS, TEXT_STYLES, timeline, VOICES, type Format, type SceneMedia, type VideoDoc } from '@/lib/video'
-import { enqueueRender } from '@/lib/video-render'
+import { enqueueRender, stopRender } from '@/lib/video-render'
 import { advanceClip, CLIP_QUALITIES, CLIP_SECONDS, startVeo, veoAspect, veoEnabled, type ClipQuality } from '@/lib/veo'
 import { isPaid, PAID_ONLY } from '@/lib/plans'
 import { veoAllowance, veoLimitMessage } from '@/lib/credits'
@@ -174,18 +173,46 @@ export async function renderVideo(id: string, overlays: (string | null)[]): Prom
     if (buf.length > 8 * 1024 * 1024 || !buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { error: 'Invalid overlay' }
     pngs.push(buf)
   }
-  await prisma.video.update({ where: { id }, data: { status: 'RENDERING', error: null } })
-  after(() => enqueueRender(id, pngs))
+  if (!(await enqueueRender(id, pngs))) return { error: 'Already rendering' }
+  revalidatePath('/app/studio')
+  return {}
+}
+
+// Takes a video out of the render queue (or stops its render). The last
+// finished MP4, if any, stays.
+export async function cancelRender(id: string): Promise<{ error?: string }> {
+  const { workspace } = await requireContext()
+  const v = await prisma.video.findFirst({ where: { id, workspaceId: workspace.id }, select: { status: true, outputMediaId: true } })
+  if (!v) return { error: 'Video not found' }
+  if (v.status !== 'RENDERING') return {}
+  await prisma.video.updateMany({
+    where: { id, status: 'RENDERING' },
+    data: { status: v.outputMediaId ? 'READY' : 'DRAFT', renderQueuedAt: null, renderStartedAt: null, renderProgress: 0 },
+  })
+  await stopRender(id)
   revalidatePath('/app/studio')
   return {}
 }
 
 export async function videoStatus(id: string) {
   const { workspace } = await requireContext()
-  const v = await prisma.video.findFirst({ where: { id, workspaceId: workspace.id }, select: { status: true, error: true, outputMediaId: true } })
+  const v = await prisma.video.findFirst({
+    where: { id, workspaceId: workspace.id },
+    select: { status: true, error: true, outputMediaId: true, renderQueuedAt: true, renderStartedAt: true, renderProgress: true },
+  })
   if (!v) return null
   const out = v.outputMediaId ? await prisma.media.findUnique({ where: { id: v.outputMediaId }, select: { id: true, posterId: true, durationMs: true } }) : null
-  return { status: v.status, error: v.error, output: out ? { url: mediaUrl(out.id), poster: out.posterId ? mediaUrl(out.posterId) : null } : null }
+  // While waiting: how many renders (of anyone) go first.
+  const ahead =
+    v.status === 'RENDERING' && !v.renderStartedAt && v.renderQueuedAt
+      ? await prisma.video.count({ where: { status: 'RENDERING', OR: [{ renderStartedAt: { not: null } }, { renderQueuedAt: { lt: v.renderQueuedAt } }] } })
+      : 0
+  return {
+    status: v.status,
+    error: v.error,
+    output: out ? { url: mediaUrl(out.id), poster: out.posterId ? mediaUrl(out.posterId) : null } : null,
+    render: v.status === 'RENDERING' ? { started: Boolean(v.renderStartedAt), progress: v.renderProgress, ahead, elapsedMs: v.renderStartedAt ? Date.now() - v.renderStartedAt.getTime() : 0 } : null,
+  }
 }
 
 // The rendered MP4 as a new post draft, or into an existing post.

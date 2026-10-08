@@ -1079,6 +1079,11 @@ model Video {
   // The rendered MP4 (Media kind VIDEO) once READY.
   outputMediaId String?
   renderedAt    DateTime?
+  // Render queue (src/lib/video-render.ts): waiting while renderStartedAt is
+  // null; progress 0–100 while ffmpeg runs.
+  renderQueuedAt  DateTime?
+  renderStartedAt DateTime?
+  renderProgress  Int       @default(0)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 

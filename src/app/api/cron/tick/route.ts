@@ -8,6 +8,7 @@ import { checkAllGoals } from '@/lib/goals'
 import { syncInboxDue } from '@/lib/inbox'
 import { syncWebsitesDue } from '@/lib/ga'
 import { advanceClipsDue } from '@/lib/veo'
+import { resumeRenders } from '@/lib/video-render'
 import { syncAdsDue } from '@/lib/meta-ads'
 import { reviewsDue } from '@/lib/weekly'
 import { publishDue, refreshInsights } from '@/lib/publisher'
@@ -42,6 +43,8 @@ export async function POST(req: Request) {
   const inbox = await syncInboxDue()
   // AI clips: finish the ones Veo is done with (also when nobody is watching).
   const clips = await advanceClipsDue()
+  // Video renders: pick up the queue after a restart.
+  await resumeRenders()
   // Goals hourly, after fresh ad and post numbers.
   let goals = 0
   if (q.get('goals') === '1' || Date.now() - lastGoals > 60 * 60 * 1000) {

@@ -44,7 +44,7 @@ import {
   type Scene,
   type VideoDoc,
 } from '@/lib/video'
-import { clipStatus, generateVoices, renderVideo, saveVideo, startClip, videoStatus, videoToPost } from '../actions'
+import { cancelRender, clipStatus, generateVoices, renderVideo, saveVideo, startClip, videoStatus, videoToPost } from '../actions'
 import { VideoMediaPicker, type LibraryItem } from '../VideoMediaPicker'
 import { MusicPicker } from '../MusicPicker'
 import { clipAction, creditsLabel } from '@/lib/pricing'
@@ -52,7 +52,9 @@ import { usePrices } from '@/components/Prices'
 
 type Allowance = { used: number; limit: number; left: number }
 
-type Status = { status: 'DRAFT' | 'RENDERING' | 'READY' | 'FAILED'; error: string | null; output: { url: string; poster: string | null } | null }
+// While rendering: waiting in the queue (ahead = renders before it) or running.
+type RenderInfo = { started: boolean; progress: number; ahead: number; elapsedMs: number }
+type Status = { status: 'DRAFT' | 'RENDERING' | 'READY' | 'FAILED'; error: string | null; output: { url: string; poster: string | null } | null; render?: RenderInfo | null }
 
 const MOTION_LABEL: Record<(typeof MOTIONS)[number], string> = {
   'zoom-in': 'Zoom in',
@@ -119,18 +121,25 @@ export function VideoEditor({
     return () => clearTimeout(t)
   }, [name, format, doc, video.id])
 
-  // While rendering, ask the server every few seconds.
+  // While rendering, ask the server every two seconds (queue place, progress).
   useEffect(() => {
     if (status.status !== 'RENDERING') return
-    const t = setInterval(async () => {
+    let stop = false
+    const check = async () => {
       const s = await videoStatus(video.id)
-      if (s && s.status !== 'RENDERING') {
-        setStatus(s)
-        setView('rendered')
+      if (stop || !s) return
+      setStatus(s)
+      if (s.status !== 'RENDERING') {
+        if (s.status === 'READY') setView('rendered')
         router.refresh()
       }
-    }, 3000)
-    return () => clearInterval(t)
+    }
+    void check()
+    const t = setInterval(check, 2000)
+    return () => {
+      stop = true
+      clearInterval(t)
+    }
   }, [status.status, video.id, router])
 
   // AI clips arrive in the background: check each pending one every few seconds.
@@ -241,7 +250,17 @@ export function VideoEditor({
       }
       const res = await renderVideo(video.id, overlays)
       if (res.error) return setError(res.error)
-      setStatus({ status: 'RENDERING', error: null, output: status.output })
+      setStatus({ status: 'RENDERING', error: null, output: status.output, render: null })
+    })
+  }
+
+  const cancel = () => {
+    setBusyWhat('cancel')
+    startBusy(async () => {
+      const res = await cancelRender(video.id)
+      if (res.error) return setError(res.error)
+      const s = await videoStatus(video.id)
+      if (s) setStatus(s)
     })
   }
 
@@ -300,6 +319,7 @@ export function VideoEditor({
         </p>
       )}
       {status.status === 'FAILED' && <p className="bg-red-50 px-4 py-2 text-sm text-red-700">Render failed: {status.error?.split('\n')[0]}</p>}
+      {status.status === 'RENDERING' && <RenderProgress info={status.render ?? null} onCancel={cancel} cancelling={busy && busyWhat === 'cancel'} />}
 
       <div className="grid flex-1 lg:grid-cols-[230px_1fr_330px]">
         {/* Scenes */}
@@ -906,6 +926,45 @@ export function VeoMeter({ veo, need }: { veo: Allowance; need: number }) {
           .
         </p>
       )}
+    </div>
+  )
+}
+
+// Queue place or progress of the render, with the time left.
+function RenderProgress({ info, onCancel, cancelling }: { info: RenderInfo | null; onCancel: () => void; cancelling: boolean }) {
+  const pct = info?.started ? info.progress : 0
+  let label = 'Starting…'
+  if (info && !info.started) label = info.ahead > 0 ? `In queue · ${info.ahead} ${info.ahead === 1 ? 'video' : 'videos'} ahead` : 'In queue · next'
+  else if (info?.started) {
+    const left = pct >= 5 ? (info.elapsedMs * (100 - pct)) / pct / 1000 : null
+    label = `Rendering · ${pct}%` + (left === null ? '' : left < 60 ? ' · less than a minute left' : ` · about ${Math.round(left / 60)} min left`)
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-200 bg-zinc-50 px-4 py-2.5">
+      <div className="min-w-48 flex-1">
+        <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">
+          <span className="font-medium text-zinc-800" aria-live="polite">
+            {label}
+          </span>
+          <span className="hidden text-xs text-zinc-500 sm:inline">You can leave this page — the video keeps rendering.</span>
+        </div>
+        <div
+          role="progressbar"
+          aria-label="Render progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct}
+          className="h-2 overflow-hidden rounded-full bg-zinc-200"
+        >
+          <div
+            className={`h-full rounded-full bg-gradient-to-r from-[#7b3ff2] via-[#ff2e6e] to-[#ff5b14] transition-[width] duration-700 ${info?.started ? '' : 'w-1/4 animate-pulse'}`}
+            style={info?.started ? { width: `${Math.max(2, pct)}%` } : undefined}
+          />
+        </div>
+      </div>
+      <button onClick={onCancel} disabled={cancelling} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-60">
+        {cancelling ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />} Cancel render
+      </button>
     </div>
   )
 }

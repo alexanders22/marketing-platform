@@ -19,6 +19,7 @@ export type VideoCard = { id: string; name: string; format: string; status: stri
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   DRAFT: { label: 'Draft', cls: 'bg-zinc-100 text-zinc-600' },
+  QUEUED: { label: 'In queue', cls: 'bg-violet-50 text-violet-700' },
   RENDERING: { label: 'Rendering…', cls: 'bg-amber-50 text-amber-700' },
   READY: { label: 'Ready', cls: 'bg-emerald-50 text-emerald-700' },
   FAILED: { label: 'Failed', cls: 'bg-red-50 text-red-700' },

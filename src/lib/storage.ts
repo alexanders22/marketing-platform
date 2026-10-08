@@ -62,6 +62,13 @@ export async function tempDir(name: string) {
   return dir
 }
 
+// Where a queued render keeps the files it needs until it runs (so a server
+// restart does not lose them). One folder per job.
+export function renderJobDir(job: string) {
+  if (!/^[a-z0-9-]+$/i.test(job)) throw new Error('Bad job id')
+  return path.join(/*turbopackIgnore: true*/ ROOT, '.render-jobs', job)
+}
+
 export async function readMedia(rel: string) {
   const full = path.resolve(ROOT, rel)
   if (!full.startsWith(ROOT + path.sep)) throw new Error('Bad media path')
