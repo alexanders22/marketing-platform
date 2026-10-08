@@ -77,10 +77,12 @@ async function render(videoId: string, overlays: (Buffer | null)[]) {
         args.push('-loop', '1', '-t', num(d), '-i', file)
         // Text fades in; the end card is the whole frame, no fade.
         const fadeIn = s ? `,fade=in:st=0.15:d=0.35:alpha=1` : ''
-        filters.push(`[${o}:v]format=rgba,scale=${W}:${H}${fadeIn}[o${i}]`, `[b${i}][o${i}]overlay=0:0:shortest=1,format=yuv420p[s${i}]`)
+        filters.push(`[${o}:v]format=rgba,scale=${W}:${H}${fadeIn}[o${i}]`, `[b${i}][o${i}]overlay=0:0:shortest=1,format=yuv420p,fps=${FPS}[s${i}]`)
       } else {
-        filters.push(`[b${i}]null[s${i}]`)
+        filters.push(`[b${i}]fps=${FPS}[s${i}]`)
       }
+      // Every scene ends with a declared constant frame rate: ffmpeg 7's xfade
+      // refuses inputs whose rate got lost (a clip stretched with tpad/trim).
       scenes.push(`[s${i}]`)
     }
 
