@@ -10,7 +10,8 @@ import { saveMediaFile, tempDir } from './storage'
 // commercial use and editing without share-alike: CC0, public domain and
 // CC BY (which needs a credit line — added to the post text).
 
-const API = 'https://api.openverse.org/v1/audio/'
+// OPENVERSE_URL can point at a fake in tests.
+const API = `${(process.env.OPENVERSE_URL || 'https://api.openverse.org/v1/audio').replace(/\/$/, '')}/`
 const LICENSES = ['cc0', 'pdm', 'by'] as const
 const MAX_BYTES = 25_000_000
 
@@ -72,7 +73,8 @@ export async function searchFreeMusic(q: string): Promise<FreeTrack[]> {
     q: q || 'background',
     category: 'music',
     license: LICENSES.join(','),
-    page_size: '30',
+    // Openverse allows at most 20 per page without an API key (401 above).
+    page_size: '20',
   })
   const data = (await getJson(`${API}?${params}`)) as { results?: Row[] }
   return (data.results ?? []).map(toTrack).filter((t): t is FreeTrack => t !== null && (t.durationMs ?? 0) <= 240_000)

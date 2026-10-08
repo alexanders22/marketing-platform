@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import ffmpegPath from 'ffmpeg-static'
@@ -213,4 +214,54 @@ test('whiteboard explainer video: drawn scenes on paper, boxed title, gentle zoo
   expect(doc.scenes[0].style).toBe('box')
   expect(doc.scenes.every((s: { motion: string }) => s.motion === 'zoom-in' || s.motion === 'zoom-out')).toBe(true)
   expect(doc.scenes.filter((s: { media: { kind: string } | null }) => s.media?.kind === 'image').length).toBeGreaterThan(0)
+})
+
+test('free music library: search (at most 20 a page, like Openverse without a key) and use a track', async () => {
+  // A fake Openverse with one real 3-second MP3 (made with ffmpeg-static).
+  const mp3 = path.resolve('storage', `.tmp-test-${Date.now()}.mp3`)
+  execFileSync(ffmpegPath as unknown as string, ['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-codec:a', 'libmp3lame', '-b:a', '64k', mp3], { stdio: 'ignore' })
+  const audio = readFileSync(mp3)
+  const ID = '1b2c3d4e-0000-4000-8000-00000000abcd'
+  const track = { id: ID, title: 'Sunny Day', creator: 'Nino', duration: 3000, license: 'by', license_version: '4.0', url: 'http://127.0.0.1:18993/files/sunny.mp3', source: 'jamendo', foreign_landing_url: 'https://example.org/sunny' }
+  const pageSizes: number[] = []
+  const ov = createServer((req, res) => {
+    const u = new URL(req.url!, 'http://127.0.0.1:18993')
+    const json = (status: number, body: unknown) => {
+      res.writeHead(status, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(body))
+    }
+    if (u.pathname === '/v1/audio/') {
+      const size = Number(u.searchParams.get('page_size') ?? 20)
+      pageSizes.push(size)
+      if (size > 20) return json(401, { detail: 'page_size may not exceed 20 for anonymous requests' })
+      return json(200, { results: [track, { ...track, id: 'x', title: 'Share-alike song', license: 'by-sa' }] })
+    }
+    if (u.pathname === `/v1/audio/${ID}/`) return json(200, track)
+    if (u.pathname === '/files/sunny.mp3') {
+      res.writeHead(200, { 'content-type': 'audio/mpeg', 'content-length': audio.length })
+      return res.end(audio)
+    }
+    json(404, { detail: 'not found' })
+  })
+  await new Promise<void>((r) => ov.listen(18993, '127.0.0.1', () => r()))
+  try {
+    await page.goto(`/app/studio/video/${videoId}`)
+    await page.getByRole('button', { name: 'Video', exact: true }).click()
+    // An earlier test gave the video music already.
+    const remove = page.getByRole('button', { name: 'Remove music' })
+    if (await remove.isVisible()) await remove.click()
+    await page.getByRole('button', { name: 'Add music' }).click()
+    await page.getByRole('tab', { name: 'Free library' }).click()
+    await page.getByLabel('Search free music').fill('upbeat')
+    await page.getByRole('button', { name: 'Search', exact: true }).click()
+    await expect(page.getByText('Sunny Day')).toBeVisible()
+    // Share-alike tracks can't be used in ads, so they are not offered.
+    await expect(page.getByText('Share-alike song')).toBeHidden()
+    expect(Math.max(...pageSizes)).toBeLessThanOrEqual(20)
+    await page.getByRole('button', { name: 'Use' }).first().click()
+    await expect.poll(() => sql(`select data->'music'->>'name' from "Video" where id='${videoId}'`), { timeout: 15_000 }).toContain('Sunny Day')
+  } finally {
+    await new Promise((r) => ov.close(r))
+    rmSync(mp3, { force: true })
+  }
 })
