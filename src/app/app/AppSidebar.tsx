@@ -29,6 +29,7 @@ import { logout } from '../(auth)/actions'
 import { switchCompany } from './companies/actions'
 import { CreditsBadge } from './CreditsBadge'
 import { MAIN, SETUP, sectionOf, type Section } from './nav'
+import type { PilotState } from '@/lib/business'
 
 export type SidebarProps = {
   workspace: string
@@ -47,6 +48,8 @@ export type SidebarProps = {
   currentId: string
   canAddCompany: boolean
   superAdmin: boolean
+  // The strategy interview (null for editors, who can't plan).
+  pilot: PilotState | null
 }
 
 export function AppSidebar(props: SidebarProps) {
@@ -92,7 +95,7 @@ export function AppSidebar(props: SidebarProps) {
   )
 }
 
-function SidebarBody({ alerts, recommendations, inbox, path, ...rest }: SidebarProps & { path: string }) {
+function SidebarBody({ alerts, recommendations, inbox, path, pilot, ...rest }: SidebarProps & { path: string }) {
   const current = sectionOf(path)
   const badge = (s: Section) => {
     if (s.badge === 'inbox' && inbox > 0) return <Count n={inbox} label="unread conversations" tone="bg-indigo-600" />
@@ -120,6 +123,8 @@ function SidebarBody({ alerts, recommendations, inbox, path, ...rest }: SidebarP
 
       <CreateMenu />
 
+      {pilot && <PilotCard pilot={pilot} active={path.startsWith('/app/strategy/interview')} />}
+
       <nav aria-label="Main" className="mt-4 space-y-0.5">
         {MAIN.map(item)}
       </nav>
@@ -137,6 +142,43 @@ function SidebarBody({ alerts, recommendations, inbox, path, ...rest }: SidebarP
   )
 }
 
+// The strategy interview, set apart from the menu: a card with the brand
+// gradient running round it until the interview is done.
+function PilotCard({ pilot, active }: { pilot: PilotState; active: boolean }) {
+  const text = {
+    start: { title: 'Plan with Pilot', sub: '3-min strategy chat' },
+    continue: { title: 'Continue the interview', sub: `${Math.round(pilot.progress * 100)}% done — goals and plan next` },
+    done: { title: 'Plan with Pilot', sub: 'Update numbers, plan again' },
+  }[pilot.state]
+  const live = pilot.state !== 'done'
+  return (
+    <Link
+      href={pilot.href}
+      aria-current={active ? 'page' : undefined}
+      className={`group mt-3 block rounded-xl p-[1.5px] shadow-sm transition hover:shadow-md ${live ? 'pilot-shine bg-[linear-gradient(110deg,#7b3ff2,#ff2e6e,#ff5b14,#ff2e6e,#7b3ff2)] shadow-fuchsia-500/20' : 'bg-gradient-to-r from-[#7b3ff2]/40 via-[#ff2e6e]/40 to-[#ff5b14]/40'}`}
+    >
+      <span className={`flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 ${active ? 'bg-violet-50' : 'bg-white group-hover:bg-violet-50/60'}`}>
+        <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#7b3ff2] via-[#ff2e6e] to-[#ff5b14] text-white">
+          <Sparkles size={15} />
+          {pilot.state === 'start' && <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-[#ff5b14] ring-2 ring-white" />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-zinc-900">{text.title}</span>
+          {pilot.state === 'continue' ? (
+            <span className="mt-1 block h-1 overflow-hidden rounded-full bg-zinc-100">
+              <span className="block h-full rounded-full bg-gradient-to-r from-[#7b3ff2] to-[#ff5b14]" style={{ width: `${pilot.progress * 100}%` }} />
+            </span>
+          ) : (
+            <span className="block truncate text-xs text-zinc-500">{text.sub}</span>
+          )}
+        </span>
+        {pilot.state === 'start' && <span className="rounded bg-gradient-to-r from-[#7b3ff2] to-[#ff2e6e] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white">NEW</span>}
+      </span>
+      {pilot.state === 'continue' && <span className="sr-only">{text.sub}</span>}
+    </Link>
+  )
+}
+
 function Count({ n, label, tone }: { n: number; label: string; tone: string }) {
   return (
     <span className={`ml-auto rounded-full px-1.5 py-px text-[11px] font-semibold text-white ${tone}`} aria-label={`${n} ${label}`}>
@@ -146,7 +188,7 @@ function Count({ n, label, tone }: { n: number; label: string; tone: string }) {
 }
 
 const CREATE = [
-  { href: '/app/strategy/new', label: 'Plan my marketing with AI', icon: Compass, tint: 'bg-indigo-100 text-indigo-700' },
+  { href: '/app/strategy/interview', label: 'Plan my marketing with AI', icon: Compass, tint: 'bg-gradient-to-br from-[#7b3ff2] via-[#ff2e6e] to-[#ff5b14] text-white' },
   { href: '/app/posts/new', label: 'New post or thread', icon: StickyNote, tint: 'bg-emerald-100 text-emerald-700' },
   { href: '/app/create', label: 'New AI social post', icon: Sparkles, tint: 'bg-sky-100 text-sky-700' },
   { href: '/app/campaigns/new?kind=social', label: 'New AI social campaign', icon: Target, tint: 'bg-violet-100 text-violet-700' },

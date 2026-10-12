@@ -9,6 +9,7 @@ import { CreditsBadge } from './CreditsBadge'
 import { SectionTabs } from './SectionTabs'
 import { prices } from '@/lib/credits'
 import { PricesProvider } from '@/components/Prices'
+import { interviewState } from '@/lib/business'
 
 export const metadata: Metadata = { title: 'Loudpilot' }
 
@@ -31,11 +32,12 @@ function planLabel(a: { plan: string; trialEndsAt: Date | null; paidUntil: Date 
 // Light app shell (the marketing site stays dark).
 export default async function AppLayout({ children }: LayoutProps<'/app'>) {
   const { user, account, workspace, brand, role, companies, asAdmin } = await requireContext()
-  const [alerts, recommendations, inbox, creditPrices] = await Promise.all([
+  const [alerts, recommendations, inbox, creditPrices, pilot] = await Promise.all([
     prisma.alert.count({ where: { workspaceId: workspace.id, readAt: null } }),
     prisma.recommendation.count({ where: { workspaceId: workspace.id, status: 'OPEN' } }),
     prisma.conversation.count({ where: { workspaceId: workspace.id, unread: { gt: 0 } } }),
     prices(),
+    role === 'EDITOR' ? null : interviewState(workspace.id),
   ])
   return (
     <PricesProvider prices={creditPrices}>
@@ -53,6 +55,7 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
         currentId={workspace.id}
         canAddCompany={asAdmin || role !== 'EDITOR'}
         superAdmin={user.role === 'SUPER_ADMIN'}
+        pilot={pilot}
       />
       <main className="min-w-0 flex-1 p-2 lg:py-3 lg:pr-3 lg:pl-0">
         <header className="mb-2 hidden items-center justify-end gap-2 lg:flex">

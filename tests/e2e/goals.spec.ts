@@ -131,7 +131,7 @@ test('alerts page, unread badge, mark read, email switch', async () => {
   await expect(page.getByRole('link', { name: /Alerts/ }).first()).toContainText(String(unread))
   await expect(page.getByText('Meta rejected Lead Gen — Tbilisi')).toBeVisible()
   await page.getByRole('button', { name: 'Mark all read' }).click()
-  await expect(page.getByText('NEW', { exact: true })).toHaveCount(0)
+  await expect(page.locator('main').getByText('NEW', { exact: true })).toHaveCount(0)
   await page.getByLabel('Email me alerts').uncheck()
   await expect.poll(() => sql(`select "alertEmails" from "Account" where id=(select "accountId" from "Workspace" where id='${ws}')`)).toBe('f')
 })

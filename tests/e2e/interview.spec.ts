@@ -58,6 +58,14 @@ test.afterAll(async () => {
 const bot = (text: string | RegExp) => page.getByText(text).last()
 const chip = (name: string | RegExp) => page.getByRole('button', { name, exact: typeof name === 'string' })
 
+test('the interview stands out: sidebar card, dashboard hero, Create new menu', async () => {
+  await page.goto('/app/dashboard')
+  await expect(page.getByRole('link', { name: /Not sure where to start\? Let Pilot interview you/ })).toHaveAttribute('href', '/app/strategy/interview')
+  const card = page.getByRole('link', { name: /Plan with Pilot/ })
+  await expect(card).toContainText('NEW')
+  await expect(card).toHaveAttribute('href', '/app/strategy/interview')
+})
+
 test('the Strategy page starts with the interview; the quick form stays', async () => {
   await page.goto('/app/strategy')
   await expect(page.getByRole('link', { name: 'Quick form' })).toHaveAttribute('href', '/app/strategy/new')
@@ -151,6 +159,12 @@ test('goal: suggestions from capacity, reality check against budget, realistic o
   await chip('Keep 10 and show what it takes').click()
   await expect(goal).toHaveText('10 new shops in 2 months')
   await expect(page.getByRole('button', { name: /^Build my plan/ })).toBeVisible()
+})
+
+test('a half-done interview is resumed from the sidebar and the dashboard', async () => {
+  await page.goto('/app/dashboard')
+  await expect(page.getByRole('link', { name: /Finish your strategy interview/ })).toHaveAttribute('href', `/app/strategy/interview/${id}`)
+  await expect(page.getByRole('link', { name: /Continue the interview/ })).toHaveAttribute('href', `/app/strategy/interview/${id}`)
 })
 
 test('the dossier shows the business numbers', async () => {

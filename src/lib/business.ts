@@ -237,3 +237,24 @@ export async function composeFor(workspaceId: string, language: InterviewData['l
     return base
   }
 }
+
+// Where the strategy interview stands, for the sidebar and the dashboard:
+// not taken yet, half answered (resume it), or done.
+export type PilotState = { state: 'start' | 'continue' | 'done'; href: string; progress: number }
+
+export async function interviewState(workspaceId: string): Promise<PilotState> {
+  const [open, done] = await Promise.all([
+    prisma.strategyInterview.findFirst({
+      where: { workspaceId, status: 'OPEN', createdAt: { gt: new Date(Date.now() - 14 * 86_400_000) } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, data: true },
+    }),
+    prisma.strategyInterview.count({ where: { workspaceId, status: 'DONE' } }),
+  ])
+  const d = open?.data as InterviewData | undefined
+  if (open && d && d.step > 0) {
+    const answered = d.questions.filter((q) => d.answers[q.key]).length + 1
+    return { state: 'continue', href: `/app/strategy/interview/${open.id}`, progress: Math.min(0.95, answered / (d.questions.length + 2)) }
+  }
+  return { state: done ? 'done' : 'start', href: '/app/strategy/interview', progress: 0 }
+}

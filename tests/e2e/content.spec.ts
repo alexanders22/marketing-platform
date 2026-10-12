@@ -54,7 +54,7 @@ const createMenu = () => page.locator('div.fixed.z-\\[60\\]')
 
 test('Create-new menu: 8 items navigate; closes on outside click and Escape', async () => {
   const items: [string, RegExp][] = [
-    ['Plan my marketing with AI', /\/app\/strategy\/new$/],
+    ['Plan my marketing with AI', /\/app\/strategy\/interview$/],
     ['New post or thread', /\/app\/posts\/new$/],
     ['New AI social post', /\/app\/create$/],
     ['New AI social campaign', /\/app\/campaigns\/new\?kind=social$/],

@@ -138,3 +138,19 @@ body {
     animation: none;
   }
 }
+
+/* Sidebar "Plan with Pilot": the brand gradient slowly runs round the card. */
+@keyframes pilot-shine {
+  to {
+    background-position: 200% 0;
+  }
+}
+.pilot-shine {
+  background-size: 200% 100%;
+  animation: pilot-shine 5s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pilot-shine {
+    animation: none;
+  }
+}

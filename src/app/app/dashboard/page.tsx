@@ -31,6 +31,7 @@ import { formatMoney, formatNumber, formatPercent } from '@/lib/format'
 import { formatMetric, metricDef } from '@/lib/goal-metrics'
 import { momentumOf } from '@/lib/momentum'
 import { prisma } from '@/lib/prisma'
+import { interviewState, type PilotState } from '@/lib/business'
 import { readinessOf } from '@/lib/readiness'
 import { STATUS as GOAL_STATUS, progressOf } from '../goals/GoalCards'
 import { goalName } from '../goals/GoalList'
@@ -89,10 +90,37 @@ function ChartCard({ title, children, right }: { title: string; children: ReactN
   )
 }
 
+// The strategy interview in the hero: up front until it is done.
+function PilotStrip({ pilot }: { pilot: PilotState }) {
+  const t = {
+    start: { title: 'Not sure where to start? Let Pilot interview you', sub: '3 minutes · ends with goals and a ready plan', cta: 'Start' },
+    continue: { title: 'Finish your strategy interview', sub: `${Math.round(pilot.progress * 100)}% done · goals and plan next`, cta: 'Continue' },
+    done: { title: 'Numbers changed? Update them with Pilot', sub: 'Your plans stay within what a customer may cost', cta: 'Update' },
+  }[pilot.state]
+  return (
+    <Link
+      href={pilot.href}
+      className={`group flex items-center gap-3 rounded-2xl bg-white/10 p-3 ring-1 ring-white/20 backdrop-blur transition hover:bg-white/15 ${pilot.state === 'done' ? 'mt-5' : 'mt-4'}`}
+    >
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#7b3ff2] via-[#ff2e6e] to-[#ff5b14] shadow-lg shadow-fuchsia-900/40">
+        <Sparkles size={18} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold">{t.title}</span>
+        <span className="block text-xs text-violet-200">{t.sub}</span>
+      </span>
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-white px-3.5 py-2 text-sm font-semibold text-[#3b1a8f] transition group-hover:gap-2">
+        {t.cta} <ArrowRight size={14} />
+      </span>
+    </Link>
+  )
+}
+
 const IDEAS = ['50 enquiries for the new building this month', 'Fill the weekend workshop', 'More orders for the holiday menu']
 
 export default async function DashboardPage({ searchParams }: PageProps<'/app/dashboard'>) {
-  const { workspace, brand } = await requireContext()
+  const { workspace, brand, role } = await requireContext()
+  const pilot = role === 'EDITOR' ? null : await interviewState(workspace.id)
   const q = await searchParams
   const range = parseRange(q.from, q.to)
   const period = (PERIODS.find((p) => String(p) === q.days) ?? 30) as Period
@@ -163,6 +191,7 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
               <Wand2 size={14} /> AI strategist
             </p>
             <h2 className="mt-1 text-2xl font-bold tracking-tight">What do you want to achieve?</h2>
+            {pilot && pilot.state !== 'done' && <PilotStrip pilot={pilot} />}
             <form action="/app/strategy/new" className="mt-4 flex flex-col gap-2 sm:flex-row">
               <label htmlFor="want" className="sr-only">
                 What do you want to achieve?
@@ -186,6 +215,7 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
                 </Link>
               ))}
             </div>
+            {pilot?.state === 'done' && <PilotStrip pilot={pilot} />}
             {(openAlerts > 0 || openRecs > 0) && (
               <div className="mt-5 flex flex-wrap gap-2 border-t border-white/15 pt-4">
                 {openAlerts > 0 && (
