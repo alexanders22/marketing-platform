@@ -194,6 +194,8 @@ model Workspace {
   mcpRequests      McpRequest[]
   conversations    Conversation[]
   brandFacts       BrandFact[]
+  businessFacts    BusinessFact[]
+  interviews       StrategyInterview[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -1055,6 +1057,40 @@ model BrandFact {
   createdAt   DateTime  @default(now())
 
   @@unique([workspaceId, question])
+}
+
+// The owner's business numbers and answers from the strategy interview
+// (src/lib/business.ts): one row per slot, e.g. avg_sale, margin, capacity.
+model BusinessFact {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  key         String
+  // { value: number | string | string[], label: string }
+  value       Json
+  // OWNER (answered), ESTIMATE ("not sure" → typical for the industry).
+  source      String    @default("OWNER")
+  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, key])
+}
+
+// A chat-style strategy interview: what we already know, the questions the AI
+// picked for this business, the answers, and the plan it ended with.
+model StrategyInterview {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // OPEN while answering, DONE once the plan is built.
+  status      String    @default("OPEN")
+  data        Json
+  planId      String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId, createdAt])
 }
 
 enum VideoStatus {

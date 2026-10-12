@@ -9,6 +9,8 @@ import { requireContext } from '@/lib/context'
 import type { DossierStats } from '@/lib/dossier'
 import { formatMoney, formatNumber, formatPercent } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
+import { businessFacts } from '@/lib/business'
+import { SLOTS, type SlotKey } from '@/lib/interview'
 import { FactDelete, RefreshButton } from './RefreshButton'
 
 export const metadata: Metadata = { title: 'Dossier — Loudpilot' }
@@ -66,6 +68,8 @@ export default async function DossierPage() {
     prisma.socialPost.count({ where: { workspaceId: workspace.id } }),
     prisma.brandFact.findMany({ where: { workspaceId: workspace.id }, orderBy: { updatedAt: 'desc' } }),
   ])
+  const business = await businessFacts(workspace.id)
+  const numbers = (Object.keys(SLOTS) as SlotKey[]).filter((k) => business.answers[k])
   const profile = profileRow?.data as CompanyProfile | undefined
   const audit = auditRow?.data as BrandAuditData | undefined
   const stats = auditRow?.stats as DossierStats | undefined
@@ -359,6 +363,30 @@ export default async function DossierPage() {
           </section>
         )
       )}
+
+      <Card title="Your business numbers">
+        <p className="-mt-2 mb-3 text-sm text-zinc-500">
+          From the strategy interview. Plans keep new customers cheaper than they earn you and within what you can take on.
+        </p>
+        {numbers.length > 0 && (
+          <dl className="mb-3 grid gap-x-6 sm:grid-cols-2" aria-label="Business numbers">
+            {numbers.map((k) => (
+              <div key={k} className="flex justify-between gap-3 border-b border-zinc-100 py-2 text-sm">
+                <dt className="text-zinc-500">{SLOTS[k].label}</dt>
+                <dd className="text-right font-medium">
+                  {business.answers[k]!.label}
+                  {business.answers[k]!.source === 'ESTIMATE' && <span className="ml-1 text-xs font-normal text-zinc-400">(typical)</span>}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {canEdit && (
+          <Link href="/app/strategy/interview" className="inline-flex rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-semibold text-white hover:bg-zinc-800">
+            {numbers.length ? 'Update in the interview' : 'Start the strategy interview'}
+          </Link>
+        )}
+      </Card>
 
       {facts.length > 0 && (
         <Card title="What you told Loudpilot">

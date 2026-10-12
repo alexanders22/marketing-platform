@@ -93,7 +93,9 @@ test.describe('onboarding', () => {
 
     // Pick Team, yearly.
     await page.getByRole('button', { name: /Start 7-day free trial/ }).nth(1).click()
-    await page.waitForURL(/\/app\/planner/)
+    // The app opens on the strategy interview.
+    await page.waitForURL(/\/app\/strategy\/interview\?welcome=1/)
+    await expect(page.getByRole('heading', { name: 'Let’s plan your first results' })).toBeVisible()
     expect(acct(email, 'a.plan, a."billingCycle", a."creditBalance"')).toBe('TEAM|YEARLY|50')
     const days = Number(acct(email, `round(extract(epoch from (a."trialEndsAt" - (now() at time zone 'utc')))/86400)`))
     expect(days).toBe(7)

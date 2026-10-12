@@ -9,6 +9,7 @@ import { METRICS } from './goal-metrics'
 import { prisma } from './prisma'
 import { zonedToUtc } from './time'
 import { holidaysBetween } from './holidays'
+import { businessEconomics } from './business'
 
 // Goal → plan: gathers what Loudpilot knows, asks the AI strategist, then checks
 // and completes its answer (budgets in money, forecasts from history, only
@@ -48,12 +49,13 @@ const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.p
 
 export async function buildPlan(workspaceId: string, input: PlanInput, createdById?: string) {
   const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId }, include: { brandKit: true, account: true } })
-  const [bench, stats, d30, campaigns, goals] = await Promise.all([
+  const [bench, stats, d30, campaigns, goals, business] = await Promise.all([
     benchmarks(workspaceId),
     computeStats(workspaceId),
     dashboard(workspaceId, 30),
     prisma.adCampaign.findMany({ where: { workspaceId, status: 'ACTIVE' }, select: { name: true, objective: true, dailyBudget: true } }),
     prisma.goal.findMany({ where: { workspaceId, active: true }, select: { metric: true, target: true, status: true } }),
+    businessEconomics(workspaceId),
   ])
   const currency = bench?.currency ?? d30.currency ?? ws.account?.currency ?? null
   const days = daysBetween(input.startsOn, input.endsOn)
@@ -64,6 +66,8 @@ export async function buildPlan(workspaceId: string, input: PlanInput, createdBy
     focus: input.focus || null,
     period: { from: input.startsOn, to: input.endsOn, days },
     budget: input.budget ? { total: input.budget, currency } : null,
+    // From the owner's interview: the limits the plan must respect.
+    businessEconomics: business,
     connected: d30.connected,
     pastResults: {
       last30Days: { ...d30.current, resultLabel: d30.resultLabel, currency: d30.currency },

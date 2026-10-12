@@ -6,6 +6,7 @@ import { prisma } from './prisma'
 import { safeFetchText } from './safe-fetch'
 import { isValidTimeZone } from './time'
 import { ACTIVE_WORKSPACE } from './pause'
+import { businessBrief } from './business'
 
 // The dossier: what Loudpilot knows about a company — its website, its post and
 // ad history, and the audit of what worked. Every AI feature reads it.
@@ -328,6 +329,8 @@ export async function dossierBrief(workspaceId: string) {
     )
   }
   if (site.length) lines.push(websiteLine(site))
+  const business = await businessBrief(workspaceId)
+  if (business) lines.push(business)
   if (rivals) {
     const r = rivals.data as { positioning?: string; wins?: string[]; gaps?: string[]; perCompetitor?: { name: string }[] }
     lines.push(

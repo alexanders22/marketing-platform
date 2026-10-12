@@ -26,9 +26,17 @@ export default async function StrategyPage() {
           <p className="text-sm text-zinc-500">Tell Loudpilot what you want to achieve. Your AI strategist plans the audiences, budget, ads, posts and goals.</p>
         </div>
         {canEdit && (
-          <Link href="/app/strategy/new" className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800">
-            <Plus size={16} /> New plan
-          </Link>
+          <>
+            <Link href="/app/strategy/new" className="rounded-lg border border-zinc-200 px-4 py-2.5 text-sm font-semibold hover:bg-zinc-50">
+              Quick form
+            </Link>
+            <Link
+              href="/app/strategy/interview"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#7b3ff2] via-[#ff2e6e] to-[#ff5b14] px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110"
+            >
+              <Plus size={16} /> New plan
+            </Link>
+          </>
         )}
       </div>
       {plans.length === 0 ? (
@@ -38,11 +46,11 @@ export default async function StrategyPage() {
           </span>
           <h2 className="mt-4 text-lg font-semibold">“I want more sales” is enough to start</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-zinc-500">
-            The strategist reads your dossier — website, past posts and ads — and comes back with a plan you approve piece by piece.
+            A short chat about your business — the strategist already read your website, posts and ads — ends with goals and a plan you approve piece by piece.
           </p>
           {canEdit && (
-            <Link href="/app/strategy/new" className="mt-5 inline-flex rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white">
-              Ask the strategist
+            <Link href="/app/strategy/interview" className="mt-5 inline-flex rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white">
+              Start the strategy interview
             </Link>
           )}
         </section>

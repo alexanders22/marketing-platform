@@ -439,6 +439,7 @@ export async function generateStrategy(brandName: string, brand: Brand | null, b
     '- Posts: only for the first 14 days of the period, 3–10 posts, each with a ready caption and 3–8 hashtags (no #). Dates YYYY-MM-DD inside the period, time HH:MM.',
     '- Goals use only these metric ids — ads: cost_per_result, results, ctr, cpm, spend; posts: posts, reach, avg_reach, engagements, engagement_rate, views; website (only when the facts include website numbers): site_key_events, site_cost_per_key_event, site_visits, site_conversion_rate. scope "ADS", "POSTS" or "WEBSITE"; percent targets in percent (2 = 2%). Money targets only when the facts give a currency and past cost per result.',
     '- If there is no ad budget, plan organic only and say what an ad budget would add.',
+    '- If the brief has businessEconomics: a new customer must cost less than maxCostPerCustomer and an enquiry less than maxCostPerLead (set a cost_per_result goal at or below it when the ads aim for leads); never plan more new customers a month than newCustomersPerMonthCapacity. If the goal is out of reach for the budget, say so in "diagnosis" with what it would take.',
     brandContext(brandName, brand),
     MARKETING_PLAYBOOK,
     `Write in ${language}.`,
@@ -713,6 +714,50 @@ export async function adviseBrief(
       }))
       .filter((i) => i.title && i.prompt),
   }
+}
+
+export type InterviewDraft = {
+  vocabulary: { customer: string; customers: string }
+  known: { label: string; text: string }[]
+  questions: { key: string; text: string; options: { label: string; value: string }[]; hint: string; estimate: string }[]
+  estimates: { costPerLead: number; leadToSale: number }
+}
+
+// The strategy interview, written for this business: which business
+// questions matter here (from a fixed list of slots), in its own words
+// ("shops", "parcels"), with answer chips, a typical range and a typical value
+// for "not sure". What the dossier already says is confirmed, not asked.
+export async function composeInterview(
+  brandName: string,
+  brand: Brand | null,
+  input: { slots: { key: string; kind: string; question: string; required: boolean }[]; facts: unknown; currency: string; language: PostOptions['language'] },
+): Promise<Partial<InterviewDraft>> {
+  const system = [
+    'You are the strategy director of a marketing agency preparing a short interview with a new client, before planning their advertising. The client is a busy owner: few questions, all of them relevant, in their own business terms.',
+    'Do this:',
+    '1. "vocabulary": how this business names one customer and many (e.g. "shop"/"shops" for a courier serving online shops, "guest"/"guests" for a café, "client"/"clients"), lower case.',
+    '2. "known": 2–5 short facts the dossier states about the business that matter for advertising (what they sell, to whom, prices, where). Not ad costs or spend — the system adds those. "label" is 1–2 words in sentence case, "text" one short line. Only stated facts, never guesses — the owner confirms them.',
+    '3. "questions": pick 6–10 slots from the list, the ones that matter for THIS business and are not already clear from the dossier or the answers. Always include the required ones unless the dossier states them. Never ask what the dossier or answers already tell (e.g. do not ask a parcel service whether it is a café). For each: "key" (the slot), "text" one short question in the business’s own terms that keeps the slot’s meaning and unit exactly (e.g. capacity is new customers a month, purchases is per customer per year), "options" 3–5 answer chips the owner would tap, "hint" one short line with what is typical in this industry and market (e.g. "Courier services usually run 15–25%"), or "" if unsure, "estimate" a typical value used when the owner does not know (number as text for numeric slots, "" for text slots).',
+    `Options: for money slots the value is a number in ${input.currency} (the middle of the range) and the label shows the range with the currency; percent slots use numbers 0–100; number slots plain numbers; choice and multi slots short lower-case ids. Text slots have no options.`,
+    `4. "estimates": "costPerLead" — what one enquiry from Meta ads typically costs such a business in its market, in ${input.currency}; "leadToSale" — typical percent of enquiries that buy. Use the account’s own ad costs from the facts when given.`,
+    brandContext(brandName, brand),
+    `Write vocabulary, known, questions, options and hints in ${input.language}.`,
+  ].join('\n\n')
+  const str = { type: 'string' }
+  const obj = (props: Record<string, unknown>) => ({ type: 'object', properties: props, required: Object.keys(props) })
+  const schema = obj({
+    vocabulary: obj({ customer: str, customers: str }),
+    known: { type: 'array', items: obj({ label: str, text: str }) },
+    questions: { type: 'array', items: obj({ key: { type: 'string', enum: input.slots.map((x) => x.key) }, text: str, options: { type: 'array', items: obj({ label: str, value: str }) }, hint: str, estimate: str }) },
+    estimates: obj({ costPerLead: { type: 'number' }, leadToSale: { type: 'number' } }),
+  })
+  return json<Partial<InterviewDraft>>(
+    system,
+    [`Slots (key, kind, plain question, required):\n${input.slots.map((x) => `${x.key} | ${x.kind} | ${x.question} | ${x.required ? 'required' : 'optional'}`).join('\n')}`, `Facts:\n${JSON.stringify(input.facts)}`].join('\n\n'),
+    6000,
+    90_000,
+    schema,
+  )
 }
 
 export type VideoScript = {

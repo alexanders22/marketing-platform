@@ -79,7 +79,8 @@ export function Onboarding({ mode: flow = 'first' }: { mode?: 'first' | 'company
     <div className="min-h-screen bg-[#f4f3f1] px-4 py-10 text-zinc-900 sm:py-16">
       {step === 'plan' ? (
         <div className="mx-auto max-w-6xl">
-          <PlanPicker after="/app" />
+          {/* First thing in the app: the strategy interview (it can be skipped). */}
+          <PlanPicker after={flow === 'company' ? '/app' : '/app/strategy/interview?welcome=1'} />
         </div>
       ) : (
         <div className="mx-auto max-w-3xl rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5 sm:p-10">
