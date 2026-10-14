@@ -21,6 +21,8 @@ import { veoAllowance, veoLimitMessage } from '@/lib/credits'
 import { clipAction } from '@/lib/pricing'
 import { aiError } from '@/lib/ai-health'
 import { IMAGE_STYLES, SKETCH_PAPER } from '@/lib/image-styles'
+import { resolveImageStyle, videoLook } from '@/lib/style-ref'
+import type { VideoLook } from '@/lib/ai'
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/)
 const SceneSchema = z.object({
@@ -251,7 +253,7 @@ export async function listVideoMedia(kind: 'visual' | 'audio') {
     take: 80,
   })
   return rows
-    .filter((m) => !(m.prompt?.startsWith('Video poster') || m.prompt?.startsWith('Poster:')))
+    .filter((m) => !(m.prompt?.startsWith('Video poster') || m.prompt?.startsWith('Poster:') || m.prompt?.startsWith('Style reference:')))
     .map((m) => ({
       id: m.id,
       kind: m.kind === 'VIDEO' ? ('video' as const) : m.kind === 'AUDIO' ? ('audio' as const) : ('image' as const),
@@ -336,7 +338,19 @@ const AiInput = z.object({
   language: z.string(),
   // sketch: hand-drawn whiteboard explainer (ink on paper).
   look: z.enum(['standard', 'sketch']).optional(),
+  // A video style copied from a reference (StyleRef): its structure, look,
+  // text, transitions, voice and music.
+  styleId: z.string().max(40).optional(),
+  // With a copied style: AI music in the reference's mood.
+  music: z.boolean().optional(),
 })
+
+// A voice like the reference's.
+function voiceLike(v: VideoLook['voice']) {
+  const lively = /upbeat|energ|excit|bright|cheer|fun|hype/i.test(v.tone)
+  if (v.gender === 'male') return lively ? 'Puck' : /calm|deep|serious|warm/i.test(v.tone) ? 'Charon' : 'Fenrir'
+  return lively ? 'Aoede' : 'Kore'
+}
 
 // Script → scenes with text and voice lines → visuals (your photos and clips
 // in order, AI images, or brand colours) → voice-over. Opens in the editor.
@@ -350,7 +364,12 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
   const format: Format = isFormat(input.format) ? input.format : '9:16'
   const language = LANGUAGES.find((l) => l === input.language) ?? 'English'
   const veoMode = input.visuals === 'veo' ? (input.veoMode ?? 'text') : null
-  const sketch = input.look === 'sketch'
+  const ref = input.styleId ? await videoLook(workspace.id, input.styleId) : null
+  if (input.styleId && !ref) return { error: 'Style not found' }
+  const sketch = !ref && input.look === 'sketch'
+  // The reference sets the number of scenes.
+  if (ref) input.scenes = Math.min(8, Math.max(3, ref.beats.length))
+  const withMusic = Boolean(ref && input.music && ref.music.used)
   // Veo keeps a character only on Pro/Cinema and in 8-second clips.
   const clipQuality: ClipQuality = veoMode === 'character' && (input.clipQuality ?? 'quick') === 'quick' ? 'pro' : (input.clipQuality ?? 'quick')
   const clipSeconds = veoMode === 'character' ? 8 : 4
@@ -370,7 +389,8 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     COST.videoScript +
     (input.voice ? COST.voice : 0) +
     (input.visuals === 'ai' ? input.scenes * COST.image : 0) +
-    (input.visuals === 'veo' ? input.scenes * COST[clipAction(clipQuality)] * clipSeconds : 0)
+    (input.visuals === 'veo' ? input.scenes * COST[clipAction(clipQuality)] * clipSeconds : 0) +
+    (withMusic ? COST.music : 0)
   if (input.visuals === 'veo' && !veoEnabled() && !input.brief.startsWith('[test]')) return { error: 'AI video is not connected yet.' }
   if (input.visuals === 'veo' && !isPaid(account) && user.role !== 'SUPER_ADMIN') return { error: PAID_ONLY }
   if (input.visuals === 'veo' && user.role !== 'SUPER_ADMIN') {
@@ -382,7 +402,14 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
   const known = await withDossier(brand, workspace.id)
   let script
   try {
-    script = await videoScript(workspace.name, known, { brief: input.brief, scenes: input.scenes, language, voice: input.voice, look: sketch ? 'sketch' : undefined })
+    script = await videoScript(workspace.name, known, {
+      brief: input.brief,
+      scenes: input.scenes,
+      language,
+      voice: input.voice,
+      look: sketch ? 'sketch' : undefined,
+      reference: ref ? { hook: ref.hook, beats: ref.beats.slice(0, input.scenes), voice: ref.voice } : undefined,
+    })
   } catch (e) {
     console.error('videoScript failed', e)
     return { error: aiError(e, 'The AI could not write this video. Try again.') }
@@ -401,33 +428,37 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     posterUrl: m.posterId ? mediaUrl(m.posterId) : null,
   })
 
+  // Pictures in the reference's look (its still goes along as the style reference).
+  const refStyle = ref ? await resolveImageStyle(workspace.id, `ref:${input.styleId}`) : undefined
   let images: (SceneMedia | null)[] = []
   if (input.visuals === 'ai') {
     const aspect = format === '16:9' ? '16:9' : format === '1:1' ? '1:1' : format === '4:5' ? '4:5' : '9:16'
     const res = await Promise.allSettled(
       script.scenes.map((sc, i) =>
-        generateImage(workspace.name, known, sc.visual, `${sc.text}. ${sc.voice}`, i, [], aspect, sketch ? IMAGE_STYLES.sketch : undefined).then((img) => saveMedia(workspace.id, img.data, img.mime, sc.visual)),
+        generateImage(workspace.name, known, sc.visual, `${sc.text}. ${sc.voice}`, i, [], aspect, sketch ? IMAGE_STYLES.sketch : refStyle).then((img) => saveMedia(workspace.id, img.data, img.mime, sc.visual)),
       ),
     )
     images = res.map((r) => (r.status === 'fulfilled' ? { id: r.value.id, kind: 'image', url: mediaUrl(r.value.id), durationMs: null, posterUrl: null } : null))
     res.forEach((r) => r.status === 'rejected' && console.error('scene image failed', r.reason))
   }
 
-  const bg = sketch ? SKETCH_PAPER : brandColor(brand?.colors)
+  const bg = sketch ? SKETCH_PAPER : (ref?.palette[0] ?? brandColor(brand?.colors))
+  const beat = (i: number) => ref?.beats[i]
   const doc: VideoDoc = {
     ...emptyDoc(bg),
+    ...(ref ? { transition: ref.transition, voiceName: voiceLike(ref.voice) } : {}),
     scenes: script.scenes.map((sc, i) =>
       newScene(bg, {
         // Photos being animated show until their clips arrive.
         media: input.visuals === 'ai' ? images[i] : photos.length ? asSceneMedia(photos[i % photos.length]) : ordered.length ? asSceneMedia(ordered[i % ordered.length]) : null,
-        duration: sc.seconds,
+        duration: beat(i)?.seconds ?? sc.seconds,
         text: sc.text,
         voice: sc.voice,
         // White bold text is lost on sketch paper; boxes read on any picture.
-        style: i === 0 ? (sketch ? 'box' : 'bold') : 'caption',
-        position: i === 0 ? 'center' : 'bottom',
+        style: ref ? ref.textStyle : i === 0 ? (sketch ? 'box' : 'bold') : 'caption',
+        position: ref ? ref.textPosition : i === 0 ? 'center' : 'bottom',
         // Sketches only breathe; pans would cut the drawing off.
-        motion: sketch ? (['zoom-in', 'zoom-out'] as const)[i % 2] : (['zoom-in', 'pan-right', 'zoom-out', 'pan-left'] as const)[i % 4],
+        motion: beat(i)?.camera ?? (sketch ? (['zoom-in', 'zoom-out'] as const)[i % 2] : (['zoom-in', 'pan-right', 'zoom-out', 'pan-left'] as const)[i % 4]),
       }),
     ),
     caption: [script.caption, script.hashtags.map((h) => `#${h}`).join(' ')].filter(Boolean).join('\n\n'),
@@ -448,8 +479,23 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     }
   }
 
+  // Music in the reference's mood.
+  let scored = false
+  if (withMusic && ref) {
+    const brief = ref.music.prompt || `${ref.music.mood} instrumental background music`
+    try {
+      const track = await generateMusic(brief)
+      const m = await saveGeneratedMusic(workspace.id, track.data, track.mime, brief)
+      doc.music = { mediaId: m.id, url: mediaUrl(m.id), name: `AI: ${brief.slice(0, 60)}`, volume: 0.6 }
+      scored = true
+    } catch (e) {
+      console.error('reference music failed', e)
+    }
+  }
+
   const drawn = images.filter(Boolean).length
   const ok = await charge(account.id, workspace.id, [
+    { amount: scored ? COST.music : 0, reason: 'AI_VIDEO', note: 'Video music', action: 'music', units: 1 },
     { amount: COST.videoScript, reason: 'AI_VIDEO', note: 'Video script', action: 'videoScript', units: 1 },
     { amount: voiced ? COST.voice : 0, reason: 'AI_VIDEO', note: 'Video voice-over', action: 'voice', units: 1 },
     { amount: drawn * COST.image, reason: 'AI_IMAGE', note: `${drawn} video scene image${drawn === 1 ? '' : 's'}`, action: 'image', units: drawn },
@@ -472,7 +518,9 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
           ? `Bring this photo to life: ${visual}. Gentle, realistic camera and subject motion; keep the place and people as they are. No text on screen.`
           : sketch
             ? `${visual}. Hand-drawn whiteboard explainer animation: thin black ink lines draw themselves stroke by stroke on plain warm off-white paper, simple doodle characters move a little, one or two small flat colour accents on the key object, static camera. No text on screen.`
-            : `${visual}. Vertical social video, no text on screen.`
+            : ref
+              ? `${visual}. Look: ${ref.prompt} No text on screen.`
+              : `${visual}. Vertical social video, no text on screen.`
       const res = await beginClip(account.id, balance, workspace.id, {
         prompt: input.brief.startsWith('[test]') ? `[test] ${prompt}` : prompt,
         quality: clipQuality,

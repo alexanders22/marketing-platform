@@ -122,7 +122,8 @@ export async function generateImage(
       : '',
     `Post brief: ${brief}`,
     `Post caption: ${caption.slice(0, 600)}`,
-    attachments.length ? 'Use the attached images as the product/subject reference — keep it recognisable.' : '',
+    attachments.length ? `Use the ${style?.reference ? 'first ' + attachments.length + ' attached image(s)' : 'attached images'} as the product/subject reference — keep it recognisable.` : '',
+    style?.reference ? 'The LAST attached image is a style reference: match its look — medium, palette, light, texture, composition and mood — but not its subject, people, text or logos.' : '',
     style ? `Make it ${style.prompt}. No words, letters, logos or watermarks in the image.` : 'Photorealistic or clean modern graphic style. No words, letters, logos or watermarks in the image.',
     variant > 0 ? `This is alternative #${variant + 1}: use a clearly different composition.` : '',
   ]
@@ -137,7 +138,7 @@ export async function generateImage(
         contents: [
           {
             role: 'user',
-            parts: [...attachments.map((a) => ({ inlineData: { mimeType: a.mime, data: a.data } })), { text: prompt }],
+            parts: [...[...attachments, ...(style?.reference ? [style.reference] : [])].map((a) => ({ inlineData: { mimeType: a.mime, data: a.data } })), { text: prompt }],
           },
         ],
         config: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspect }, abortSignal: AbortSignal.timeout(90_000) },
@@ -760,6 +761,136 @@ export async function composeInterview(
   )
 }
 
+/* ─── Copying a style from a reference ─────────────────────────────────── */
+
+export type ImageLook = {
+  name: string
+  summary: string
+  // For the image generator: how it looks, never what it shows.
+  prompt: string
+  palette: string[]
+}
+
+export type VideoBeat = { role: string; seconds: number; shot: string; camera: 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | 'none'; text: string }
+
+export type VideoLook = ImageLook & {
+  hook: string
+  beats: VideoBeat[]
+  textStyle: 'bold' | 'box' | 'caption' | 'minimal'
+  textPosition: 'top' | 'center' | 'bottom'
+  transition: 'cut' | 'fade'
+  voice: { used: boolean; tone: string; gender: 'female' | 'male' | 'none' }
+  music: { used: boolean; mood: string; prompt: string }
+}
+
+const LOOK_RULES = [
+  '"name": 2–4 words naming the look (e.g. "Moody film grain", "Bold pop flat"). "summary": one sentence a marketer understands.',
+  '"prompt": one paragraph for an image generator describing ONLY the visual style — medium (photo, 3D, illustration…), lighting, colour palette and grading, texture/grain, composition and framing, depth of field, mood. Never the subject, people, products, brands, text or logos, so it can be reused for any brand.',
+  '"palette": 3–6 dominant colours as #RRGGBB.',
+]
+
+const lookSchema = {
+  name: { type: 'string' },
+  summary: { type: 'string' },
+  prompt: { type: 'string' },
+  palette: { type: 'array', items: { type: 'string' } },
+}
+
+const cleanLook = (o: Partial<ImageLook> | null | undefined): ImageLook => ({
+  name: String(o?.name ?? '').trim().slice(0, 40) || 'My style',
+  summary: String(o?.summary ?? '').trim().slice(0, 300),
+  prompt: String(o?.prompt ?? '').trim().slice(0, 1200),
+  palette: (Array.isArray(o?.palette) ? o.palette : []).map((c) => String(c).trim()).filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 6),
+})
+
+async function lookAt<T>(parts: Part[], system: string, schema: unknown, timeoutMs: number): Promise<T> {
+  if (!client) throw new Error('AI is not configured')
+  const res = await retrying((model) =>
+    client.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts }],
+      config: { systemInstruction: system, responseMimeType: 'application/json', responseJsonSchema: schema, maxOutputTokens: 4000, abortSignal: AbortSignal.timeout(timeoutMs) },
+    }),
+  )
+  return JSON.parse(res.text ?? 'null') as T
+}
+
+// A video for the model to watch: uploaded to the Gemini Files API, ready
+// once processed; `done` deletes it again.
+export async function videoForAI(file: string, mimeType: string): Promise<{ part: Part; done: () => Promise<void> }> {
+  if (!client) throw new Error('AI is not configured')
+  let f = await client.files.upload({ file, config: { mimeType } })
+  const until = Date.now() + 3 * 60_000
+  while (f.state === 'PROCESSING' && Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 2000))
+    f = await client.files.get({ name: f.name! })
+  }
+  const done = () => client.files.delete({ name: f.name! }).then(() => undefined, () => undefined)
+  if (f.state !== 'ACTIVE' || !f.uri) {
+    await done()
+    throw new Error('The video could not be processed')
+  }
+  return { part: { fileData: { fileUri: f.uri, mimeType } }, done }
+}
+
+// The look of a reference picture, reusable for any brand.
+export async function analyzeImageStyle(image: Part): Promise<ImageLook> {
+  const system = ['You are an art director. Describe the visual style of the attached image so a generator can make new, different images that look like they belong to the same series.', ...LOOK_RULES].join('\n\n')
+  const out = await lookAt<Partial<ImageLook>>([image, { text: 'Describe this style.' }], system, { type: 'object', properties: lookSchema, required: Object.keys(lookSchema) }, 90_000)
+  const look = cleanLook(out)
+  if (!look.prompt) throw new Error('The AI could not read this style')
+  return look
+}
+
+const CAMERAS = ['zoom-in', 'zoom-out', 'pan-left', 'pan-right', 'none'] as const
+
+// The recipe of a reference video: its look and how it is built — beats,
+// pacing, on-screen text, transitions, voice and music — to make a new video
+// for another brand the same way.
+export async function analyzeVideoStyle(video: Part): Promise<VideoLook> {
+  const system = [
+    'You are the editor of a social video agency. Watch the attached video and write the recipe to make a NEW video for a different brand in exactly the same style and structure.',
+    ...LOOK_RULES.map((r) => r.replace('the attached image', 'the footage')),
+    '"hook": what the first 1–2 seconds do to stop the scroll, in one line.',
+    '"beats": the video split into 3–10 scenes in order: "role" (hook, problem, product, demo, benefit, proof, offer, cta or other), "seconds" (its length), "shot" (the kind of shot in generic words — e.g. "close-up of hands using the product", "person talking to camera" — no brand names), "camera" (zoom-in, zoom-out, pan-left, pan-right or none — the closest move), "text" (the pattern of on-screen text, e.g. "a question in 4 words", or "" if none).',
+    '"textStyle": bold (big white words), box (text on a colour box), caption (subtitles) or minimal; "textPosition": top, center or bottom; "transition": cut or fade.',
+    '"voice": used (true if someone speaks over it), tone (e.g. "upbeat, friendly"), gender (female, male or none). "music": used, mood, and "prompt" — a one-line brief for an AI music generator for an instrumental track like it (genre, tempo, instruments, mood).',
+  ].join('\n\n')
+  const str = { type: 'string' }
+  const obj = (props: Record<string, unknown>) => ({ type: 'object', properties: props, required: Object.keys(props) })
+  const schema = obj({
+    ...lookSchema,
+    hook: str,
+    beats: { type: 'array', items: obj({ role: str, seconds: { type: 'number' }, shot: str, camera: { type: 'string', enum: [...CAMERAS] }, text: str }) },
+    textStyle: { type: 'string', enum: ['bold', 'box', 'caption', 'minimal'] },
+    textPosition: { type: 'string', enum: ['top', 'center', 'bottom'] },
+    transition: { type: 'string', enum: ['cut', 'fade'] },
+    voice: obj({ used: { type: 'boolean' }, tone: str, gender: { type: 'string', enum: ['female', 'male', 'none'] } }),
+    music: obj({ used: { type: 'boolean' }, mood: str, prompt: str }),
+  })
+  const out = await lookAt<Partial<VideoLook>>([video, { text: 'Write the recipe.' }], system, schema, 180_000)
+  const look = cleanLook(out)
+  const s = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n)
+  const beats = (Array.isArray(out?.beats) ? out.beats : []).slice(0, 10).map((b) => ({
+    role: s(b?.role, 20) || 'other',
+    seconds: Math.min(8, Math.max(1, Math.round((Number(b?.seconds) || 3) * 10) / 10)),
+    shot: s(b?.shot, 200),
+    camera: (CAMERAS as readonly string[]).includes(String(b?.camera)) ? (b.camera as VideoBeat['camera']) : 'none',
+    text: s(b?.text, 120),
+  }))
+  if (!look.prompt || beats.length < 2) throw new Error('The AI could not read this video')
+  return {
+    ...look,
+    hook: s(out?.hook, 200),
+    beats,
+    textStyle: (['bold', 'box', 'caption', 'minimal'] as const).find((x) => x === out?.textStyle) ?? 'bold',
+    textPosition: (['top', 'center', 'bottom'] as const).find((x) => x === out?.textPosition) ?? 'bottom',
+    transition: out?.transition === 'cut' ? 'cut' : 'fade',
+    voice: { used: out?.voice?.used === true, tone: s(out?.voice?.tone, 80), gender: out?.voice?.gender === 'male' ? 'male' : out?.voice?.gender === 'female' ? 'female' : 'none' },
+    music: { used: out?.music?.used !== false, mood: s(out?.music?.mood, 80), prompt: s(out?.music?.prompt, 300) },
+  }
+}
+
 export type VideoScript = {
   title: string
   caption: string
@@ -774,10 +905,14 @@ export async function videoScript(
   brandName: string,
   brand: Brand | null,
   // sketch: a hand-drawn whiteboard explainer — each visual is one simple drawing.
-  input: { brief: string; scenes: number; language: PostOptions['language']; voice: boolean; look?: 'sketch' },
+  input: { brief: string; scenes: number; language: PostOptions['language']; voice: boolean; look?: 'sketch'; reference?: Pick<VideoLook, 'hook' | 'beats' | 'voice'> },
 ): Promise<VideoScript> {
+  const ref = input.reference
   const system = [
     'You write short social videos (Reels, Stories, TikTok) for one brand.',
+    ref
+      ? `Copy the structure of a reference video the client liked, scene by scene, for THIS brand: ${ref.beats.map((b, i) => `scene ${i + 1} — ${b.role}, ~${b.seconds}s, shot: ${b.shot}${b.text ? `, on-screen text: ${b.text}` : ''}`).join('; ')}. Its hook: ${ref.hook}.${ref.voice.used && ref.voice.tone ? ` Voice-over tone: ${ref.voice.tone}.` : ''} Keep the same rhythm; the content is about the brief, not the reference.`
+      : '',
     `Write exactly ${input.scenes} scenes. Scene 1 is a hook that stops the scroll; the last scene is a clear call to action.`,
     '"text": on-screen text, at most 7 words. ' + (input.voice ? '"voice": the voice-over line for the scene, natural spoken language, 6–18 words.' : '"voice": empty string.'),
     input.look === 'sketch'

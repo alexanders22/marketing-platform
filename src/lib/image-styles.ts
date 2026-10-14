@@ -1,6 +1,10 @@
 // Looks for AI images, shared by the pickers (client) and the generator.
 // `ownPalette`: the look has its own colours, brand colours only as accents.
-export type ImageStyleDef = { label: string; prompt: string; ownPalette?: boolean }
+// `reference`: a picture of the look (a copied style), sent to the image model.
+export type ImageStyleDef = { label: string; prompt: string; ownPalette?: boolean; reference?: { mime: string; data: string } }
+
+// A style copied from a reference (StyleRef) is picked as "ref:<id>".
+export const isRefStyle = (id: string) => id.startsWith('ref:')
 
 export const IMAGE_STYLES = {
   realistic: { label: 'Realistic photo', prompt: 'a realistic professional photograph, natural light, true-to-life colours, sharp' },

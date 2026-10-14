@@ -7,12 +7,11 @@ import { Modal } from '@/components/ui/Popover'
 import { usePrices } from '@/components/Prices'
 import { TEMPLATE_PHOTO, TEMPLATE_PHOTO_LIBRARY, templatePhotoUrl } from '@/lib/design'
 import { ImageStylePicker } from '@/components/ImageStylePicker'
-import type { ImageStyle } from '@/lib/image-styles'
 import { VideoMediaPicker } from '../studio/video/VideoMediaPicker'
 
 export type ImagesChoice =
   | null
-  | { mode: 'ai'; prompt: string | null; style: ImageStyle }
+  | { mode: 'ai'; prompt: string | null; style: string }
   | { mode: 'photos'; photoIds: string[] }
   | { mode: 'videos'; videoIds: string[] }
 
@@ -50,7 +49,7 @@ export function CampaignImagesModal({
   const [clipPicker, setClipPicker] = useState(false)
   const [source, setSource] = useState<'post' | 'custom'>('post')
   const [prompt, setPrompt] = useState('')
-  const [style, setStyle] = useState<ImageStyle>('realistic')
+  const [style, setStyle] = useState<string>('realistic')
   const [picked, setPicked] = useState<Picked[]>([])
   const [library, setLibrary] = useState(false)
 

@@ -11,7 +11,6 @@ import { MediaPicker, type PickedMedia } from '@/components/MediaPicker'
 import { designFromMedia } from '../studio/actions'
 import { deletePost, generatePostImages, publishNow, savePost } from './actions'
 import { ImageStylePicker } from '@/components/ImageStylePicker'
-import type { ImageStyle } from '@/lib/image-styles'
 import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
 import { CtaPicker } from '@/components/CtaPicker'
@@ -106,7 +105,8 @@ export function PostEditor({
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiCount, setAiCount] = useState(1)
   const [aiSource, setAiSource] = useState<'post' | 'custom'>('post')
-  const [aiStyle, setAiStyle] = useState<ImageStyle>('realistic')
+  // A built-in style or a copied one ("ref:<id>").
+  const [aiStyle, setAiStyle] = useState<string>('realistic')
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string>()
   const [saved, setSaved] = useState(false)

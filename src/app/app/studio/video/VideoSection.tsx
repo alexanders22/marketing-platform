@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
-import { Clapperboard, Film, ImageIcon, Loader2, Palette, PenLine, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { useEffect, useState, useTransition } from 'react'
+import { Clapperboard, Copy, Film, ImageIcon, Loader2, Palette, PenLine, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Popover'
 import { CLIP_QUALITIES, FORMATS, type ClipQuality, type Format } from '@/lib/video'
 import { createVideo, createVideoFromTemplate, createVideoWithAI, deleteVideo } from './actions'
@@ -11,9 +11,15 @@ import { templatePhotoUrl } from '@/lib/design'
 import { VIDEO_TEMPLATES } from '@/lib/video-templates'
 import { VideoMediaPicker, type LibraryItem } from './VideoMediaPicker'
 import { VeoMeter } from './[id]/VideoEditor'
-import { clipAction } from '@/lib/pricing'
+import { clipAction, creditsLabel } from '@/lib/pricing'
+import { CopyStyleDialog } from '@/components/CopyStyleDialog'
+import type { StyleView } from '@/lib/style-ref'
+import { myStyles } from '../styles/actions'
 import { usePrices } from '@/components/Prices'
 import { confirmDialog } from '@/components/ui/Dialog'
+
+// standard · whiteboard sketch · a style copied from a reference video.
+type Look = 'standard' | 'sketch' | 'reference'
 
 export type VideoCard = { id: string; name: string; format: string; status: string; poster: string | null; seconds: number; updatedAt: string }
 
@@ -41,8 +47,9 @@ export function VideoSection({
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
-  // The modal opens with the standard look, or preset to the whiteboard sketch.
-  const [ai, setAi] = useState<'standard' | 'sketch' | null>(initialAiBrief ? 'standard' : null)
+  // The modal opens with the standard look, or preset to the whiteboard
+  // sketch or to a style copied from a reference video.
+  const [ai, setAi] = useState<Look | null>(initialAiBrief ? 'standard' : null)
   const [, start] = useTransition()
 
   const [tplFormat, setTplFormat] = useState<Format>('9:16')
@@ -73,6 +80,12 @@ export function VideoSection({
           <p className="text-sm text-zinc-500">Reels and Stories from your photos and clips — text, motion, voice-over, music and your logo at the end.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setAi('reference')}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#6a32d8] ring-1 ring-[#7b3ff2]/40 hover:bg-violet-50"
+          >
+            <Copy size={15} /> Like a video I saw
+          </button>
           <button onClick={() => setAi('sketch')} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-800 ring-1 ring-zinc-200 hover:bg-zinc-50">
             <PenLine size={15} /> Whiteboard explainer
           </button>
@@ -184,7 +197,7 @@ function AiVideoModal({
   initialLook = 'standard',
 }: {
   initialBrief?: string
-  initialLook?: 'standard' | 'sketch'
+  initialLook?: Look
   onClose: () => void
   paid: boolean
   veo: { used: number; limit: number; left: number } | null
@@ -195,8 +208,13 @@ function AiVideoModal({
   const [format, setFormat] = useState<Format>('9:16')
   const [scenes, setScenes] = useState(5)
   const [look, setLook] = useState(initialLook)
-  // Sketches are drawn, so the whiteboard look starts with AI images.
-  const [visuals, setVisuals] = useState<'library' | 'ai' | 'veo' | 'none'>(initialLook === 'sketch' ? 'ai' : 'library')
+  // Sketches and copied looks are drawn, so they start with AI images.
+  const [visuals, setVisuals] = useState<'library' | 'ai' | 'veo' | 'none'>(initialLook === 'standard' ? 'library' : 'ai')
+  // Video styles copied from references, and the one picked.
+  const [refs, setRefs] = useState<StyleView[] | null>(null)
+  const [styleId, setStyleId] = useState<string | null>(null)
+  const [music, setMusic] = useState(true)
+  const [copying, setCopying] = useState(false)
   const [clipQuality, setClipQuality] = useState<ClipQuality>('quick')
   const [veoMode, setVeoMode] = useState<'text' | 'photos' | 'character'>('text')
   const [characterId, setCharacterId] = useState(characters[0]?.id ?? '')
@@ -210,7 +228,30 @@ function AiVideoModal({
   const [error, setError] = useState<string>()
   const [pending, start] = useTransition()
   const P = usePrices()
-  const cost = P.videoScript + (voice ? P.voice : 0) + (visuals === 'ai' ? scenes * P.image : 0) + (visuals === 'veo' ? scenes * P[clipAction(quality)] * clipSeconds : 0)
+  const pickStyle = (r: StyleView) => {
+    setStyleId(r.id)
+    setVoice(r.voice)
+    if (r.beats) setScenes(Math.min(8, Math.max(3, r.beats)))
+  }
+  const picked = look === 'reference' ? (refs?.find((r) => r.id === styleId) ?? null) : null
+  useEffect(() => {
+    myStyles('VIDEO').then(
+      (list) => {
+        setRefs(list)
+        if (initialLook === 'reference' && list[0]) pickStyle(list[0])
+      },
+      () => setRefs([]),
+    )
+    // Once, when the modal opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const withMusic = Boolean(picked?.music && music)
+  const cost =
+    P.videoScript +
+    (voice ? P.voice : 0) +
+    (visuals === 'ai' ? scenes * P.image : 0) +
+    (visuals === 'veo' ? scenes * P[clipAction(quality)] * clipSeconds : 0) +
+    (withMusic ? P.music : 0)
 
   const go = () =>
     start(async () => {
@@ -226,14 +267,15 @@ function AiVideoModal({
         mediaIds: media.map((m) => m.id),
         voice,
         language,
-        look,
+        look: look === 'sketch' ? 'sketch' : 'standard',
+        ...(look === 'reference' && styleId ? { styleId, music: withMusic } : {}),
       })
       if (res.error || !res.id) return setError(res.error)
       router.push(`/app/studio/video/${res.id}`)
     })
 
   return (
-    <Modal title={look === 'sketch' ? 'Whiteboard explainer video' : 'Create video with AI'} onClose={onClose}>
+    <Modal title={look === 'sketch' ? 'Whiteboard explainer video' : look === 'reference' ? 'A video like one you saw' : 'Create video with AI'} onClose={onClose}>
       <div className="space-y-4">
         <label className="block text-sm font-medium">
           What is the video about?
@@ -257,7 +299,13 @@ function AiVideoModal({
           </label>
           <label className="block text-sm font-medium">
             Scenes
-            <select value={scenes} onChange={(e) => setScenes(Number(e.target.value))} className="mt-1.5 w-full rounded-lg border border-zinc-200 px-2 py-2 text-sm font-normal">
+            <select
+              value={scenes}
+              onChange={(e) => setScenes(Number(e.target.value))}
+              disabled={Boolean(picked)}
+              title={picked ? 'As many as in the reference' : undefined}
+              className="mt-1.5 w-full rounded-lg border border-zinc-200 px-2 py-2 text-sm font-normal disabled:bg-zinc-50 disabled:text-zinc-500"
+            >
               {[3, 4, 5, 6, 7, 8].map((n) => (
                 <option key={n}>{n}</option>
               ))}
@@ -266,11 +314,12 @@ function AiVideoModal({
         </div>
         <div>
           <p className="text-sm font-medium">Look</p>
-          <div role="radiogroup" aria-label="Video look" className="mt-1.5 grid grid-cols-2 gap-2">
+          <div role="radiogroup" aria-label="Video look" className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-3">
             {(
               [
                 ['standard', Sparkles, 'Standard', 'Photos, clips or brand colours'],
                 ['sketch', PenLine, 'Whiteboard sketch', 'Hand-drawn ink on paper, explained step by step'],
+                ['reference', Copy, 'Like a video I saw', 'Same look, rhythm, text and music'],
               ] as const
             ).map(([l, Icon, label, hint]) => (
               <button
@@ -279,7 +328,8 @@ function AiVideoModal({
                 aria-checked={look === l}
                 onClick={() => {
                   setLook(l)
-                  if (l === 'sketch' && (visuals === 'library' || visuals === 'none')) setVisuals('ai')
+                  if (l !== 'standard' && (visuals === 'library' || visuals === 'none')) setVisuals('ai')
+                  if (l === 'reference' && !styleId && refs?.[0]) pickStyle(refs[0])
                 }}
                 className={`flex items-start gap-2 rounded-xl p-2.5 text-left ring-1 ${look === l ? 'bg-zinc-900 text-white ring-zinc-900' : 'ring-zinc-200 hover:bg-zinc-50'}`}
               >
@@ -291,8 +341,57 @@ function AiVideoModal({
               </button>
             ))}
           </div>
-          {look === 'sketch' && (visuals === 'library' || (visuals === 'veo' && veoMode === 'photos')) && (
-            <p className="mt-1.5 text-xs text-amber-700">Your own photos stay as they are — pick AI images or AI clips to get the drawings.</p>
+          {look !== 'standard' && (visuals === 'library' || (visuals === 'veo' && veoMode === 'photos')) && (
+            <p className="mt-1.5 text-xs text-amber-700">Your own photos stay as they are — pick AI images or AI clips to get the {look === 'sketch' ? 'drawings' : 'look'}.</p>
+          )}
+          {look === 'reference' && (
+            <div className="mt-2 space-y-2">
+              {refs === null ? (
+                <p className="flex items-center gap-2 text-xs text-zinc-500">
+                  <Loader2 size={13} className="animate-spin" /> Loading your styles…
+                </p>
+              ) : (
+                <ul className="grid gap-2 sm:grid-cols-2" aria-label="Your video styles" role="radiogroup">
+                  {refs.map((r) => (
+                    <li key={r.id}>
+                      <button
+                        role="radio"
+                        aria-checked={styleId === r.id}
+                        onClick={() => pickStyle(r)}
+                        className={`flex w-full gap-2.5 rounded-xl p-2 text-left ring-1 ${styleId === r.id ? 'bg-violet-50 ring-[#7b3ff2]/60' : 'ring-zinc-200 hover:bg-zinc-50'}`}
+                      >
+                        {r.thumbUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={r.thumbUrl} alt="" className="h-14 w-10 shrink-0 rounded-lg object-cover" />
+                        ) : (
+                          <span className="h-14 w-10 shrink-0 rounded-lg" style={{ background: r.palette[0] ?? '#27272a' }} />
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold">{r.name}</span>
+                          <span className="line-clamp-2 block text-xs text-zinc-500">{r.summary}</span>
+                          <span className="mt-0.5 block text-[11px] text-zinc-400">
+                            {r.beats} scenes{r.voice ? ' · voice-over' : ''}{r.music ? ` · ${r.music}` : ''}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                  <li>
+                    <button
+                      onClick={() => setCopying(true)}
+                      className="flex h-full min-h-[4.5rem] w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#7b3ff2]/50 px-3 text-sm font-medium text-[#6a32d8] hover:bg-violet-50"
+                    >
+                      <Copy size={15} /> {refs.length ? 'Copy another video' : 'Copy a video’s style'}
+                    </button>
+                  </li>
+                </ul>
+              )}
+              {picked?.music && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={music} onChange={(e) => setMusic(e.target.checked)} /> AI music like the reference ({picked.music}) · {creditsLabel(P.music)}
+                </label>
+              )}
+            </div>
           )}
         </div>
         <div>
@@ -443,7 +542,8 @@ function AiVideoModal({
               brief.trim().length < 3 ||
               (visuals === 'veo' && veo !== null && veo.left < scenes * clipSeconds) ||
               (visuals === 'veo' && veoMode === 'photos' && !media.some((m) => m.kind === 'image')) ||
-              (visuals === 'veo' && veoMode === 'character' && !characterId)
+              (visuals === 'veo' && veoMode === 'character' && !characterId) ||
+              (look === 'reference' && !styleId)
             }
             className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
@@ -453,6 +553,17 @@ function AiVideoModal({
         </div>
       </div>
       {picking && <VideoMediaPicker kind="visual" multiple onClose={() => setPicking(false)} onPick={setMedia} />}
+      {copying && (
+        <CopyStyleDialog
+          kind="VIDEO"
+          onClose={() => setCopying(false)}
+          onDone={(r) => {
+            setRefs((cur) => [r, ...(cur ?? []).filter((x) => x.id !== r.id)])
+            pickStyle(r)
+            setCopying(false)
+          }}
+        />
+      )}
     </Modal>
   )
 }

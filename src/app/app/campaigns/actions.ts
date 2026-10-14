@@ -19,7 +19,7 @@ import { BATCH, chunks, pairWithDates, slots, startsInPast } from '@/lib/campaig
 import { dayIn, isValidTimeZone } from '@/lib/time'
 import { aiError } from '@/lib/ai-health'
 import { generateCampaignImages } from '@/lib/campaign-images'
-import { IMAGE_STYLE_IDS, type ImageStyle } from '@/lib/image-styles'
+import { IMAGE_STYLE_IDS, isRefStyle, type ImageStyle } from '@/lib/image-styles'
 import { templatePhotos } from '@/lib/template-photos'
 import { CTA_TYPES, CtaInput } from '@/lib/cta'
 
@@ -243,7 +243,8 @@ const Images = z.discriminatedUnion('mode', [
     mode: z.literal('ai'),
     // null: each post's own text is the brief.
     prompt: z.string().trim().max(1000).nullable(),
-    style: z.enum(IMAGE_STYLE_IDS as [ImageStyle, ...ImageStyle[]]),
+    // A built-in style or a copied one ("ref:<id>").
+    style: z.string().max(60).refine((s) => IMAGE_STYLE_IDS.includes(s as ImageStyle) || isRefStyle(s), 'Unknown style'),
   }),
   // Photos from the library (media ids) or the templates ("tpl:…"), used in order.
   z.object({ mode: z.literal('photos'), photoIds: z.array(z.string().max(60)).min(1, 'Pick at least one photo').max(30) }),

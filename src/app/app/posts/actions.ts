@@ -10,7 +10,7 @@ import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
 import { mediaUrl, saveMedia } from '@/lib/storage'
 import { aiError } from '@/lib/ai-health'
-import { IMAGE_STYLES, type ImageStyle } from '@/lib/image-styles'
+import { resolveImageStyle } from '@/lib/style-ref'
 import { Prisma } from '@prisma/client'
 import { CtaInput } from '@/lib/cta'
 
@@ -168,7 +168,8 @@ export async function uploadMedia(input: { data: string; prompt?: string }): Pro
 export async function listMedia(): Promise<{ id: string; url: string }[]> {
   const { workspace } = await requireContext()
   const rows = await prisma.media.findMany({
-    where: { workspaceId: workspace.id, kind: 'IMAGE' },
+    // Stills of copied styles are not pictures to post.
+    where: { workspaceId: workspace.id, kind: 'IMAGE', OR: [{ prompt: null }, { NOT: { prompt: { startsWith: 'Style reference:' } } }] },
     orderBy: { createdAt: 'desc' },
     take: 60,
     select: { id: true },
@@ -189,7 +190,7 @@ export async function generatePostImages(input: { prompt: string; caption: strin
   if (account.creditBalance < max) return { error: notEnough(max, account.creditBalance) }
 
   const known = await withDossier(brand, workspace.id)
-  const style = input.style && input.style in IMAGE_STYLES ? IMAGE_STYLES[input.style as ImageStyle] : undefined
+  const style = await resolveImageStyle(workspace.id, input.style)
   const results = await Promise.allSettled(
     Array.from({ length: count }, (_, i) =>
       generateImage(workspace.name, known, prompt || input.caption.slice(0, 300), input.caption.slice(0, 2000), i, [], '1:1', style).then((img) =>

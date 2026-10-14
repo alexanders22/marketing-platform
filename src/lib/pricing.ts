@@ -26,6 +26,8 @@ export const ACTIONS = {
   brandbookDesign: { label: 'Brandbook design (3 directions)', unit: 'brandbook', credits: 3, costUsd: 0.02 },
   seoAdvice: { label: 'SEO action plan', unit: 'plan', credits: 2, costUsd: 0.02 },
   aiSearch: { label: 'AI search visibility check', unit: 'check', credits: 5, costUsd: 0.2 },
+  styleImage: { label: 'Copy a style from an image', unit: 'image', credits: 1, costUsd: 0.003 },
+  styleVideo: { label: 'Copy a style from a video', unit: 'video', credits: 2, costUsd: 0.03 },
 } as const
 
 export type Action = keyof typeof ACTIONS

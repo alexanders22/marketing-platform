@@ -47,6 +47,9 @@ import { audienceLine, BriefAssistant } from '@/components/BriefAssistant'
 import { creditsLabel } from '@/lib/pricing'
 import { usePrices } from '@/components/Prices'
 import { IMAGE_STYLE_IDS, IMAGE_STYLES, type ImageStyle } from '@/lib/image-styles'
+import type { StyleView } from '@/lib/style-ref'
+import { CopyStyleDialog } from '@/components/CopyStyleDialog'
+import { myStyles } from '../studio/styles/actions'
 
 type Tone = 'Professional' | 'Friendly' | 'Educational' | 'Bold' | 'Founder-led'
 type Length = 'Short' | 'Medium' | 'Long'
@@ -122,7 +125,14 @@ export function Composer({ credits, libraries: initialLibs, initialPrompt = '' }
   const [libraries, setLibraries] = useState(initialLibs)
   const [libIds, setLibIds] = useState<string[]>([])
   const [images, setImages] = useState(0)
-  const [imageStyle, setImageStyle] = useState<ImageStyle>('realistic')
+  // A built-in style or a copied one ("ref:<id>").
+  const [imageStyle, setImageStyle] = useState<string>('realistic')
+  const [myLooks, setMyLooks] = useState<StyleView[]>([])
+  const [copying, setCopying] = useState(false)
+  useEffect(() => {
+    myStyles().then(setMyLooks, () => setMyLooks([]))
+  }, [])
+  const styleLabel = imageStyle in IMAGE_STYLES ? IMAGE_STYLES[imageStyle as ImageStyle].label : (myLooks.find((m) => `ref:${m.id}` === imageStyle)?.name ?? 'My style')
   const [tone, setTone] = useState<Tone>('Professional')
   const [length, setLength] = useState<Length>('Medium')
   const [language, setLanguage] = useState<Language>('English')
@@ -369,7 +379,7 @@ export function Composer({ credits, libraries: initialLibs, initialPrompt = '' }
                 width="w-64"
                 trigger={() => (
                   <Chip icon={ImageIcon} on={images > 0}>
-                    Images{images > 0 && ` (${images} · ${IMAGE_STYLES[imageStyle].label})`}
+                    Images{images > 0 && ` (${images} · ${styleLabel})`}
                   </Chip>
                 )}
               >
@@ -394,11 +404,30 @@ export function Composer({ credits, libraries: initialLibs, initialPrompt = '' }
                             {IMAGE_STYLES[st].label}
                           </MenuItem>
                         ))}
+                        {myLooks.map((m) => (
+                          <MenuItem key={m.id} checked={imageStyle === `ref:${m.id}`} hint="Copied" onClick={() => (setImageStyle(`ref:${m.id}`), close())}>
+                            {m.name}
+                          </MenuItem>
+                        ))}
+                        <MenuItem checked={false} onClick={() => (setCopying(true), close())}>
+                          Copy a style…
+                        </MenuItem>
                       </>
                     )}
                   </>
                 )}
               </Popover>
+              {copying && (
+                <CopyStyleDialog
+                  kind="IMAGE"
+                  onClose={() => setCopying(false)}
+                  onDone={(s) => {
+                    setMyLooks((cur) => [s, ...cur.filter((x) => x.id !== s.id)])
+                    setImageStyle(`ref:${s.id}`)
+                    setCopying(false)
+                  }}
+                />
+              )}
 
               {/* Tone */}
               <Popover

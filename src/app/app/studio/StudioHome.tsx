@@ -8,6 +8,7 @@ import { DesignPreview } from '@/components/DesignCanvas'
 import { palette, resizeDoc, SIZES, TEMPLATE_CATEGORIES, TEMPLATES, type DesignDoc, type TemplateCategory } from '@/lib/design'
 import { createDesign, deleteDesign, duplicateDesign } from './actions'
 import { confirmDialog } from '@/components/ui/Dialog'
+import { StyledImages } from './StyledImages'
 
 type Design = { id: string; name: string; width: number; height: number; data: DesignDoc; preview: string | null; updatedAt: string }
 
@@ -75,6 +76,8 @@ export function StudioHome({
           ))}
         </div>
       </section>
+
+      <StyledImages brandName={brandName} />
 
       <div className="mt-10 flex flex-wrap items-end justify-between gap-3">
         <div>

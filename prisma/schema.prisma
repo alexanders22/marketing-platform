@@ -195,6 +195,7 @@ model Workspace {
   conversations    Conversation[]
   brandFacts       BrandFact[]
   businessFacts    BusinessFact[]
+  styleRefs        StyleRef[]
   interviews       StrategyInterview[]
 
   @@unique([partnerId, externalId])
@@ -1074,6 +1075,28 @@ model BusinessFact {
   createdAt   DateTime  @default(now())
 
   @@unique([workspaceId, key])
+}
+
+// "Make it like this": a look copied from a reference image or video (a link
+// or an upload), analysed by the AI (src/lib/style-ref.ts). Image styles show
+// up in every image style picker; video styles also carry the structure
+// (beats, pacing, text, transitions, voice, music) for AI videos.
+model StyleRef {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // IMAGE or VIDEO (what the reference was).
+  kind        String
+  name        String
+  // The link it came from; null for an upload.
+  sourceUrl   String?
+  // A still of the reference (the image, or a frame of the video): shown in
+  // the pickers and sent to the image model as the style reference.
+  thumbId     String?
+  data        Json
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
 }
 
 // A chat-style strategy interview: what we already know, the questions the AI

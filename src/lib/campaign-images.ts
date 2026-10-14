@@ -3,11 +3,11 @@ import { generateImage } from './ai'
 import { noteAiFailure } from './ai-health'
 import { charge, prices } from './credits'
 import { withDossier } from './dossier'
-import { IMAGE_STYLES, type ImageStyle } from './image-styles'
+import { resolveImageStyle } from './style-ref'
 import { prisma } from './prisma'
 import { saveMedia } from './storage'
 
-export type CampaignImagePlan = { prompt: string | null; style: ImageStyle }
+export type CampaignImagePlan = { prompt: string | null; style: string }
 
 // AI images for a campaign's posts that have none, three at a time, in the
 // background. Each image is charged once it exists; out of credits stops.
@@ -22,7 +22,7 @@ export async function generateCampaignImages(campaignId: string, plan: CampaignI
   const todo = campaign.posts.filter((p) => p.mediaIds.length === 0)
   const known = await withDossier(ws.brandKit, ws.id)
   const COST = await prices()
-  const style = IMAGE_STYLES[plan.style]
+  const style = await resolveImageStyle(ws.id, plan.style)
   let stop = false
 
   const one = async (post: (typeof todo)[number], i: number) => {
