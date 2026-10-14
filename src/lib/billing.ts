@@ -1,6 +1,7 @@
 import 'server-only'
 import type { BillingCycle } from '@prisma/client'
-import { PLANS, billingState } from './plans'
+import { getPlans } from './credits'
+import { billingState } from './plans'
 import { prisma } from './prisma'
 
 // Paid periods. No card payments yet: a super admin books a payment, which
@@ -27,7 +28,7 @@ export async function grantPlanCredits(accountId: string, now = new Date()) {
   return prisma.$transaction(async (tx) => {
     const a = await tx.account.findUnique({ where: { id: accountId }, select: { plan: true, trialEndsAt: true, paidUntil: true } })
     if (!a || billingState(a, now) !== 'active') return 0
-    const credits = PLANS.find((p) => p.id === a.plan)?.credits ?? 0
+    const credits = (await getPlans()).find((p) => p.id === a.plan)?.credits ?? 0
     if (credits <= 0) return 0
     const start = periodStart(a.paidUntil!, now)
     const idempotencyKey = `plan:${accountId}:${start.toISOString().slice(0, 10)}`

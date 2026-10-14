@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react'
 import { ArrowLeft, ArrowRight, Check, Link2, Loader2, Palette, Store } from 'lucide-react'
 import { BrandEditor } from '@/components/BrandEditor'
 import { PlanPicker } from '@/components/PlanPicker'
+import type { PickerPrices } from '@/lib/plans'
 import type { BrandDraft } from '@/lib/brand-schema'
 import Link from 'next/link'
 import { addCompany } from '../app/companies/actions'
@@ -15,7 +16,7 @@ const EMPTY: BrandDraft = { name: '', website: '', description: '', logoUrl: '',
 const CHECKS = ['Scanning your website', 'Extracting logos and colors', 'Finding social profiles', 'Preparing your brand']
 
 // `company`: one more company for an existing account (no plan step).
-export function Onboarding({ mode: flow = 'first' }: { mode?: 'first' | 'company' }) {
+export function Onboarding({ mode: flow = 'first', prices }: { mode?: 'first' | 'company'; prices?: PickerPrices }) {
   const [step, setStep] = useState<Step>('source')
   const [mode, setMode] = useState<'website' | 'manual'>('website')
   const [url, setUrl] = useState('')
@@ -80,7 +81,7 @@ export function Onboarding({ mode: flow = 'first' }: { mode?: 'first' | 'company
       {step === 'plan' ? (
         <div className="mx-auto max-w-6xl">
           {/* First thing in the app: the strategy interview (it can be skipped). */}
-          <PlanPicker after={flow === 'company' ? '/app' : '/app/strategy/interview?welcome=1'} />
+          <PlanPicker prices={prices} after={flow === 'company' ? '/app' : '/app/strategy/interview?welcome=1'} />
         </div>
       ) : (
         <div className="mx-auto max-w-3xl rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5 sm:p-10">

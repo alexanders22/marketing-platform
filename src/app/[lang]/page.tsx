@@ -4,7 +4,9 @@ import { HtmlLang } from "@/components/landing/HtmlLang";
 import { Landing } from "@/components/landing/Landing";
 import { alternates, COPY, isLang } from "@/components/landing/i18n";
 
-// /ka and /ru; English is the root page.
+// /ka and /ru; English is the root page. Prices come from Admin → Pricing:
+// refreshed every 10 minutes.
+export const revalidate = 600;
 export const dynamicParams = false;
 export const generateStaticParams = () => [{ lang: "ka" }, { lang: "ru" }];
 

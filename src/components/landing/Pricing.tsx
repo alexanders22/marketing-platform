@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Building2, Check, Clapperboard, Code2, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Sparkles, UserRound, Users } from "lucide-react";
-import { BUNDLES } from "@/lib/plans";
+import { BUNDLES, type Bundle } from "@/lib/plans";
 import { DEFAULT_PRICING } from "@/lib/pricing";
 import { COPY, type Lang } from "./i18n";
 import { SIGNUP } from "./site";
@@ -51,7 +51,9 @@ const PLANS = [
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 
-export function Pricing({ lang = "en" }: { lang?: Lang }) {
+type PlanPrice = { id: "STARTER" | "TEAM" | "AGENCY"; monthly: number; credits: number; bundle: Bundle };
+
+export function Pricing({ lang = "en", plans, gelPerUsd }: { lang?: Lang; plans: PlanPrice[]; gelPerUsd: number }) {
   const [yearly, setYearly] = useState(false);
   const t = COPY[lang].pricing;
 
@@ -76,7 +78,10 @@ export function Pricing({ lang = "en" }: { lang?: Lang }) {
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        {PLANS.map((p) => {
+        {PLANS.map((base) => {
+          // Price and credits as set in Admin → Pricing.
+          const live = plans.find((x) => x.id === base.id);
+          const p = { ...base, monthly: live?.monthly ?? base.monthly, credits: fmt(live?.credits ?? Number(base.credits.replace(/,/g, ""))), bundle: live?.bundle ?? BUNDLES[base.id] };
           const price = yearly ? Math.round((p.monthly * 10) / 12) : p.monthly;
           return (
             <div
@@ -100,6 +105,7 @@ export function Pricing({ lang = "en" }: { lang?: Lang }) {
               <div className="mt-6 flex items-baseline gap-1">
                 <span className="text-4xl font-semibold tracking-tight">${price}</span>
                 <span className="text-sm text-zinc-400">{t.perMonth}</span>
+                <span className="ml-auto text-sm text-zinc-500" title="National Bank of Georgia rate">≈ ₾{Math.round(price * gelPerUsd)}</span>
               </div>
               <p className="mt-1 text-xs text-zinc-500">
                 {yearly ? t.billedYearly.replace("{total}", (p.monthly * 10).toLocaleString("en-US")) : t.billedMonthly}
@@ -123,12 +129,12 @@ export function Pricing({ lang = "en" }: { lang?: Lang }) {
               </ul>
               <p className="mt-6 text-xs font-medium uppercase tracking-wider text-zinc-500">{t.monthHead}</p>
               <ul className="mt-3 space-y-3 text-sm">
-                <Row icon={PenLine} label={t.posts} value={fmt(BUNDLES[p.id].posts)} />
-                <Row icon={ImageIcon} label={t.images} value={fmt(BUNDLES[p.id].images)} />
-                <Row icon={Film} label={t.videos} value={fmt(BUNDLES[p.id].videos)} />
+                <Row icon={PenLine} label={t.posts} value={fmt(p.bundle.posts)} />
+                <Row icon={ImageIcon} label={t.images} value={fmt(p.bundle.images)} />
+                <Row icon={Film} label={t.videos} value={fmt(p.bundle.videos)} />
                 <Row icon={Clapperboard} label={t.veo} value={`${p.veo}s`} />
-                <Row icon={FileText} label={t.articles} value={fmt(BUNDLES[p.id].articles)} />
-                <Row icon={Compass} label={t.strategies} value={fmt(BUNDLES[p.id].strategies)} />
+                <Row icon={FileText} label={t.articles} value={fmt(p.bundle.articles)} />
+                <Row icon={Compass} label={t.strategies} value={fmt(p.bundle.strategies)} />
               </ul>
               <p className="mt-4 flex items-start gap-1.5 text-xs text-zinc-500">
                 <Coins size={13} className="mt-0.5 shrink-0" />

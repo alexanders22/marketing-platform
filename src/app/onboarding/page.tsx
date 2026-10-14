@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
+import { pickerPrices } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/session'
 import { Onboarding } from './Onboarding'
@@ -10,5 +11,5 @@ export default async function OnboardingPage() {
   const user = await requireUser()
   const member = await prisma.accountMember.findFirst({ where: { userId: user.id }, select: { id: true } })
   if (member) redirect('/app')
-  return <Onboarding />
+  return <Onboarding prices={await pickerPrices()} />
 }

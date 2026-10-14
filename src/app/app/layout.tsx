@@ -7,7 +7,8 @@ import { prisma } from '@/lib/prisma'
 import { AppSidebar } from './AppSidebar'
 import { CreditsBadge } from './CreditsBadge'
 import { SectionTabs } from './SectionTabs'
-import { prices } from '@/lib/credits'
+import { creditValue, prices } from '@/lib/credits'
+import { CreditHints } from '@/components/CreditHints'
 import { PricesProvider } from '@/components/Prices'
 import { interviewState } from '@/lib/business'
 
@@ -32,15 +33,16 @@ function planLabel(a: { plan: string; trialEndsAt: Date | null; paidUntil: Date 
 // Light app shell (the marketing site stays dark).
 export default async function AppLayout({ children }: LayoutProps<'/app'>) {
   const { user, account, workspace, brand, role, companies, asAdmin } = await requireContext()
-  const [alerts, recommendations, inbox, creditPrices, pilot] = await Promise.all([
+  const [alerts, recommendations, inbox, creditPrices, pilot, value] = await Promise.all([
     prisma.alert.count({ where: { workspaceId: workspace.id, readAt: null } }),
     prisma.recommendation.count({ where: { workspaceId: workspace.id, status: 'OPEN' } }),
     prisma.conversation.count({ where: { workspaceId: workspace.id, unread: { gt: 0 } } }),
     prices(),
     role === 'EDITOR' ? null : interviewState(workspace.id),
+    creditValue(),
   ])
   return (
-    <PricesProvider prices={creditPrices}>
+    <PricesProvider prices={creditPrices} value={value}>
     <div className="min-h-screen bg-[#f4f3f1] text-zinc-900 lg:flex [color-scheme:light]">
       <AppSidebar
         workspace={workspace.name}
@@ -87,6 +89,7 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
           {children}
         </div>
       </main>
+      <CreditHints value={value} />
     </div>
     </PricesProvider>
   )

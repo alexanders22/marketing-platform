@@ -25,7 +25,7 @@ export default async function AdminPricing() {
   ])
   // Times = charges minus the ones given back.
   const refundsOf = (a: string) => refunded.find((r) => r.action === a)?._count._all ?? 0
-  const plans = PLANS.map((p) => ({ id: p.id, name: p.name, monthly: p.monthly, credits: p.credits }))
+  const plans = PLANS.map((p) => ({ id: p.id, name: p.name, monthly: pricing.plans[p.id].monthly, credits: pricing.plans[p.id].credits }))
   const used = Object.fromEntries(
     usage
       .filter((u) => u.action && (ACTION_KEYS as string[]).includes(u.action) && (u._sum.units ?? 0) > 0)

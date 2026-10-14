@@ -13,8 +13,14 @@ const pct = (n: number) => `${(n * 100).toFixed(0)}%`
 const marginTone = (m: number) => (m < 0 ? 'text-red-600 font-semibold' : m < 0.5 ? 'text-amber-700' : 'text-emerald-700')
 const input = 'w-24 rounded-lg border border-zinc-200 px-2 py-1 text-right text-sm tabular-nums outline-none focus:border-zinc-400'
 
-export function PricingEditor({ initial, plans, used }: { initial: Pricing; plans: Plan[]; used: Used }) {
+export function PricingEditor({ initial, plans: planNames, used }: { initial: Pricing; plans: Plan[]; used: Used }) {
   const [p, setP] = useState<Pricing>(initial)
+  // Price and credits as being edited.
+  const plans = planNames.map((pl) => ({ ...pl, ...p.plans[pl.id as keyof Pricing['plans']] }))
+  const setPlan = (id: string, field: 'monthly' | 'credits', v: string) =>
+    setP((cur) => ({ ...cur, plans: { ...cur.plans, [id]: { ...cur.plans[id as keyof Pricing['plans']], [field]: Math.max(0, field === 'credits' ? Math.round(Number(v) || 0) : Number(v) || 0) } } }))
+  const setPack = (i: number, field: 'credits' | 'priceUsd', v: string) =>
+    setP((cur) => ({ ...cur, packs: cur.packs.map((pk, j) => (j === i ? { ...pk, [field]: Math.max(0, field === 'credits' ? Math.round(Number(v) || 0) : Number(v) || 0) } : pk)) }))
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>()
   const [pending, start] = useTransition()
 
@@ -24,6 +30,18 @@ export function PricingEditor({ initial, plans, used }: { initial: Pricing; plan
     () => [{ id: 'topup', name: 'Top-up', perCredit: netOf(p.creditPriceUsd) }, ...plans.map((pl) => ({ id: pl.id, name: pl.name, perCredit: netOf(pl.monthly) / pl.credits }))],
     [p.creditPriceUsd, plans],
   )
+  // Average provider cost of one credit at last month's mix of actions.
+  const mixCost = (() => {
+    let credits = 0
+    let cost = 0
+    for (const k of ACTION_KEYS) {
+      const u = used[k]
+      if (!u) continue
+      credits += u.credits
+      cost += u.units * p.actions[k].costUsd
+    }
+    return credits > 0 ? cost / credits : null
+  })()
   const set = (k: Action, field: 'credits' | 'costUsd', v: string) =>
     setP((cur) => ({ ...cur, actions: { ...cur.actions, [k]: { ...cur.actions[k], [field]: field === 'credits' ? Math.max(0, Math.round(Number(v) || 0)) : Math.max(0, Number(v) || 0) } } }))
 
@@ -53,6 +71,84 @@ export function PricingEditor({ initial, plans, used }: { initial: Pricing; plan
 
   return (
     <div className="space-y-5">
+      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+        <h2 className="font-semibold">Plans</h2>
+        <p className="mt-1 text-sm text-zinc-500">Price a month (incl. VAT) and the credits each plan refills every month. The landing page, the plan picker and new payments use them.</p>
+        <ul className="mt-3 grid gap-3 sm:grid-cols-3">
+          {plans.map((pl) => (
+            <li key={pl.id} className="rounded-xl bg-zinc-50 p-3 text-sm ring-1 ring-zinc-200">
+              <p className="font-medium">{pl.name}</p>
+              <label className="mt-2 flex items-center justify-between gap-2">
+                Price / month
+                <span className="flex items-center gap-1">
+                  $
+                  <input type="number" min="1" step="1" value={pl.monthly} onChange={(e) => setPlan(pl.id, 'monthly', e.target.value)} aria-label={`Price of ${pl.name}`} className={input} />
+                </span>
+              </label>
+              <label className="mt-1.5 flex items-center justify-between gap-2">
+                Credits / month
+                <input type="number" min="1" step="10" value={pl.credits} onChange={(e) => setPlan(pl.id, 'credits', e.target.value)} aria-label={`Credits of ${pl.name}`} className={input} />
+              </label>
+              {mixCost !== null && (
+                <p className="mt-2 text-xs text-zinc-500">
+                  All credits used at last month&apos;s mix: {usd(pl.credits * mixCost)} AI cost of {usd(netOf(pl.monthly))} net
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+        <h2 className="font-semibold">Credit packs</h2>
+        <p className="mt-1 text-sm text-zinc-500">Top-ups on top of a plan (price incl. VAT). Bigger packs should cost less per credit than the single-credit price.</p>
+        <table className="mt-3 w-full text-sm">
+          <thead className="text-left text-xs text-zinc-500">
+            <tr>
+              <th className="py-1.5 font-medium">Credits</th>
+              <th className="py-1.5 font-medium">Price</th>
+              <th className="py-1.5 text-right font-medium">Per credit (net)</th>
+              <th className="py-1.5 text-right font-medium">Discount</th>
+              <th className="py-1.5 text-right font-medium">Margin if all used{mixCost === null ? ' (worst case)' : ''}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100">
+            {p.packs.map((pk, i) => {
+              const net = netOf(pk.priceUsd)
+              const cost = pk.credits * (mixCost ?? costPerCredit)
+              const m = net > 0 ? (net - cost) / net : 0
+              return (
+                <tr key={i}>
+                  <td className="py-2">
+                    <input type="number" min="1" step="10" value={pk.credits} onChange={(e) => setPack(i, 'credits', e.target.value)} aria-label={`Credits in pack ${i + 1}`} className={input} />
+                  </td>
+                  <td className="py-2">
+                    <span className="inline-flex items-center gap-1">
+                      $
+                      <input type="number" min="0" step="1" value={pk.priceUsd} onChange={(e) => setPack(i, 'priceUsd', e.target.value)} aria-label={`Price of pack ${i + 1}`} className={input} />
+                    </span>
+                  </td>
+                  <td className="py-2 text-right tabular-nums">{usd(net / Math.max(1, pk.credits))}</td>
+                  <td className="py-2 text-right tabular-nums">{pct(1 - pk.priceUsd / Math.max(0.0001, pk.credits * p.creditPriceUsd))}</td>
+                  <td className={`py-2 text-right tabular-nums ${marginTone(m)}`}>{pct(m)}</td>
+                  <td className="py-2 text-right">
+                    <button onClick={() => setP((cur) => ({ ...cur, packs: cur.packs.filter((_, j) => j !== i) }))} className="text-xs text-zinc-500 hover:text-red-600" aria-label={`Remove pack ${i + 1}`}>
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        {p.packs.length < 8 && (
+          <button onClick={() => setP((cur) => ({ ...cur, packs: [...cur.packs, { credits: 1000, priceUsd: 90 }] }))} className="mt-2 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
+            Add a pack
+          </button>
+        )}
+      </section>
+
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <h2 className="font-semibold">Value of a credit</h2>
         <div className="mt-3 flex flex-wrap items-end gap-6">

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
-import { PLANS } from '@/lib/plans'
+import { getPlans } from '@/lib/credits'
 import { card, daysAgo, fmtDateTime, Stat } from './shared'
 
 export default async function AdminOverview() {
@@ -25,8 +25,9 @@ export default async function AdminOverview() {
     prisma.account.findMany({ orderBy: { createdAt: 'desc' }, take: 6, select: { id: true, name: true, email: true, createdAt: true } }),
   ])
   // Paying plans only (trials and paused excluded); yearly counted per month.
+  const prices = await getPlans()
   const mrr = plans.reduce((s, p) => {
-    const price = PLANS.find((x) => x.id === p.plan)?.monthly ?? 0
+    const price = prices.find((x) => x.id === p.plan)?.monthly ?? 0
     return s + price * (p.billingCycle === 'YEARLY' ? 10 / 12 : 1) * p._count
   }, 0)
   const paying = plans.reduce((s, p) => s + p._count, 0)

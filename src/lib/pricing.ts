@@ -3,6 +3,8 @@
 // admins change them in Admin → Pricing (stored in Setting "pricing").
 // Shared by server and client.
 
+import { PLANS, type PlanId } from './plans'
+
 export const ACTIONS = {
   postText: { label: 'AI post text', unit: 'post', credits: 1, costUsd: 0.002 },
   image: { label: 'AI image', unit: 'image', credits: 1, costUsd: 0.039 },
@@ -36,18 +38,33 @@ export const ACTION_KEYS = Object.keys(ACTIONS) as Action[]
 export const VEO_PLANS = ['STARTER', 'TEAM', 'AGENCY'] as const
 export type VeoPlan = (typeof VEO_PLANS)[number]
 
+// A top-up: credits bought on top of the plan (price incl. VAT).
+export type CreditPack = { credits: number; priceUsd: number }
+
 export type Pricing = {
-  // What one credit sells for as a top-up (plans have their own effective
-  // price per credit, shown next to it).
+  // What one credit is worth in money — shown as the ₾/$ equivalent of any
+  // credit amount (plans have their own effective price per credit).
   creditPriceUsd: number
   actions: Record<Action, { credits: number; costUsd: number }>
   // Seconds of AI clips (Veo) each paid plan may generate per calendar month.
   veoSecondsPerMonth: Record<VeoPlan, number>
+  // Plan price (USD a month, incl. VAT) and monthly credits.
+  plans: Record<PlanId, { monthly: number; credits: number }>
+  // Credit packs for sale on top of a plan, cheaper per credit when bigger.
+  packs: CreditPack[]
 }
+
+export const DEFAULT_PACKS: CreditPack[] = [
+  { credits: 100, priceUsd: 10 },
+  { credits: 500, priceUsd: 45 },
+  { credits: 2000, priceUsd: 160 },
+]
 
 export const DEFAULT_PRICING: Pricing = {
   creditPriceUsd: 0.1,
   veoSecondsPerMonth: { STARTER: 32, TEAM: 120, AGENCY: 320 },
+  plans: Object.fromEntries(PLANS.map((p) => [p.id, { monthly: p.monthly, credits: p.credits }])) as Pricing['plans'],
+  packs: DEFAULT_PACKS,
   actions: Object.fromEntries(ACTION_KEYS.map((k) => [k, { credits: ACTIONS[k].credits, costUsd: ACTIONS[k].costUsd }])) as Pricing['actions'],
 }
 

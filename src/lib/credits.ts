@@ -1,5 +1,7 @@
 import 'server-only'
 import type { CreditReason, Prisma } from '@prisma/client'
+import { gelPerUsd } from './fx'
+import { plansWith, type PickerPrices } from './plans'
 import { prisma } from './prisma'
 import { ACTION_KEYS, DEFAULT_PRICING, pricesOf, VEO_PLANS, type Action, type Prices, type Pricing } from './pricing'
 
@@ -24,6 +26,13 @@ export async function getPricing(): Promise<Pricing> {
         return [k, { credits: Number.isFinite(a?.credits) ? a!.credits : d.credits, costUsd: Number.isFinite(a?.costUsd) ? a!.costUsd : d.costUsd }]
       }),
     ) as Pricing['actions'],
+    plans: Object.fromEntries(
+      Object.entries(DEFAULT_PRICING.plans).map(([id, d]) => {
+        const s = saved.plans?.[id as keyof Pricing['plans']]
+        return [id, { monthly: s && s.monthly > 0 ? s.monthly : d.monthly, credits: s && s.credits > 0 ? Math.round(s.credits) : d.credits }]
+      }),
+    ) as Pricing['plans'],
+    packs: Array.isArray(saved.packs) && saved.packs.length ? saved.packs.filter((x) => x.credits > 0 && x.priceUsd > 0) : DEFAULT_PRICING.packs,
   }
   cached = { at: Date.now(), value }
   return value
@@ -31,6 +40,25 @@ export async function getPricing(): Promise<Pricing> {
 
 export const forgetPricing = () => {
   cached = null
+}
+
+// The plans at the prices and credits set in Admin → Pricing.
+export async function getPlans() {
+  return plansWith((await getPricing()).plans)
+}
+
+// What a credit is worth, for the ₾/$ hints next to credit amounts.
+export async function creditValue(): Promise<{ usd: number; gelPerUsd: number }> {
+  const [pricing, rate] = await Promise.all([getPricing(), gelPerUsd()])
+  return { usd: pricing.creditPriceUsd, gelPerUsd: rate }
+}
+
+export async function pickerPrices(): Promise<PickerPrices> {
+  const [pricing, rate] = await Promise.all([getPricing(), gelPerUsd()])
+  return {
+    plans: plansWith(pricing.plans).map((p) => ({ id: p.id, monthly: p.monthly, credits: p.credits, bundle: p.bundle, veo: pricing.veoSecondsPerMonth[p.id] })),
+    gelPerUsd: rate,
+  }
 }
 
 // Credits per unit for each action.

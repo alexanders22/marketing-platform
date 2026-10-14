@@ -57,6 +57,25 @@ export const BUNDLES: Record<PlanId, Bundle> = {
   AGENCY: { posts: 1500, images: 1500, videos: 150, articles: 60, strategies: 30 },
 }
 
+// The plans with the prices and credits super admins set (Admin → Pricing):
+// `overrides` comes from Pricing.plans. What the credits buy scales with them.
+export type Plan = (typeof PLANS)[number]
+export function plansWith(overrides: Partial<Record<PlanId, { monthly: number; credits: number }>> | undefined): (Plan & { bundle: Bundle })[] {
+  return PLANS.map((p) => {
+    const o = overrides?.[p.id]
+    const monthly = o && Number.isFinite(o.monthly) && o.monthly > 0 ? o.monthly : p.monthly
+    const credits = o && Number.isFinite(o.credits) && o.credits > 0 ? Math.round(o.credits) : p.credits
+    const k = credits / p.credits
+    const b = BUNDLES[p.id]
+    const bundle = { posts: Math.floor(b.posts * k), images: Math.floor(b.images * k), videos: Math.floor(b.videos * k), articles: Math.floor(b.articles * k), strategies: Math.floor(b.strategies * k) }
+    return { ...p, monthly, credits, bundle }
+  })
+}
+
+// What the plan picker shows: prices, credits and clip seconds as set in
+// Admin → Pricing, and lari per dollar for the ₾ equivalent.
+export type PickerPrices = { plans: { id: PlanId; monthly: number; credits: number; bundle: Bundle; veo: number }[]; gelPerUsd: number }
+
 export const TRIAL_DAYS = 7
 // Credits granted once when a trial starts, whatever plan is picked.
 export const TRIAL_CREDITS = 50

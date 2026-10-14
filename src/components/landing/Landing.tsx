@@ -1,5 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
+import { CreditHints } from "@/components/CreditHints";
+import { creditValue, getPlans } from "@/lib/credits";
 import {
   ArrowRight,
   BarChart3,
@@ -60,9 +62,11 @@ const NETWORKS: { icon: Icon; name: string; color: string }[] = [
   { icon: SiGoogleads, name: "Google Ads", color: "#4285F4" },
 ];
 
-// The marketing page in one language (/, /ka, /ru).
-export function Landing({ lang }: { lang: Lang }) {
+// The marketing page in one language (/, /ka, /ru). Plan prices and credits
+// come from Admin → Pricing; credit amounts show their ₾/$ value on hover.
+export async function Landing({ lang }: { lang: Lang }) {
   const c = COPY[lang];
+  const [plans, value] = await Promise.all([getPlans(), creditValue()]);
   return (
     <div lang={lang} className="overflow-x-clip">
       <Header lang={lang} />
@@ -78,13 +82,14 @@ export function Landing({ lang }: { lang: Lang }) {
         <section id="pricing" className="border-y border-white/5 bg-zinc-900/30 py-24">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <SectionHead eyebrow={c.pricing.eyebrow} title={c.pricing.title} sub={c.pricing.sub} />
-            <Pricing lang={lang} />
+            <Pricing lang={lang} plans={plans.map((p) => ({ id: p.id, monthly: p.monthly, credits: p.credits, bundle: p.bundle }))} gelPerUsd={value.gelPerUsd} />
           </div>
         </section>
         <WhatYouGet c={c} />
         <FinalCta c={c} />
       </main>
       <Footer lang={lang} />
+      <CreditHints value={value} />
     </div>
   );
 }

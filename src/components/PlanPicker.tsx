@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2, CheckCircle2, Clapperboard, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Share2, UserRound, Users, X, Code2 } from 'lucide-react'
 import { DEFAULT_PRICING } from '@/lib/pricing'
-import { BUNDLES, PLANS, TRIAL_DAYS, yearlyTotal, type PlanId } from '@/lib/plans'
+import { BUNDLES, PLANS, TRIAL_DAYS, yearlyTotal, type PickerPrices, type PlanId } from '@/lib/plans'
 import { VAT } from '@/lib/tax'
 import { choosePlan } from '@/app/app/plan/actions'
 
@@ -16,7 +16,7 @@ const TINT = {
 }
 
 // Ocoya-style "Choose your plan" panel. Closing it skips the plan for now.
-export function PlanPicker({ current, after = '/app' }: { current?: PlanId | null; after?: string }) {
+export function PlanPicker({ current, after = '/app', prices }: { current?: PlanId | null; after?: string; prices?: PickerPrices }) {
   const router = useRouter()
   const [yearly, setYearly] = useState(false)
   const [pending, start] = useTransition()
@@ -86,7 +86,10 @@ export function PlanPicker({ current, after = '/app' }: { current?: PlanId | nul
         {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         <div className="grid gap-4 md:grid-cols-3">
-          {PLANS.map((p) => {
+          {PLANS.map((base) => {
+            const live = prices?.plans.find((x) => x.id === base.id)
+            const p = { ...base, monthly: live?.monthly ?? base.monthly, credits: live?.credits ?? base.credits, bundle: live?.bundle ?? BUNDLES[base.id], veo: live?.veo ?? DEFAULT_PRICING.veoSecondsPerMonth[base.id] }
+            const shown = yearly ? yearlyTotal(p.monthly) : p.monthly
             const Icon = ICON[p.id]
             const isCurrent = current === p.id
             return (
@@ -109,8 +112,9 @@ export function PlanPicker({ current, after = '/app' }: { current?: PlanId | nul
                 </div>
                 <p className="mt-3 min-h-10 text-sm text-zinc-500">{p.blurb}</p>
                 <p className="mt-4 text-3xl font-semibold text-zinc-900">
-                  ${yearly ? yearlyTotal(p.monthly).toLocaleString() : p.monthly}
+                  ${shown.toLocaleString()}
                   <span className="text-base font-normal text-zinc-500"> / {yearly ? 'year' : 'month'}</span>
+                  <span className="ml-2 text-sm font-normal text-zinc-400">≈ ₾{Math.round(shown * (prices?.gelPerUsd ?? 2.7)).toLocaleString()}</span>
                 </p>
                 <p className="text-xs text-zinc-500">{yearly ? 'Billed yearly' : 'Billed monthly'} · incl. {Math.round(VAT.rate * 100)}% VAT</p>
                 <button
@@ -133,12 +137,12 @@ export function PlanPicker({ current, after = '/app' }: { current?: PlanId | nul
                 </ul>
                 <p className="mt-4 text-xs font-semibold tracking-wide text-zinc-500">EVERY MONTH</p>
                 <ul className="mt-2 space-y-2.5 text-sm text-zinc-700">
-                  <Row icon={PenLine} label="AI-written posts" value={BUNDLES[p.id].posts.toLocaleString()} />
-                  <Row icon={ImageIcon} label="AI images" value={BUNDLES[p.id].images.toLocaleString()} />
-                  <Row icon={Film} label="AI videos with voice-over" value={BUNDLES[p.id].videos.toLocaleString()} />
-                  <Row icon={Clapperboard} label="AI clips (Veo)" value={`${DEFAULT_PRICING.veoSecondsPerMonth[p.id]}s`} />
-                  <Row icon={FileText} label="Blog articles" value={BUNDLES[p.id].articles.toLocaleString()} />
-                  <Row icon={Compass} label="Strategy plans" value={BUNDLES[p.id].strategies.toLocaleString()} />
+                  <Row icon={PenLine} label="AI-written posts" value={p.bundle.posts.toLocaleString()} />
+                  <Row icon={ImageIcon} label="AI images" value={p.bundle.images.toLocaleString()} />
+                  <Row icon={Film} label="AI videos with voice-over" value={p.bundle.videos.toLocaleString()} />
+                  <Row icon={Clapperboard} label="AI clips (Veo)" value={`${p.veo}s`} />
+                  <Row icon={FileText} label="Blog articles" value={p.bundle.articles.toLocaleString()} />
+                  <Row icon={Compass} label="Strategy plans" value={p.bundle.strategies.toLocaleString()} />
                 </ul>
                 <p className="mt-3 flex items-start gap-1.5 text-xs text-zinc-500">
                   <Coins size={13} className="mt-0.5 shrink-0" /> Runs on {p.credits.toLocaleString()} AI credits — use them for any mix you like.

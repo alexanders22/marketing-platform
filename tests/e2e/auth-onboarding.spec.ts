@@ -85,11 +85,11 @@ test.describe('onboarding', () => {
       ['$79', '$790'],
       ['$199', '$1,990'],
     ]) {
-      await expect(page.getByText(`${m} / month`, { exact: true })).toBeVisible()
+      await expect(page.getByText(new RegExp(`^\\${m} / month`))).toBeVisible()
       void y
     }
     await page.getByRole('button', { name: 'Yearly (2 months free)' }).click()
-    for (const y of ['$290', '$790', '$1,990']) await expect(page.getByText(`${y} / year`, { exact: true })).toBeVisible()
+    for (const y of ['$290', '$790', '$1,990']) await expect(page.getByText(new RegExp(`^\\${y} / year`))).toBeVisible()
 
     // Pick Team, yearly.
     await page.getByRole('button', { name: /Start 7-day free trial/ }).nth(1).click()

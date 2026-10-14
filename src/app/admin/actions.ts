@@ -7,12 +7,13 @@ import { z } from 'zod'
 import type { CreditReason, MemberRole } from '@prisma/client'
 import { logAdmin, requireSuperAdmin } from '@/lib/admin'
 import { bookPayment } from '@/lib/billing'
-import { PLANS, yearlyTotal } from '@/lib/plans'
+import { yearlyTotal } from '@/lib/plans'
 import { vatParts } from '@/lib/tax'
 import { WORKSPACE_COOKIE } from '@/lib/context'
-import { forgetPricing } from '@/lib/credits'
+import { forgetPricing, getPlans } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
 import { ACTION_KEYS, VEO_PLANS, type Pricing } from '@/lib/pricing'
+import type { Economics } from '@/lib/economics'
 
 export type AdminState = { ok?: string; error?: string } | undefined
 
@@ -118,7 +119,7 @@ export async function recordPayment(accountId: string, _: AdminState, f: FormDat
   })
   if (booked) return { ok: 'Already booked' }
   // The list price, VAT included (18%): what the customer paid and what goes to the state.
-  const monthly = PLANS.find((p) => p.id === account.plan)?.monthly ?? 0
+  const monthly = (await getPlans()).find((p) => p.id === account.plan)?.monthly ?? 0
   const money = vatParts((cycle === 'YEARLY' ? yearlyTotal(monthly) : monthly) * periods)
   const { paidUntil, granted } = await bookPayment(accountId, periods, cycle)
   await logAdmin(admin, 'payment.record', 'account', accountId, { key, periods, cycle, note, plan: account.plan, ...money, paidUntil: paidUntil.toISOString(), granted })
@@ -314,7 +315,24 @@ export async function savePricing(input: Pricing): Promise<AdminState> {
     if (!Number.isInteger(n) || n < 0 || n > 100_000) return { error: `Veo limit for ${pl} must be a whole number of seconds` }
     veoSecondsPerMonth[pl] = n
   }
-  const value: Pricing = { creditPriceUsd: price, actions, veoSecondsPerMonth }
+  const plans = {} as Pricing['plans']
+  for (const pl of VEO_PLANS) {
+    const monthly = Number(input.plans?.[pl]?.monthly)
+    const credits = Number(input.plans?.[pl]?.credits)
+    if (!Number.isFinite(monthly) || monthly <= 0 || monthly > 100_000) return { error: `Price of ${pl} must be above $0` }
+    if (!Number.isInteger(credits) || credits <= 0 || credits > 10_000_000) return { error: `Credits of ${pl} must be a whole number above 0` }
+    plans[pl] = { monthly: Math.round(monthly * 100) / 100, credits }
+  }
+  const packs: Pricing['packs'] = []
+  for (const pk of (input.packs ?? []).slice(0, 8)) {
+    const credits = Number(pk?.credits)
+    const priceUsd = Number(pk?.priceUsd)
+    if (!Number.isInteger(credits) || credits <= 0 || credits > 1_000_000) return { error: 'Each pack needs a whole number of credits' }
+    if (!Number.isFinite(priceUsd) || priceUsd <= 0 || priceUsd > 100_000) return { error: 'Each pack needs a price above $0' }
+    packs.push({ credits, priceUsd: Math.round(priceUsd * 100) / 100 })
+  }
+  packs.sort((a, b) => a.credits - b.credits)
+  const value: Pricing = { creditPriceUsd: price, actions, veoSecondsPerMonth, plans, packs }
   await prisma.setting.upsert({
     where: { key: 'pricing' },
     create: { key: 'pricing', value, updatedBy: admin.email },
@@ -324,5 +342,45 @@ export async function savePricing(input: Pricing): Promise<AdminState> {
   await logAdmin(admin, 'pricing.update', 'setting', 'pricing', value)
   revalidatePath('/admin/pricing')
   revalidatePath('/app', 'layout')
+  revalidatePath('/', 'layout')
   return { ok: 'Saved — new prices apply to the next charge' }
+}
+
+/* ─── Economics ────────────────────────────────────────────────────────── */
+
+// The inputs of Admin → Economics (costs, fees, forecast). Nothing is charged
+// from them; they only feed the calculator.
+export async function saveEconomics(input: Economics): Promise<AdminState> {
+  const admin = await requireSuperAdmin()
+  const n = (v: unknown, lo: number, hi: number) => {
+    const x = Number(v)
+    return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : lo
+  }
+  const fixed = (input.fixed ?? []).slice(0, 30).map((f) => ({
+    name: String(f?.name ?? '').trim().slice(0, 80) || 'Cost',
+    amount: n(f?.amount, 0, 100_000_000),
+    currency: f?.currency === 'USD' ? ('USD' as const) : ('GEL' as const),
+  }))
+  const perPlan = (r: Record<string, unknown> | undefined, hi: number) => Object.fromEntries(VEO_PLANS.map((p) => [p, n(r?.[p], 0, hi)])) as Economics['usagePct']
+  const value: Economics = {
+    fixed,
+    paymentFeePct: n(input.paymentFeePct, 0, 50),
+    paymentFeeUsd: n(input.paymentFeeUsd, 0, 100),
+    turnoverTaxPct: n(input.turnoverTaxPct, 0, 50),
+    partnerSharePct: n(input.partnerSharePct, 0, 100),
+    yearlySharePct: n(input.yearlySharePct, 0, 100),
+    usagePct: perPlan(input.usagePct, 100),
+    customers: Object.fromEntries(VEO_PLANS.map((p) => [p, Math.round(n(input.customers?.[p], 0, 1_000_000))])) as Economics['customers'],
+    packsSold: Object.fromEntries(Object.entries(input.packsSold ?? {}).slice(0, 10).map(([k, v]) => [String(Math.round(Number(k)) || 0), Math.round(n(v, 0, 1_000_000))])),
+    trialsPerMonth: Math.round(n(input.trialsPerMonth, 0, 1_000_000)),
+    costPerCreditUsd: input.costPerCreditUsd === null || input.costPerCreditUsd === undefined ? null : n(input.costPerCreditUsd, 0, 100),
+  }
+  await prisma.setting.upsert({
+    where: { key: 'economics' },
+    create: { key: 'economics', value, updatedBy: admin.email },
+    update: { value, updatedBy: admin.email },
+  })
+  await logAdmin(admin, 'economics.update', 'setting', 'economics', {})
+  revalidatePath('/admin/economics')
+  return { ok: 'Saved' }
 }
