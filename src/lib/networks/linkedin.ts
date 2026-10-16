@@ -1,17 +1,31 @@
 import 'server-only'
+import type { SocialAccount } from '@prisma/client'
 import { api, form, NetworkError, type Connector, type Found, type OutMedia } from './types'
 
 // LinkedIn: the member's own profile ("Share on LinkedIn", w_member_social,
-// self-serve) and — once the Community Management API is approved
-// (LINKEDIN_PAGES=1) — the company Pages they administer.
+// self-serve) and the company Pages they administer (Community Management
+// API). LinkedIn allows the Community Management API only as the sole
+// product of an app, so Pages need a second app: LINKEDIN_PAGES_CLIENT_ID /
+// _SECRET. Once it is set, new connections go through it (it can post as the
+// member too); accounts remember which app issued their token.
 
 const AUTH = () => process.env.LINKEDIN_AUTH_URL || 'https://www.linkedin.com/oauth/v2'
 const API = () => (process.env.LINKEDIN_API_URL || 'https://api.linkedin.com').replace(/\/$/, '')
 const VERSION = () => process.env.LINKEDIN_VERSION || '202609'
-const id = () => process.env.LINKEDIN_CLIENT_ID || ''
-const secret = () => process.env.LINKEDIN_CLIENT_SECRET || ''
-const pages = () => process.env.LINKEDIN_PAGES === '1'
-const scopes = () => ['openid', 'profile', 'w_member_social', ...(pages() ? ['w_organization_social', 'r_organization_social', 'rw_organization_admin'] : [])]
+type App = { key: 'member' | 'pages'; id: string; secret: string; pages: boolean }
+// The self-serve app (Sign In with LinkedIn + Share on LinkedIn). LINKEDIN_PAGES=1:
+// this one app holds the Community Management API instead.
+const memberApp = (): App => ({ key: 'member', id: process.env.LINKEDIN_CLIENT_ID || '', secret: process.env.LINKEDIN_CLIENT_SECRET || '', pages: process.env.LINKEDIN_PAGES === '1' })
+const pagesApp = (): App | null => {
+  const id = process.env.LINKEDIN_PAGES_CLIENT_ID || ''
+  const secret = process.env.LINKEDIN_PAGES_CLIENT_SECRET || ''
+  return id && secret ? { key: 'pages', id, secret, pages: true } : null
+}
+const connectApp = () => pagesApp() ?? memberApp()
+const appOf = (a: SocialAccount) => ((a.meta as { app?: string } | null)?.app === 'pages' && pagesApp()) || memberApp()
+// A Community Management app has no OpenID product: the profile comes from r_basicprofile.
+const scopes = (app: App) =>
+  app.pages ? ['r_basicprofile', 'w_member_social', 'w_organization_social', 'r_organization_social', 'rw_organization_admin'] : ['openid', 'profile', 'w_member_social']
 
 const headers = (token: string, json = true) => ({
   authorization: `Bearer ${token}`,
@@ -80,22 +94,32 @@ const stat = (urn: string) => (urn.includes(':ugcPost:') ? 'ugcPosts' : 'shares'
 export const linkedin: Connector = {
   network: 'LINKEDIN',
   label: 'LinkedIn',
-  about: 'Posts with photos or video on your profile, and company Pages once approved',
+  about: 'Posts with photos or video on your profile and your company Pages',
   setup: ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'],
-  enabled: () => Boolean(id() && secret()),
+  enabled: () => Boolean(memberApp().id && memberApp().secret) || pagesApp() !== null,
   oauth: {
     pkce: false,
-    authUrl: ({ state, redirectUri }) => `${AUTH()}/authorization?${form({ response_type: 'code', client_id: id(), redirect_uri: redirectUri, state, scope: scopes().join(' ') })}`,
+    authUrl: ({ state, redirectUri }) => {
+      const app = connectApp()
+      return `${AUTH()}/authorization?${form({ response_type: 'code', client_id: app.id, redirect_uri: redirectUri, state, scope: scopes(app).join(' ') })}`
+    },
     async exchange({ code, redirectUri }) {
+      const app = connectApp()
       const t = await api<TokenRes>(`${AUTH()}/accessToken`, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: form({ grant_type: 'authorization_code', code, client_id: id(), client_secret: secret(), redirect_uri: redirectUri }),
+        body: form({ grant_type: 'authorization_code', code, client_id: app.id, client_secret: app.secret, redirect_uri: redirectUri }),
       }, 'LinkedIn')
-      const granted = (t.scope ?? scopes().join(',')).split(/[ ,]+/).filter(Boolean)
-      const me = await api<{ sub: string; name?: string; picture?: string }>(`${API()}/v2/userinfo`, { headers: { authorization: `Bearer ${t.access_token}` } }, 'LinkedIn')
+      const granted = (t.scope ?? scopes(app).join(',')).split(/[ ,]+/).filter(Boolean)
+      const me = app.pages
+        ? await api<{ id: string; localizedFirstName?: string; localizedLastName?: string }>(`${API()}/v2/me`, { headers: { authorization: `Bearer ${t.access_token}` } }, 'LinkedIn').then((m) => ({
+            sub: m.id,
+            name: [m.localizedFirstName, m.localizedLastName].filter(Boolean).join(' ') || undefined,
+            picture: undefined as string | undefined,
+          }))
+        : await api<{ sub: string; name?: string; picture?: string }>(`${API()}/v2/userinfo`, { headers: { authorization: `Bearer ${t.access_token}` } }, 'LinkedIn')
       const base = { ...tokens(t), scopes: granted }
-      const out: Found[] = [{ externalId: `urn:li:person:${me.sub}`, name: me.name ?? 'LinkedIn profile', avatarUrl: me.picture ?? null, meta: { kind: 'person' }, ...base }]
+      const out: Found[] = [{ externalId: `urn:li:person:${me.sub}`, name: me.name ?? 'LinkedIn profile', avatarUrl: me.picture ?? null, meta: { kind: 'person', app: app.key }, ...base }]
       if (granted.includes('rw_organization_admin')) {
         const acl = await rest<{ elements: { organization?: string; organizationTarget?: string; state?: string }[] }>(
           'organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&count=50',
@@ -105,17 +129,18 @@ export const linkedin: Connector = {
         if (ids.length) {
           const orgs = await rest<{ results: Record<string, { id: number; localizedName: string; vanityName?: string }> }>(`organizations?ids=List(${ids.join(',')})`, t.access_token).catch(() => ({ results: {} }))
           for (const o of Object.values(orgs.results ?? {}))
-            out.push({ externalId: `urn:li:organization:${o.id}`, name: o.localizedName, handle: o.vanityName ?? null, meta: { kind: 'organization' }, ...base })
+            out.push({ externalId: `urn:li:organization:${o.id}`, name: o.localizedName, handle: o.vanityName ?? null, meta: { kind: 'organization', app: app.key }, ...base })
         }
       }
       return out
     },
   },
-  async refresh(_, refresh) {
+  async refresh(a, refresh) {
+    const app = appOf(a)
     const t = await api<TokenRes>(`${AUTH()}/accessToken`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: form({ grant_type: 'refresh_token', refresh_token: refresh, client_id: id(), client_secret: secret() }),
+      body: form({ grant_type: 'refresh_token', refresh_token: refresh, client_id: app.id, client_secret: app.secret }),
     }, 'LinkedIn')
     return tokens(t)
   },
