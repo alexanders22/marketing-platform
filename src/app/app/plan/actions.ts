@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireContext } from '@/lib/context'
+import { cancelAutoRenew } from '@/lib/payments'
 import { prisma } from '@/lib/prisma'
 import { TRIAL_CREDITS, TRIAL_DAYS } from '@/lib/plans'
 
@@ -20,6 +21,12 @@ export async function choosePlan(input: { plan: string; cycle: string }): Promis
   const parsed = Choice.safeParse(input)
   if (!parsed.success) return { error: 'Unknown plan' }
   const { plan, cycle } = parsed.data
+  // Auto-renewal charges for one plan and cycle: a change stops it (the paid
+  // period stays; the customer subscribes again to the new plan).
+  if (await prisma.subscription.findFirst({ where: { accountId: account.id, status: 'ACTIVE', NOT: { plan, cycle } }, select: { id: true } })) {
+    const res = await cancelAutoRenew(account.id)
+    if (res.error) return { error: `Auto-renewal could not be stopped: ${res.error}` }
+  }
 
   await prisma.$transaction(async (tx) => {
     const fresh = await tx.account.findUniqueOrThrow({ where: { id: account.id } })

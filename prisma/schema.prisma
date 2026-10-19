@@ -95,6 +95,8 @@ model Account {
   credits     CreditEntry[]
   members     AccountMember[]
   invitations Invitation[]
+  payments    Payment[]
+  subscriptions Subscription[]
   // Self-serve API access (Agency plan): the account acts as its own partner.
   apiPartner  Partner?     @relation("PartnerOwner")
 
@@ -111,6 +113,75 @@ enum Plan {
 enum BillingCycle {
   MONTHLY
   YEARLY
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+// A card payment through Monrem's hosted checkout (src/lib/monrem.ts): a
+// credit pack, or plan periods. Its id is the order_id sent to Monrem; it is
+// fulfilled once (fulfilledAt) when Monrem reports APPROVED.
+model Payment {
+  id                String        @id @default(cuid())
+  accountId         String
+  account           Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // PACK (credits) or PLAN (periods of plan × cycle).
+  kind              String
+  credits           Int?
+  plan              Plan?
+  cycle             BillingCycle?
+  periods           Int?
+  // Minor units (cents), VAT included.
+  amount            Int
+  currency          String
+  status            PaymentStatus @default(PENDING)
+  statusDescription String?
+  provider          String        @default("monrem")
+  // Monrem's transaction id (renewals are found by it).
+  transactionId     String?       @unique
+  checkoutUrl       String?
+  // The recurring billing plan a first payment subscribes to (auto-renewal).
+  recurringRef      String?
+  // A plan payment that starts auto-renewal, or one of its renewals.
+  subscriptionId    String?
+  subscription      Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  createdById       String?
+  fulfilledAt       DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([accountId, createdAt])
+  @@index([status, createdAt])
+  @@index([subscriptionId])
+}
+
+// Auto-renewal of a plan: a Monrem recurring billing subscription (id =
+// Monrem's), started by a plan payment with the plan's recurring reference.
+// Monrem charges each cycle; every approved charge extends paidUntil once.
+model Subscription {
+  id             String       @id
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  plan           Plan
+  cycle          BillingCycle
+  // Monrem recurring billing plan ref_id.
+  refId          String
+  // ACTIVE until cancelled (by the customer, a plan change or Monrem).
+  status         String       @default("ACTIVE")
+  providerStatus String?
+  cancelledAt    DateTime?
+  // Last look at Monrem's charges for it.
+  checkedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  payments Payment[]
+
+  @@index([accountId])
+  @@index([status, checkedAt])
 }
 
 enum CreditReason {
