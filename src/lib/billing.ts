@@ -51,13 +51,19 @@ export async function grantPlanCreditsDue(now = new Date()) {
   return granted
 }
 
+// The new paid-through date: `periods` cycles from today, or from the
+// current paid date while it is still running.
+export function extendPaidUntil(current: Date | null, periods: number, cycle: BillingCycle, now = new Date()) {
+  const from = current && current > now ? current : now
+  return addMonths(from, periods * (cycle === 'YEARLY' ? 12 : 1))
+}
+
 // A payment for `periods` billing cycles: paidUntil moves forward from today
 // (or from the current paid date, if still running), the trial ends, and
 // this month's credits arrive.
 export async function bookPayment(accountId: string, periods: number, cycle: BillingCycle, now = new Date()) {
   const a = await prisma.account.findUniqueOrThrow({ where: { id: accountId }, select: { paidUntil: true } })
-  const from = a.paidUntil && a.paidUntil > now ? a.paidUntil : now
-  const paidUntil = addMonths(from, periods * (cycle === 'YEARLY' ? 12 : 1))
+  const paidUntil = extendPaidUntil(a.paidUntil, periods, cycle, now)
   await prisma.account.update({ where: { id: accountId }, data: { paidUntil, billingCycle: cycle, trialEndsAt: now } })
   const granted = await grantPlanCredits(accountId, now)
   return { paidUntil, granted }

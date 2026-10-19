@@ -1,12 +1,16 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Coins } from 'lucide-react'
+import { CheckCircle2, Clock, Coins, XCircle } from 'lucide-react'
 import { PageHeader } from '@/components/EmptyState'
 import { requireContext } from '@/lib/context'
 import { creditMoney } from '@/lib/money'
 import { creditValue, getPlans, getPricing } from '@/lib/credits'
 import { VAT } from '@/lib/tax'
 import { prisma } from '@/lib/prisma'
+import { monremEnabled } from '@/lib/monrem'
+import { syncPayment } from '@/lib/payments'
+import { billingState, yearlyTotal } from '@/lib/plans'
+import { BuyButton } from './BuyButton'
 
 export const metadata: Metadata = { title: 'Plan & credits — Loudpilot' }
 
@@ -21,8 +25,16 @@ const REASON: Record<string, string> = {
   ADJUSTMENT: 'Adjustment',
 }
 
-export default async function CreditsPage() {
-  const { account } = await requireContext()
+export default async function CreditsPage({ searchParams }: PageProps<'/app/credits'>) {
+  const { account: acct, role } = await requireContext()
+  const q = await searchParams
+  // Back from Monrem's payment page: ask Monrem if the callback hasn't arrived yet.
+  let paid = typeof q.payment === 'string' ? await prisma.payment.findFirst({ where: { id: q.payment, accountId: acct.id } }) : null
+  if (paid?.status === 'PENDING' && monremEnabled()) paid = await syncPayment(paid.id)
+  // Re-read: a fulfilled payment changed the balance or the plan.
+  const account = paid ? await prisma.account.findUniqueOrThrow({ where: { id: acct.id } }) : acct
+  const canPay = monremEnabled() && (role === 'OWNER' || role === 'ADMIN')
+  const cantPay = !monremEnabled() ? 'Card payments are being set up' : !canPay ? 'Only the account owner or an admin can pay' : undefined
   const entries = await prisma.creditEntry.findMany({
     where: { accountId: account.id },
     orderBy: { createdAt: 'desc' },
@@ -33,26 +45,42 @@ export default async function CreditsPage() {
   const worth = creditMoney(account.creditBalance, value)
   const gel = (usd: number) => `₾${Math.round(usd * value.gelPerUsd).toLocaleString('en-US')}`
   const trial = account.trialEndsAt && account.trialEndsAt > new Date()
+  const active = billingState(account) === 'active'
 
   return (
     <div className="max-w-3xl">
       <PageHeader title="Plan & credits" sub="AI generation spends credits. Your plan refills them every month." />
+
+      {paid && <PaymentResult p={paid} paidUntil={account.paidUntil} />}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-zinc-200 p-5">
           <p className="text-sm text-zinc-500">Plan</p>
           <p className="mt-1 text-2xl font-semibold">{plan ? plan.name : 'No plan yet'}</p>
           <p className="mt-1 text-sm text-zinc-500">
-            {plan && trial
-              ? `Free trial until ${account.trialEndsAt!.toLocaleDateString('en-GB')}`
-              : plan
-                ? `${account.billingCycle === 'YEARLY' ? 'Yearly' : 'Monthly'} billing`
-                : 'Pick a plan to start your free trial.'}
+            {plan && active
+              ? `Paid until ${account.paidUntil!.toLocaleDateString('en-GB')}`
+              : plan && trial
+                ? `Free trial until ${account.trialEndsAt!.toLocaleDateString('en-GB')}`
+                : plan
+                  ? `${account.billingCycle === 'YEARLY' ? 'Yearly' : 'Monthly'} billing`
+                  : 'Pick a plan to start your free trial.'}
           </p>
-          <Link
-            href="/app/plan"
-            className="mt-4 inline-block rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
-          >
+          {plan && (
+            <div className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Pay for the plan">
+              <div>
+                <BuyButton purchase={{ kind: 'PLAN', plan: plan.id, cycle: 'MONTHLY' }} disabled={cantPay} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800">
+                  {active ? 'Extend' : 'Pay'} 1 month · ${plan.monthly}
+                </BuyButton>
+              </div>
+              <div>
+                <BuyButton purchase={{ kind: 'PLAN', plan: plan.id, cycle: 'YEARLY' }} disabled={cantPay} className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold hover:bg-zinc-50">
+                  1 year · ${yearlyTotal(plan.monthly)}
+                </BuyButton>
+              </div>
+            </div>
+          )}
+          <Link href="/app/plan" className={`inline-block text-sm font-medium ${plan ? 'mt-3 text-indigo-600 hover:underline' : 'mt-4 rounded-lg bg-zinc-900 px-4 py-2 font-semibold text-white hover:bg-zinc-800'}`}>
             {plan ? 'Change plan' : 'Choose a plan'}
           </Link>
         </div>
@@ -90,15 +118,15 @@ export default async function CreditsPage() {
                 <p className="text-xs text-zinc-500" data-no-credit-hint>
                   {gel(pk.priceUsd / pk.credits * 100)} per 100 credits
                 </p>
-                <button disabled title="Card payments are being set up" className="mt-3 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
+                <BuyButton purchase={{ kind: 'PACK', credits: pk.credits }} disabled={cantPay} className="mt-3 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800">
                   Buy
-                </button>
+                </BuyButton>
               </li>
             )
           })}
         </ul>
         <p className="mt-3 text-xs text-zinc-500">
-          Card payments open soon. Need credits now?{' '}
+          {monremEnabled() ? 'Secure card payment by Monrem. Need an invoice instead?' : 'Card payments open soon. Need credits now?'}{' '}
           <a href="mailto:info@loudpilot.app?subject=Buy%20credits" className="font-medium text-indigo-600 underline">
             Write to us
           </a>{' '}
@@ -131,5 +159,29 @@ export default async function CreditsPage() {
         )}
       </section>
     </div>
+  )
+}
+
+// What happened to the payment the customer just came back from.
+function PaymentResult({ p, paidUntil }: { p: { status: string; kind: string; credits: number | null; statusDescription: string | null }; paidUntil: Date | null }) {
+  if (p.status === 'APPROVED')
+    return (
+      <p role="status" className="mb-4 flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200">
+        <CheckCircle2 size={16} className="shrink-0" />
+        {p.kind === 'PACK' ? `Payment received — ${p.credits?.toLocaleString('en-US')} credits added.` : `Payment received — your plan is paid until ${paidUntil?.toLocaleDateString('en-GB')}.`}
+      </p>
+    )
+  if (p.status === 'DECLINED')
+    return (
+      <p role="alert" className="mb-4 flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
+        <XCircle size={16} className="shrink-0" />
+        The payment didn&apos;t go through{p.statusDescription ? `: ${p.statusDescription}` : ''}. Nothing was charged — try again or use another card.
+      </p>
+    )
+  return (
+    <p role="status" className="mb-4 flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200">
+      <Clock size={16} className="shrink-0" />
+      The bank is still confirming your payment. Credits arrive as soon as it&apos;s done — refresh this page in a minute.
+    </p>
   )
 }
