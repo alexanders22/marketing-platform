@@ -92,8 +92,8 @@ export type CheckoutInput = {
   refererUrl: string
   returnUrl: string
   callbackUrl: string
-  customer: { firstName: string; lastName: string; email: string }
-  billing: { street: string; city: string; postCode: string; country: string }
+  customer: { firstName: string; lastName: string; email: string; phone: string; phoneCode: string }
+  billing: { street: string; city: string; postCode: string; state: string; country: string }
 }
 
 // A hosted checkout: the customer is sent to hpp_url to pay.
@@ -112,12 +112,15 @@ export async function hppCheckout(i: CheckoutInput) {
       customer_first_name: i.customer.firstName,
       customer_last_name: i.customer.lastName,
       customer_email: i.customer.email,
+      customer_phone: i.customer.phone,
+      ...(i.customer.phoneCode ? { customer_phone_code: i.customer.phoneCode } : {}),
       billing_first_name: i.customer.firstName,
       billing_last_name: i.customer.lastName,
       billing_street: i.billing.street,
       billing_city: i.billing.city,
+      billing_post_code: i.billing.postCode,
       billing_country: i.billing.country,
-      ...(i.billing.postCode ? { billing_post_code: i.billing.postCode } : {}),
+      ...(i.billing.state ? { billing_state: i.billing.state } : {}),
     },
   })
   if (!tx.hpp_url) throw new MonremError('Monrem did not return a checkout link')

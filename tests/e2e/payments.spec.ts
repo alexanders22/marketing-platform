@@ -43,23 +43,33 @@ test('a credit pack: Monrem checkout, callback, credits added once', async () =>
   await page.getByRole('list', { name: 'Credit packs' }).getByRole('listitem').first().getByRole('button', { name: 'Buy' }).click()
   // The first payment asks for the billing address Monrem needs.
   const form = page.getByRole('dialog', { name: 'Billing address' })
+  // The name comes from the profile; the state is only asked in the US, Canada and Mexico.
+  await expect(form.getByLabel('First name')).not.toHaveValue('')
+  await form.getByLabel('Country').selectOption('US')
+  await expect(form.getByLabel('State / province')).toBeVisible()
+  await form.getByLabel('Country').selectOption('GE')
+  await expect(form.getByLabel('State / province')).toBeHidden()
+  await form.getByLabel('First name').fill('Nino')
+  await form.getByLabel('Last name').fill('Beridze')
   await form.getByLabel('Street and number').fill('1 Rustaveli Ave')
   await form.getByLabel('City').fill('Tbilisi')
   await form.getByLabel('Postal code').fill('0108')
   await expect(form.getByLabel('Country')).toHaveValue('GE')
+  await form.getByLabel('Phone').fill('+995 555 12-34-56')
   await form.getByRole('button', { name: 'Continue to payment' }).click()
   await page.waitForURL(new RegExp(`127.0.0.1:${FAKE_MONREM_PORT}/pay/`))
   await expect(page.getByRole('heading', { name: 'Pay 10.00 USD' })).toBeVisible()
   const [id] = lastPayment()
   const order = monrem.orders.get(id)!
-  expect(order.body).toMatchObject({ amount: 1000, currency: 'USD', callback_url: webhook, billing_street: '1 Rustaveli Ave', billing_city: 'Tbilisi', billing_post_code: '0108', billing_country: 'GE' })
+  expect(order.body).toMatchObject({ amount: 1000, currency: 'USD', callback_url: webhook, billing_street: '1 Rustaveli Ave', billing_city: 'Tbilisi', billing_post_code: '0108', billing_country: 'GE', customer_phone: '555123456', customer_phone_code: '995', customer_first_name: 'Nino', customer_last_name: 'Beridze', billing_first_name: 'Nino', billing_last_name: 'Beridze' })
+  expect(order.body).not.toHaveProperty('billing_state')
   expect(String(order.body.return_url)).toContain(`/app/credits?payment=${id}`)
 
   await page.getByRole('link', { name: 'Pay now' }).click()
   await page.waitForURL(/\/app\/credits\?payment=/)
   await expect(page.getByText('Payment received — 100 credits added.')).toBeVisible()
   expect(balance()).toBe(before + 100)
-  await expect(page.getByText('Billing address: 1 Rustaveli Ave, Tbilisi, 0108, Georgia')).toBeVisible()
+  await expect(page.getByText('Billing: Nino Beridze, 1 Rustaveli Ave, Tbilisi, 0108, Georgia · +995 555 12-34-56')).toBeVisible()
   expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PACK', '1000', 'USD', 'true'])
   expect(sql(`select count(*) from "CreditEntry" where "idempotencyKey"='payment:${id}' and reason='PURCHASE' and amount=100`)).toBe('1')
 
@@ -88,8 +98,14 @@ test('a plan year: approved without a callback, picked up from the status on ret
 
 test('a declined card: nothing booked, the customer is told', async () => {
   const before = balance()
+  // An address saved before the phone was asked for: the form comes back filled in.
+  sql(`update "Account" set "billingAddress"='{"street":"1 Rustaveli Ave","city":"Tbilisi","postCode":"0108","country":"GE"}' where id='${accountId}'`)
   await page.goto('/app/credits')
   await page.getByRole('list', { name: 'Credit packs' }).getByRole('listitem').first().getByRole('button', { name: 'Buy' }).click()
+  const form = page.getByRole('dialog', { name: 'Billing address' })
+  await expect(form.getByLabel('Street and number')).toHaveValue('1 Rustaveli Ave')
+  await form.getByLabel('Phone').fill('555 12 34 56')
+  await form.getByRole('button', { name: 'Continue to payment' }).click()
   await page.waitForURL(/\/pay\//)
   await page.getByRole('link', { name: 'Decline' }).click()
   await expect(page.getByText(/The payment didn.t go through/)).toBeVisible()
