@@ -79,7 +79,7 @@ export function startFakeMonrem() {
       if (!authed) return json(401, { message: 'Unauthenticated.' })
       const o = orders.get(url.searchParams.get('order_id') ?? '')
       if (!o) return json(422, { message: 'Not found', errors: { order_id: ['Unknown order'] } })
-      return json(200, { order_id: o.order_id, transaction_id: o.transaction_id, amount: o.amount, currency: o.currency, status: o.status, status_description: o.status === 'APPROVED' ? 'Success' : 'Pending', transaction_type: 'purchase' })
+      return json(200, { ...txOf(o), status_description: o.status === 'APPROVED' ? 'Success' : 'Pending', transaction_type: 'purchase' })
     }
     if (req.method === 'GET' && url.pathname === '/recurring-billing-plan') {
       if (!authed) return json(401, { message: 'Unauthenticated.' })
@@ -132,6 +132,7 @@ export function startFakeMonrem() {
     const x = subs.get(subId)!
     const o: Order = { ...x.first, order_id: `RB${Date.now()}${++n}`, transaction_id: `GWS${Date.now()}-${++n}`, status, subscription: subId }
     x.renewals.push(o)
+    orders.set(o.order_id, o)
     if (notify) await callback(o)
     return o
   }

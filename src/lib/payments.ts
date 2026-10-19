@@ -288,6 +288,27 @@ export async function cancelAutoRenew(accountId: string): Promise<{ error?: stri
   return {}
 }
 
+// A callback is only a hint: what it says is confirmed with Monrem's API
+// before anything is booked, so a leaked API password can't fake a payment.
+// A renewal (an order id we don't know) must also be one of the
+// subscription's own charges. Throws when Monrem can't be asked — the route
+// answers 503 and Monrem (or the ticker) tries again.
+export async function applyCallback(tx: MonremTx) {
+  const confirmed = await txStatus(tx.order_id)
+  if (confirmed.order_id !== tx.order_id) return null
+  const sid = confirmed.subscription?.id ?? tx.subscription?.id
+  const known =
+    (await prisma.payment.findUnique({ where: { id: tx.order_id }, select: { id: true } })) ??
+    (confirmed.transaction_id ? await prisma.payment.findUnique({ where: { transactionId: confirmed.transaction_id }, select: { id: true } }) : null)
+  if (!known) {
+    if (sid == null) return null
+    const sub = await getSubscription(String(sid))
+    const charges = [sub.transaction, ...(sub.transactions ?? [])]
+    if (!charges.some((c) => c?.order_id === tx.order_id)) return null
+  }
+  return applyStatus({ ...confirmed, amount: Number(confirmed.amount), transaction_id: confirmed.transaction_id ?? tx.transaction_id }, sid != null ? String(sid) : undefined)
+}
+
 // Ask Monrem when the callback is late (or never came).
 export async function syncPayment(id: string) {
   try {

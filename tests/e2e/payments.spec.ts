@@ -100,6 +100,17 @@ test('forged or tampered callbacks are refused', async ({ request }) => {
   expect(cheap.status()).toBe(200)
   expect(lastPayment()[1]).toBe('DECLINED')
   expect(balance()).toBe(before)
+
+  // Correctly signed (a leaked API password) but never paid: Monrem's API says
+  // PENDING, so nothing is booked.
+  await page.goto('/app/credits')
+  await page.getByRole('list', { name: 'Credit packs' }).getByRole('listitem').first().getByRole('button', { name: 'Buy' }).click()
+  await page.waitForURL(/\/pay\//)
+  const [unpaid, , , cents, cur] = lastPayment()
+  const faked = await request.post(webhook, { data: signed({ order_id: unpaid, status: 'APPROVED', amount: Number(cents), currency: cur }) })
+  expect(faked.status()).toBe(200)
+  expect(lastPayment()[1]).toBe('PENDING')
+  expect(balance()).toBe(before)
 })
 
 test.describe('auto-renewal', () => {
