@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 // The payer's name, billing address and phone: without a saved card Monrem's
-// checkout requires them all (and the state in the US, Canada and Mexico).
+// checkout requires them all.
 
 // ISO 3166-1 alpha-2 → international calling code.
 export const DIAL_CODES: Record<string, string> = {
@@ -25,17 +25,24 @@ export const DIAL_CODES: Record<string, string> = {
 export const COUNTRY_CODES = Object.keys(DIAL_CODES)
 const CALLING = new Set(Object.values(DIAL_CODES))
 
-// Monrem validates billing_state only for these.
-export const STATE_COUNTRIES = ['US', 'CA', 'MX']
+// Monrem's payment page takes names in Latin letters and spaces only (as on the card).
+const NAME = /^[A-Za-z]+( [A-Za-z]+)*$/
+const name = (what: string) =>
+  z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/\s+/g, ' '))
+    .pipe(z.string().min(1, `Enter the ${what}`).max(50).regex(NAME, `The ${what}: Latin letters and spaces only, as on the card`))
 
 export const BillingAddress = z
   .object({
-    firstName: z.string().trim().min(1, 'Enter the first name').max(50),
-    lastName: z.string().trim().min(1, 'Enter the last name').max(50),
+    firstName: name('first name'),
+    lastName: name('last name'),
     street: z.string().trim().min(3, 'Enter the street address').max(120),
     city: z.string().trim().min(2, 'Enter the city').max(60),
     postCode: z.string().trim().min(2, 'Enter the postal code').max(16),
-    state: z.string().trim().max(40).default(''),
+    // Asked for every country by Monrem's payment page (Georgia: the region, e.g. Tbilisi).
+    state: z.string().trim().min(2, 'Enter the state or region').max(40),
     country: z.string().refine((c) => COUNTRY_CODES.includes(c), 'Pick a country'),
     phone: z
       .string()
@@ -43,7 +50,6 @@ export const BillingAddress = z
       .max(24)
       .refine((p) => /^(\+|00)?[\d\s().-]+$/.test(p) && p.replace(/\D/g, '').length >= 7 && p.replace(/\D/g, '').length <= 15, 'Enter a phone number'),
   })
-  .refine((a) => !STATE_COUNTRIES.includes(a.country) || a.state.length >= 2, { message: 'Enter the state or province', path: ['state'] })
 export type BillingAddress = z.infer<typeof BillingAddress>
 
 // The saved address, or null when there is none (or it lacks a field added since).
@@ -52,20 +58,21 @@ export const savedAddress = (v: unknown): BillingAddress | null => {
   return r.success ? r.data : null
 }
 
-// "Nino Beridze" → Nino / Beridze; one word (or none) fills both.
-export const nameParts = (name: string, email: string) => {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  const first = parts[0] ?? email.split('@')[0]
-  return { firstName: first.slice(0, 50), lastName: (parts.slice(1).join(' ') || first).slice(0, 50) }
+// "Nino Beridze" → Nino / Beridze. Only a real name is offered: a nickname
+// like "alexander22122" (or an email) leaves the fields for the payer to fill.
+export const nameParts = (full: string) => {
+  const parts = full.trim().split(/\s+/).filter(Boolean)
+  if (parts.length < 2 || !parts.every((p) => NAME.test(p))) return { firstName: '', lastName: '' }
+  return { firstName: parts[0].slice(0, 50), lastName: parts.slice(1).join(' ').slice(0, 50) }
 }
 
 // A starting point for the form: whatever was saved, else the user's name and
 // the account's country (or Georgia).
-export function addressDraft(stored: unknown, country: string | null, user: { name: string; email: string }): BillingAddress {
+export function addressDraft(stored: unknown, country: string | null, user: { name: string }): BillingAddress {
   const s = (stored && typeof stored === 'object' ? stored : {}) as Record<string, unknown>
   const str = (v: unknown) => (typeof v === 'string' ? v : '')
   const c = str(s.country) || (country ?? '').toUpperCase()
-  const names = nameParts(user.name, user.email)
+  const names = nameParts(user.name)
   return {
     firstName: str(s.firstName) || names.firstName,
     lastName: str(s.lastName) || names.lastName,

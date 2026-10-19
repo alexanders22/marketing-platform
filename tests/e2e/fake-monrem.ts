@@ -59,7 +59,8 @@ export function startFakeMonrem() {
     }
     if (req.method === 'POST' && url.pathname === '/v2/hpp/checkout') {
       if (!authed) return json(401, { message: 'Unauthenticated.' })
-      for (const f of ['order_id', 'currency', 'description', 'ip_address', 'referer_url', 'return_url', 'customer_first_name', 'customer_last_name', 'customer_email', 'customer_phone', 'billing_first_name', 'billing_last_name', 'billing_street', 'billing_city', 'billing_post_code', 'billing_country']) if (!body[f]) return json(422, { message: 'Invalid', errors: { [f]: [`The ${f.replace(/_/g, ' ')} field is required when customer token is not present.`] } })
+      for (const f of ['order_id', 'currency', 'description', 'ip_address', 'referer_url', 'return_url', 'customer_first_name', 'customer_last_name', 'customer_email', 'customer_phone', 'billing_first_name', 'billing_last_name', 'billing_street', 'billing_city', 'billing_post_code', 'billing_state', 'billing_country']) if (!body[f]) return json(422, { message: 'Invalid', errors: { [f]: [`The ${f.replace(/_/g, ' ')} field is required when customer token is not present.`] } })
+      for (const f of ['customer_first_name', 'customer_last_name', 'billing_first_name', 'billing_last_name']) if (!/^[A-Za-z ]+$/.test(String(body[f]))) return json(422, { message: 'Invalid', errors: { [f]: ['Must contain only letters and spaces'] } })
       const plan = body.recurring_billing_reference ? FAKE_PLANS.find((x) => x.ref_id === body.recurring_billing_reference) : null
       if (body.recurring_billing_reference && !plan) return json(422, { message: 'Invalid', errors: { recurring_billing_reference: ['Unknown plan'] } })
       const o: Order = {

@@ -120,7 +120,7 @@ export async function hppCheckout(i: CheckoutInput) {
       billing_city: i.billing.city,
       billing_post_code: i.billing.postCode,
       billing_country: i.billing.country,
-      ...(i.billing.state ? { billing_state: i.billing.state } : {}),
+      billing_state: i.billing.state,
     },
   })
   if (!tx.hpp_url) throw new MonremError('Monrem did not return a checkout link')

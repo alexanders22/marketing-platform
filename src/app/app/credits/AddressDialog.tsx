@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, MapPin } from 'lucide-react'
-import { COUNTRY_CODES, STATE_COUNTRIES, type BillingAddress } from '@/lib/billing-address'
+import { COUNTRY_CODES, type BillingAddress } from '@/lib/billing-address'
 import { saveBillingAddress } from './actions'
 
 const input = 'mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none'
@@ -31,7 +31,6 @@ export function AddressDialog({
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const id = useId()
-  const [country, setCountry] = useState(initial.country)
   useEffect(() => {
     const d = ref.current
     if (d && !d.open) d.showModal()
@@ -63,44 +62,42 @@ export function AddressDialog({
             <div className="mt-4 grid grid-cols-2 gap-3">
               <label className="block text-sm font-medium">
                 First name
-                <input name="firstName" required maxLength={50} autoComplete="given-name" defaultValue={initial.firstName} className={input} />
+                <input name="firstName" required maxLength={50} pattern="[A-Za-z ]+" title="Latin letters, as on the card" placeholder="Nino" autoComplete="given-name" defaultValue={initial.firstName} className={input} />
               </label>
               <label className="block text-sm font-medium">
                 Last name
-                <input name="lastName" required maxLength={50} autoComplete="family-name" defaultValue={initial.lastName} className={input} />
+                <input name="lastName" required maxLength={50} pattern="[A-Za-z ]+" title="Latin letters, as on the card" placeholder="Beridze" autoComplete="family-name" defaultValue={initial.lastName} className={input} />
               </label>
             </div>
             <label className="mt-3 block text-sm font-medium">
               Street and number
               <input name="street" required minLength={3} maxLength={120} autoComplete="street-address" defaultValue={initial.street} className={input} />
             </label>
-            <div className="mt-3 grid grid-cols-[1fr_8rem] gap-3">
+            <div className="mt-3 grid grid-cols-2 gap-3">
               <label className="block text-sm font-medium">
                 City
                 <input name="city" required minLength={2} maxLength={60} autoComplete="address-level2" defaultValue={initial.city} className={input} />
               </label>
               <label className="block text-sm font-medium">
-                Postal code
-                <input name="postCode" required minLength={2} maxLength={16} autoComplete="postal-code" defaultValue={initial.postCode} className={input} />
+                State / region
+                <input name="state" required minLength={2} maxLength={40} autoComplete="address-level1" placeholder="Tbilisi" defaultValue={initial.state} className={input} />
               </label>
             </div>
+            <label className="mt-3 block text-sm font-medium">
+              Postal code
+              <input name="postCode" required minLength={2} maxLength={16} autoComplete="postal-code" defaultValue={initial.postCode} className={`${input} max-w-[10rem]`} />
+            </label>
             {/* Labelled by id: a wrapping label would read every country into the name. */}
             <label htmlFor={`${id}-country`} className="mt-3 block text-sm font-medium">
               Country
             </label>
-            <select id={`${id}-country`} name="country" required autoComplete="country" value={country} onChange={(e) => setCountry(e.target.value)} className={input}>
+            <select id={`${id}-country`} name="country" required autoComplete="country" defaultValue={initial.country} className={input}>
               {countries().map(([code, name]) => (
                 <option key={code} value={code}>
                   {name}
                 </option>
               ))}
             </select>
-            {STATE_COUNTRIES.includes(country) && (
-              <label className="mt-3 block text-sm font-medium">
-                State / province
-                <input name="state" required minLength={2} maxLength={40} autoComplete="address-level1" placeholder={country === 'US' ? 'NY' : country === 'CA' ? 'ON' : 'CDMX'} defaultValue={initial.state} className={input} />
-              </label>
-            )}
             <label className="mt-3 block text-sm font-medium">
               Phone
               <input name="phone" type="tel" required maxLength={24} autoComplete="tel" placeholder="+995 555 12 34 56" defaultValue={initial.phone} className={input} />
