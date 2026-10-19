@@ -29,11 +29,11 @@ export async function checkout(
   let billing = savedAddress(account.billingAddress)
   if (address) {
     const a = BillingAddress.safeParse(address)
-    if (!a.success) return { error: a.error.issues[0].message, needAddress: addressDraft(billing, account.country) }
+    if (!a.success) return { error: a.error.issues[0].message, needAddress: addressDraft(address, account.country, user) }
     billing = a.data
     await prisma.account.update({ where: { id: account.id }, data: { billingAddress: billing } })
   }
-  if (!billing) return { needAddress: addressDraft(null, account.country) }
+  if (!billing) return { needAddress: addressDraft(account.billingAddress, account.country, user) }
   const h = await headers()
   const ip = (h.get('x-forwarded-for') ?? '').split(',')[0].trim() || h.get('x-real-ip') || '127.0.0.1'
   return startCheckout({ accountId: account.id, user, billing, ip, purchase: parsed.data as Purchase })

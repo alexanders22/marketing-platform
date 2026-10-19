@@ -1,7 +1,7 @@
 import 'server-only'
 import { Prisma, type BillingCycle, type Payment } from '@prisma/client'
 import { extendPaidUntil, grantPlanCredits } from './billing'
-import type { BillingAddress } from './billing-address'
+import { splitPhone, type BillingAddress } from './billing-address'
 import { getPlans, getPricing } from './credits'
 import { gelPerUsd } from './fx'
 import { siteUrl, terminalUrl } from './hosts'
@@ -55,12 +55,6 @@ async function inCurrency(usd: number) {
 
 const isUnique = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002'
 
-const splitName = (name: string, email: string) => {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  const first = parts[0] ?? email.split('@')[0]
-  return { firstName: first.slice(0, 50), lastName: (parts.slice(1).join(' ') || first).slice(0, 50) }
-}
-
 /* ─── Recurring billing plans ───────────────────────────────────────────── */
 
 // Which Monrem recurring plan renews which of ours: { "TEAM_MONTHLY": ref_id, … }.
@@ -102,6 +96,11 @@ export async function recurringOption(plan: PlanId, cycle: BillingCycle) {
 
 /* ─── Checkout ──────────────────────────────────────────────────────────── */
 
+const phoneParts = (b: BillingAddress) => {
+  const { code, number } = splitPhone(b.phone, b.country)
+  return { phone: number, phoneCode: code }
+}
+
 // Creates the payment and Monrem's checkout; the browser goes to the URL.
 export async function startCheckout(o: {
   accountId: string
@@ -141,7 +140,7 @@ export async function startCheckout(o: {
       refererUrl: terminalUrl(),
       returnUrl: `${terminalUrl()}/app/credits?payment=${payment.id}`,
       callbackUrl: `${siteUrl()}/api/payments/monrem`,
-      customer: { ...splitName(o.user.name, o.user.email), email: o.user.email },
+      customer: { firstName: o.billing.firstName, lastName: o.billing.lastName, email: o.user.email, ...phoneParts(o.billing) },
       billing: o.billing,
     })
     await prisma.payment.update({ where: { id: payment.id }, data: { checkoutUrl: tx.hpp_url } })
