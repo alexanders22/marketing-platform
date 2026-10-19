@@ -1,11 +1,12 @@
 import 'server-only'
 import { Prisma, type BillingCycle, type Payment } from '@prisma/client'
 import { extendPaidUntil, grantPlanCredits } from './billing'
-import { splitPhone, type BillingAddress } from './billing-address'
+import { phoneParts, type BillingAddress } from './billing-address'
 import { getPlans, getPricing } from './credits'
 import { gelPerUsd } from './fx'
 import { siteUrl, terminalUrl } from './hosts'
 import {
+  canEmbed,
   cancelSubscription,
   findSubscription,
   getSubscription,
@@ -96,11 +97,6 @@ export async function recurringOption(plan: PlanId, cycle: BillingCycle) {
 
 /* ─── Checkout ──────────────────────────────────────────────────────────── */
 
-const phoneParts = (b: BillingAddress) => {
-  const { code, number } = splitPhone(b.phone, b.country)
-  return { phone: number, phoneCode: code }
-}
-
 // Creates the payment and Monrem's checkout; the browser goes to the URL.
 export async function startCheckout(o: {
   accountId: string
@@ -108,7 +104,7 @@ export async function startCheckout(o: {
   billing: BillingAddress
   ip: string
   purchase: Purchase
-}): Promise<{ url?: string; error?: string }> {
+}): Promise<{ url?: string; embed?: boolean; error?: string }> {
   const q = await quote(o.purchase)
   if (!q || q.usd <= 0) return { error: 'This is not for sale' }
   const p = o.purchase
@@ -140,7 +136,7 @@ export async function startCheckout(o: {
       refererUrl: terminalUrl(),
       returnUrl: `${terminalUrl()}/app/credits?payment=${payment.id}`,
       callbackUrl: `${siteUrl()}/api/payments/monrem`,
-      customer: { firstName: o.billing.firstName, lastName: o.billing.lastName, email: o.user.email, ...phoneParts(o.billing) },
+      customer: { firstName: o.billing.firstName, lastName: o.billing.lastName, email: o.user.email, ...phoneParts(o.billing.phone) },
       billing: o.billing,
     })
     await prisma.payment.update({ where: { id: payment.id }, data: { checkoutUrl: tx.hpp_url } })
@@ -150,7 +146,7 @@ export async function startCheckout(o: {
         if (!isUnique(e)) throw e
         console.error('monrem transaction id already used', tx.transaction_id)
       })
-    return { url: tx.hpp_url }
+    return { url: tx.hpp_url, embed: await canEmbed(tx.hpp_url) }
   } catch (e) {
     console.error('monrem checkout failed', payment.id, e instanceof Error ? e.message : e)
     await prisma.payment.update({ where: { id: payment.id }, data: { status: 'DECLINED', statusDescription: e instanceof MonremError ? e.message.slice(0, 300) : 'Checkout failed' } })

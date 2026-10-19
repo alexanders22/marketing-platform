@@ -1,24 +1,30 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import type { BillingAddress } from '@/lib/billing-address'
+import type { AddressForm } from '@/lib/billing-address'
 import { checkout } from './actions'
 import { AddressDialog } from './AddressDialog'
+import { PayFrame } from './PayFrame'
 
 type Purchase = { kind: 'PACK'; credits: number } | { kind: 'PLAN'; plan: 'STARTER' | 'TEAM' | 'AGENCY'; cycle: 'MONTHLY' | 'YEARLY'; autoRenew?: boolean }
 
-// Opens Monrem's payment page; the customer comes back to /app/credits.
-// The first payment asks for the billing address on the way.
+// Opens Monrem's payment page: in a window over this page when Monrem allows
+// it, else in the tab; the customer comes back to /app/credits. The first
+// payment asks for the billing address on the way.
 export function BuyButton({ purchase, children, className, disabled }: { purchase: Purchase; children: React.ReactNode; className: string; disabled?: string }) {
+  const router = useRouter()
   const [pending, start] = useTransition()
   const [error, setError] = useState<string>()
-  const [address, setAddress] = useState<{ draft: BillingAddress; error?: string } | null>(null)
+  const [address, setAddress] = useState<{ draft: Required<AddressForm>; error?: string } | null>(null)
+  const [frame, setFrame] = useState<string | null>(null)
 
-  const pay = (withAddress?: BillingAddress) =>
+  const pay = (withAddress?: Required<AddressForm>) =>
     start(async () => {
       setError(undefined)
       const res = await checkout(purchase, withAddress)
+      if (res.url && res.embed) return (setAddress(null), setFrame(res.url))
       if (res.url) return window.location.assign(res.url)
       if (res.needAddress) return setAddress({ draft: withAddress ?? res.needAddress, error: res.error })
       setAddress(null)
@@ -41,8 +47,18 @@ export function BuyButton({ purchase, children, className, disabled }: { purchas
         </p>
       )}
       {address && (
-        <AddressDialog key={address.error} initial={address.draft} error={address.error} submitLabel="Continue to payment" pending={pending} onClose={() => setAddress(null)} onSubmit={(a) => pay(a)} />
+        <AddressDialog
+          key={address.error}
+          initial={address.draft}
+          error={address.error}
+          submitLabel="Continue to payment"
+          pending={pending}
+          onClose={() => setAddress(null)}
+          onSubmit={(a) => pay({ ...a, phoneCountry: a.phoneCountry ?? '' })}
+        />
       )}
+      {/* Closed without paying: the pending payment shows up (or expires) on refresh. */}
+      {frame && <PayFrame url={frame} onClose={() => (setFrame(null), router.refresh())} />}
     </>
   )
 }

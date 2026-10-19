@@ -2,16 +2,21 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { getCountries, getCountryCallingCode, getExampleNumber, type CountryCode } from 'libphonenumber-js'
+import examples from 'libphonenumber-js/mobile/examples'
 import { Loader2, MapPin } from 'lucide-react'
-import { COUNTRY_CODES, type BillingAddress } from '@/lib/billing-address'
+import { addressDraft, COUNTRY_CODES, formatPhone, type AddressForm, type BillingAddress } from '@/lib/billing-address'
 import { saveBillingAddress } from './actions'
 
 const input = 'mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none'
 
-const countries = () => {
-  const names = new Intl.DisplayNames(['en'], { type: 'region' })
-  return COUNTRY_CODES.map((c) => [c, names.of(c) ?? c] as const).sort((a, b) => a[1].localeCompare(b[1]))
-}
+const regionName = (c: string) => new Intl.DisplayNames(['en'], { type: 'region' }).of(c) ?? c
+const byName = (codes: string[]) => codes.map((c) => [c, regionName(c)] as const).sort((a, b) => a[1].localeCompare(b[1]))
+const countries = () => byName(COUNTRY_CODES)
+// Flag emoji from the two regional-indicator letters.
+const flag = (c: string) => String.fromCodePoint(...[...c].map((ch) => 0x1f1a5 + ch.charCodeAt(0)))
+const dialCountries = () => byName(getCountries()).map(([c, name]) => ({ code: c, label: `${flag(c)} +${getCountryCallingCode(c as CountryCode)} ${name}` }))
+const examplePhone = (c: string) => getExampleNumber(c as CountryCode, examples)?.formatNational() ?? ''
 
 // The payer's name, billing address and phone, asked for before the first card payment.
 export function AddressDialog({
@@ -22,15 +27,17 @@ export function AddressDialog({
   onSubmit,
   onClose,
 }: {
-  initial: BillingAddress
+  initial: Required<AddressForm>
   submitLabel: string
   pending: boolean
   error?: string
-  onSubmit: (a: BillingAddress) => void
+  onSubmit: (a: AddressForm) => void
   onClose: () => void
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const id = useId()
+  const [phoneCountry, setPhoneCountry] = useState(initial.phoneCountry)
+  const phoneRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     const d = ref.current
     if (d && !d.open) d.showModal()
@@ -47,7 +54,7 @@ export function AddressDialog({
           e.preventDefault()
           const f = new FormData(e.currentTarget)
           const v = (k: string) => String(f.get(k) ?? '')
-          onSubmit({ firstName: v('firstName'), lastName: v('lastName'), street: v('street'), city: v('city'), postCode: v('postCode'), state: v('state'), country: v('country'), phone: v('phone') })
+          onSubmit({ firstName: v('firstName'), lastName: v('lastName'), street: v('street'), city: v('city'), postCode: v('postCode'), state: v('state'), country: v('country'), phone: v('phone'), phoneCountry: v('phoneCountry') })
         }}
       >
         <div className="flex gap-4 p-5">
@@ -83,25 +90,71 @@ export function AddressDialog({
                 <input name="state" required minLength={2} maxLength={40} autoComplete="address-level1" placeholder="Tbilisi" defaultValue={initial.state} className={input} />
               </label>
             </div>
-            <label className="mt-3 block text-sm font-medium">
-              Postal code
-              <input name="postCode" required minLength={2} maxLength={16} autoComplete="postal-code" defaultValue={initial.postCode} className={`${input} max-w-[10rem]`} />
-            </label>
-            {/* Labelled by id: a wrapping label would read every country into the name. */}
-            <label htmlFor={`${id}-country`} className="mt-3 block text-sm font-medium">
-              Country
-            </label>
-            <select id={`${id}-country`} name="country" required autoComplete="country" defaultValue={initial.country} className={input}>
-              {countries().map(([code, name]) => (
-                <option key={code} value={code}>
-                  {name}
-                </option>
-              ))}
-            </select>
-            <label className="mt-3 block text-sm font-medium">
+            <div className="mt-3 grid grid-cols-[8rem_1fr] gap-3">
+              <label className="block text-sm font-medium">
+                Postal code
+                <input name="postCode" required minLength={2} maxLength={16} autoComplete="postal-code" defaultValue={initial.postCode} className={input} />
+              </label>
+              <div>
+                {/* Labelled by id: a wrapping label would read every country into the name. */}
+                <label htmlFor={`${id}-country`} className="block text-sm font-medium">
+                  Country
+                </label>
+                <select
+                  id={`${id}-country`}
+                  name="country"
+                  required
+                  autoComplete="country"
+                  defaultValue={initial.country}
+                  // The phone's code follows the country until a number is typed.
+                  onChange={(e) => !phoneRef.current?.value && getCountries().includes(e.target.value as CountryCode) && setPhoneCountry(e.target.value)}
+                  className={input}
+                >
+                  {countries().map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <label htmlFor={`${id}-phone`} className="mt-3 block text-sm font-medium">
               Phone
-              <input name="phone" type="tel" required maxLength={24} autoComplete="tel" placeholder="+995 555 12 34 56" defaultValue={initial.phone} className={input} />
             </label>
+            <div className="grid grid-cols-[6.5rem_1fr] gap-2">
+              {/* The list shows flag, code and name; closed, only flag and code. */}
+              <div className="relative">
+                <span aria-hidden className={`${input} pointer-events-none flex items-center justify-between`}>
+                  {flag(phoneCountry)} +{getCountryCallingCode(phoneCountry as CountryCode)} <span className="text-zinc-400">▾</span>
+                </span>
+                <select
+                  name="phoneCountry"
+                  aria-label="Phone country code"
+                  value={phoneCountry}
+                  onChange={(e) => setPhoneCountry(e.target.value)}
+                  className="absolute inset-0 mt-1 w-full cursor-pointer opacity-0"
+                >
+                  {dialCountries().map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <input
+                ref={phoneRef}
+                id={`${id}-phone`}
+                name="phone"
+                type="tel"
+                required
+                maxLength={30}
+                autoComplete="tel-national"
+                placeholder={examplePhone(phoneCountry)}
+                defaultValue={initial.phone}
+                className={input}
+              />
+            </div>
+            <p className="mt-1 text-xs text-zinc-500">e.g. {examplePhone(phoneCountry) || 'your mobile number'}</p>
             {error && (
               <p role="alert" className="mt-3 text-sm text-red-600">
                 {error}
@@ -128,16 +181,15 @@ export function BillingAddressLine({ address }: { address: BillingAddress }) {
   const [open, setOpen] = useState(false)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string>()
-  const country = new Intl.DisplayNames(['en'], { type: 'region' }).of(address.country) ?? address.country
   return (
-    <p className="mt-1 text-xs text-zinc-500">
-      Billing: {address.firstName} {address.lastName}, {[address.street, address.city, address.state, address.postCode, country].filter(Boolean).join(', ')} · {address.phone} ·{' '}
+    <div className="mt-1 text-xs text-zinc-500">
+      Billing: {address.firstName} {address.lastName}, {[address.street, address.city, address.state, address.postCode, regionName(address.country)].filter(Boolean).join(', ')} · {formatPhone(address.phone)} ·{' '}
       <button type="button" onClick={() => (setError(undefined), setOpen(true))} className="font-medium text-indigo-600 underline">
         Change
       </button>
       {open && (
         <AddressDialog
-          initial={address}
+          initial={addressDraft(address, address.country, { name: '' })}
           submitLabel="Save"
           pending={pending}
           error={error}
@@ -152,6 +204,6 @@ export function BillingAddressLine({ address }: { address: BillingAddress }) {
           }
         />
       )}
-    </p>
+    </div>
   )
 }

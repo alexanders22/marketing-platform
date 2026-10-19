@@ -13,6 +13,7 @@ import { recurringOption, syncPayment } from '@/lib/payments'
 import { billingState, yearlyTotal } from '@/lib/plans'
 import { BillingAddressLine } from './AddressDialog'
 import { BuyButton } from './BuyButton'
+import { EscapeFrame } from './PayFrame'
 import { CancelRenewal, PlanPay } from './PlanPay'
 
 export const metadata: Metadata = { title: 'Plan & credits — Loudpilot' }
@@ -57,6 +58,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
     <div className="max-w-3xl">
       <PageHeader title="Plan & credits" sub="AI generation spends credits. Your plan refills them every month." />
 
+      {paid && <EscapeFrame />}
       {paid && <PaymentResult p={paid} paidUntil={account.paidUntil} />}
 
       <div className="grid gap-4 sm:grid-cols-2">
