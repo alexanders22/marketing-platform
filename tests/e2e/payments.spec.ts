@@ -41,17 +41,25 @@ test('a credit pack: Monrem checkout, callback, credits added once', async () =>
   const before = balance()
   await page.goto('/app/credits')
   await page.getByRole('list', { name: 'Credit packs' }).getByRole('listitem').first().getByRole('button', { name: 'Buy' }).click()
+  // The first payment asks for the billing address Monrem needs.
+  const form = page.getByRole('dialog', { name: 'Billing address' })
+  await form.getByLabel('Street and number').fill('1 Rustaveli Ave')
+  await form.getByLabel('City').fill('Tbilisi')
+  await form.getByLabel('Postal code').fill('0108')
+  await expect(form.getByLabel('Country')).toHaveValue('GE')
+  await form.getByRole('button', { name: 'Continue to payment' }).click()
   await page.waitForURL(new RegExp(`127.0.0.1:${FAKE_MONREM_PORT}/pay/`))
   await expect(page.getByRole('heading', { name: 'Pay 10.00 USD' })).toBeVisible()
   const [id] = lastPayment()
   const order = monrem.orders.get(id)!
-  expect(order.body).toMatchObject({ amount: 1000, currency: 'USD', callback_url: webhook })
+  expect(order.body).toMatchObject({ amount: 1000, currency: 'USD', callback_url: webhook, billing_street: '1 Rustaveli Ave', billing_city: 'Tbilisi', billing_post_code: '0108', billing_country: 'GE' })
   expect(String(order.body.return_url)).toContain(`/app/credits?payment=${id}`)
 
   await page.getByRole('link', { name: 'Pay now' }).click()
   await page.waitForURL(/\/app\/credits\?payment=/)
   await expect(page.getByText('Payment received — 100 credits added.')).toBeVisible()
   expect(balance()).toBe(before + 100)
+  await expect(page.getByText('Billing address: 1 Rustaveli Ave, Tbilisi, 0108, Georgia')).toBeVisible()
   expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PACK', '1000', 'USD', 'true'])
   expect(sql(`select count(*) from "CreditEntry" where "idempotencyKey"='payment:${id}' and reason='PURCHASE' and amount=100`)).toBe('1')
 

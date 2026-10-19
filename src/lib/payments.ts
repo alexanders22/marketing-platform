@@ -1,6 +1,7 @@
 import 'server-only'
 import { Prisma, type BillingCycle, type Payment } from '@prisma/client'
 import { extendPaidUntil, grantPlanCredits } from './billing'
+import type { BillingAddress } from './billing-address'
 import { getPlans, getPricing } from './credits'
 import { gelPerUsd } from './fx'
 import { siteUrl, terminalUrl } from './hosts'
@@ -105,7 +106,7 @@ export async function recurringOption(plan: PlanId, cycle: BillingCycle) {
 export async function startCheckout(o: {
   accountId: string
   user: { id: string; name: string; email: string }
-  country: string | null
+  billing: BillingAddress
   ip: string
   purchase: Purchase
 }): Promise<{ url?: string; error?: string }> {
@@ -140,7 +141,8 @@ export async function startCheckout(o: {
       refererUrl: terminalUrl(),
       returnUrl: `${terminalUrl()}/app/credits?payment=${payment.id}`,
       callbackUrl: `${siteUrl()}/api/payments/monrem`,
-      customer: { ...splitName(o.user.name, o.user.email), email: o.user.email, country: o.country && /^[A-Z]{2}$/.test(o.country) ? o.country : null },
+      customer: { ...splitName(o.user.name, o.user.email), email: o.user.email },
+      billing: o.billing,
     })
     await prisma.payment.update({ where: { id: payment.id }, data: { checkoutUrl: tx.hpp_url } })
     // The transaction id is only a lookup aid: a clash must not block the payment.

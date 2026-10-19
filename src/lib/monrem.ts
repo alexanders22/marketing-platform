@@ -73,8 +73,9 @@ async function call<T>(path: string, init: { method?: string; body?: unknown } =
     if (res.status === 401 && attempt === 0) continue
     const data = (await res.json().catch(() => ({}))) as T & { message?: string; errors?: Record<string, string[]> }
     if (!res.ok) {
-      const first = data.errors ? Object.values(data.errors).flat()[0] : undefined
-      throw new MonremError(`Monrem: ${first ?? data.message ?? `error ${res.status}`}`)
+      // Every validation error at once, so one failed checkout shows all that is missing.
+      const all = data.errors ? Object.values(data.errors).flat().join(' ') : ''
+      throw new MonremError(`Monrem: ${all || data.message || `error ${res.status}`}`)
     }
     return data
   }
@@ -91,7 +92,8 @@ export type CheckoutInput = {
   refererUrl: string
   returnUrl: string
   callbackUrl: string
-  customer: { firstName: string; lastName: string; email: string; country?: string | null }
+  customer: { firstName: string; lastName: string; email: string }
+  billing: { street: string; city: string; postCode: string; country: string }
 }
 
 // A hosted checkout: the customer is sent to hpp_url to pay.
@@ -112,7 +114,10 @@ export async function hppCheckout(i: CheckoutInput) {
       customer_email: i.customer.email,
       billing_first_name: i.customer.firstName,
       billing_last_name: i.customer.lastName,
-      ...(i.customer.country ? { billing_country: i.customer.country } : {}),
+      billing_street: i.billing.street,
+      billing_city: i.billing.city,
+      billing_country: i.billing.country,
+      ...(i.billing.postCode ? { billing_post_code: i.billing.postCode } : {}),
     },
   })
   if (!tx.hpp_url) throw new MonremError('Monrem did not return a checkout link')
