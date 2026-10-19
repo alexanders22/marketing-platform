@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { Loader2 } from 'lucide-react'
 import { checkout } from './actions'
 
-type Purchase = { kind: 'PACK'; credits: number } | { kind: 'PLAN'; plan: 'STARTER' | 'TEAM' | 'AGENCY'; cycle: 'MONTHLY' | 'YEARLY' }
+type Purchase = { kind: 'PACK'; credits: number } | { kind: 'PLAN'; plan: 'STARTER' | 'TEAM' | 'AGENCY'; cycle: 'MONTHLY' | 'YEARLY'; autoRenew?: boolean }
 
 // Opens Monrem's payment page; the customer comes back to /app/credits.
 export function BuyButton({ purchase, children, className, disabled }: { purchase: Purchase; children: React.ReactNode; className: string; disabled?: string }) {

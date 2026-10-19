@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { cronSecret } from '@/lib/cron-secret'
 import { dispatchAlerts, holidayRemindersDue } from '@/lib/alerts'
 import { grantPlanCreditsDue } from '@/lib/billing'
-import { syncPendingPayments } from '@/lib/payments'
+import { syncPendingPayments, syncSubscriptionsDue } from '@/lib/payments'
 import { refreshDossiersDue } from '@/lib/dossier'
 import { checkAllGoals } from '@/lib/goals'
 import { syncInboxDue } from '@/lib/inbox'
@@ -24,6 +24,7 @@ let lastDossiers = 0
 let lastPlanCredits = 0
 let lastHolidays = 0
 let lastPayments = 0
+let lastSubscriptions = 0
 
 export async function POST(req: Request) {
   const given = Buffer.from(req.headers.get('x-khma-cron') ?? '')
@@ -83,6 +84,12 @@ export async function POST(req: Request) {
     lastPayments = Date.now()
     payments = await syncPendingPayments().catch((e) => (console.error('payments sync failed', e), 0))
   }
+  // Auto-renewals: Monrem's charges and subscription status, hourly.
+  let subscriptions = 0
+  if (q.get('subscriptions') === '1' || Date.now() - lastSubscriptions > 60 * 60 * 1000) {
+    lastSubscriptions = Date.now()
+    subscriptions = await syncSubscriptionsDue(new Date(), q.get('subscriptions') === '1').catch((e) => (console.error('subscriptions sync failed', e), 0))
+  }
   const alerts = await dispatchAlerts()
-  return Response.json({ published, insights, ads, website, inbox, clips, goals, dossiers, planCredits, holidays, payments, alerts })
+  return Response.json({ published, insights, ads, website, inbox, clips, goals, dossiers, planCredits, holidays, payments, subscriptions, alerts })
 }

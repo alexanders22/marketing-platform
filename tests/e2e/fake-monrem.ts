@@ -11,7 +11,14 @@ export const FAKE_MONREM_PORT = 18996
 const BASE = `http://127.0.0.1:${FAKE_MONREM_PORT}`
 export const FAKE_API_PASSWORD = 'fake-api-password'
 
-type Order = { order_id: string; transaction_id: string; amount: number; currency: string; status: string; callback_url: string; return_url: string; body: Record<string, unknown> }
+type Order = { order_id: string; transaction_id: string; amount: number; currency: string; status: string; callback_url: string; return_url: string; body: Record<string, unknown>; subscription?: string }
+type Sub = { id: string; ref_id: string; status: string; first: Order; renewals: Order[] }
+
+// Recurring billing plans as made in the Merchant Portal (amount in major units).
+export const FAKE_PLANS = [
+  { id: 1, name: 'Starter monthly', ref_id: 'ref-starter-m', amount: '29.00', currency: { code: 'USD' }, billing_frequency: 1, is_active: true },
+  { id: 2, name: 'Starter yearly (old price)', ref_id: 'ref-starter-y-old', amount: '199.00', currency: { code: 'USD' }, billing_frequency: 12, is_active: true },
+]
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex')
 export const signed = (o: { order_id: string; status: string; amount: number; currency: string }, password = FAKE_API_PASSWORD) => ({
@@ -23,11 +30,18 @@ export const signed = (o: { order_id: string; status: string; amount: number; cu
 export function startFakeMonrem() {
   const orders = new Map<string, Order>()
   const callbacks: { order_id: string; status: string; code: number }[] = []
+  const subs = new Map<string, Sub>()
+  const cancelled: string[] = []
   let n = 0
 
-  const txOf = (o: Order) => signed({ order_id: o.order_id, status: o.status, amount: o.amount, currency: o.currency })
+  const txOf = (o: Order) => ({
+    ...signed({ order_id: o.order_id, status: o.status, amount: o.amount, currency: o.currency }),
+    transaction_id: o.transaction_id,
+    ...(o.subscription ? { subscription: { id: o.subscription, status: subs.get(o.subscription)?.status } } : {}),
+  })
+  const subJson = (x: Sub) => ({ id: x.id, ref_id: x.ref_id, status: x.status, transaction: txOf(x.first), transactions: [x.first, ...x.renewals].map(txOf) })
   const callback = async (o: Order) => {
-    const res = await fetch(o.callback_url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...txOf(o), transaction_id: o.transaction_id, status_description: o.status === 'APPROVED' ? 'Success' : 'Do not honour' }) })
+    const res = await fetch(o.callback_url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...txOf(o), status_description: o.status === 'APPROVED' ? 'Success' : 'Do not honour' }) })
     callbacks.push({ order_id: o.order_id, status: o.status, code: res.status })
   }
 
@@ -46,10 +60,12 @@ export function startFakeMonrem() {
     if (req.method === 'POST' && url.pathname === '/v2/hpp/checkout') {
       if (!authed) return json(401, { message: 'Unauthenticated.' })
       for (const f of ['order_id', 'currency', 'description', 'ip_address', 'referer_url', 'return_url']) if (!body[f]) return json(422, { message: 'Invalid', errors: { [f]: [`The ${f} field is required.`] } })
+      const plan = body.recurring_billing_reference ? FAKE_PLANS.find((x) => x.ref_id === body.recurring_billing_reference) : null
+      if (body.recurring_billing_reference && !plan) return json(422, { message: 'Invalid', errors: { recurring_billing_reference: ['Unknown plan'] } })
       const o: Order = {
         order_id: String(body.order_id),
-        transaction_id: `GWS${++n}`,
-        amount: Number(body.amount),
+        transaction_id: `GWS${Date.now()}-${++n}`,
+        amount: plan ? Math.round(parseFloat(plan.amount) * 100) : Number(body.amount),
         currency: String(body.currency),
         status: 'PENDING',
         callback_url: String(body.callback_url),
@@ -57,13 +73,32 @@ export function startFakeMonrem() {
         body,
       }
       orders.set(o.order_id, o)
-      return json(200, { ...txOf(o), transaction_id: o.transaction_id, hpp_url: `${BASE}/pay/${o.order_id}` })
+      return json(200, { ...txOf(o), hpp_url: `${BASE}/pay/${o.order_id}` })
     }
     if (req.method === 'GET' && url.pathname === '/status') {
       if (!authed) return json(401, { message: 'Unauthenticated.' })
       const o = orders.get(url.searchParams.get('order_id') ?? '')
       if (!o) return json(422, { message: 'Not found', errors: { order_id: ['Unknown order'] } })
       return json(200, { order_id: o.order_id, transaction_id: o.transaction_id, amount: o.amount, currency: o.currency, status: o.status, status_description: o.status === 'APPROVED' ? 'Success' : 'Pending', transaction_type: 'purchase' })
+    }
+    if (req.method === 'GET' && url.pathname === '/recurring-billing-plan') {
+      if (!authed) return json(401, { message: 'Unauthenticated.' })
+      return json(200, { data: FAKE_PLANS, links: {}, meta: { current_page: 1, last_page: 1 } })
+    }
+    if (req.method === 'GET' && url.pathname === '/recurring-billing-subscription') {
+      if (!authed) return json(401, { message: 'Unauthenticated.' })
+      return json(200, { data: [...subs.values()].map(subJson), links: {}, meta: { current_page: 1, last_page: 1 } })
+    }
+    const sub = url.pathname.match(/^\/recurring-billing-subscription\/([^/]+)(\/cancel)?$/)
+    if (sub) {
+      if (!authed) return json(401, { message: 'Unauthenticated.' })
+      const x = subs.get(sub[1])
+      if (!x) return json(404, { message: 'Not found' })
+      if (sub[2] && req.method === 'POST') {
+        x.status = 'cancelled'
+        cancelled.push(x.id)
+      }
+      return json(200, { data: subJson(x) })
     }
     // The hosted payment page.
     const pay = url.pathname.match(/^\/pay\/([^/]+)(?:\/(approve|decline|silent))?$/)
@@ -79,6 +114,12 @@ export function startFakeMonrem() {
       }
       // Approved or declined; "silent" approves but the callback never arrives.
       o.status = pay[2] === 'decline' ? 'DECLINED' : 'APPROVED'
+      // A recurring plan's first payment starts the subscription.
+      if (o.status === 'APPROVED' && o.body.recurring_billing_reference) {
+        const id = `sub-${++n}`
+        subs.set(id, { id, ref_id: String(o.body.recurring_billing_reference), status: 'active', first: o, renewals: [] })
+        o.subscription = id
+      }
       if (pay[2] !== 'silent') await callback(o)
       res.writeHead(302, { location: o.return_url })
       return res.end()
@@ -86,10 +127,22 @@ export function startFakeMonrem() {
     json(404, { message: `fake-monrem: no route ${req.method} ${url.pathname}` })
   })
 
+  // Monrem charging the next cycle on its own (a new order id of its own).
+  const renew = async (subId: string, { notify = true, status = 'APPROVED' } = {}) => {
+    const x = subs.get(subId)!
+    const o: Order = { ...x.first, order_id: `RB${Date.now()}${++n}`, transaction_id: `GWS${Date.now()}-${++n}`, status, subscription: subId }
+    x.renewals.push(o)
+    if (notify) await callback(o)
+    return o
+  }
+
   return {
     orders,
     callbacks,
     callback,
+    subs,
+    cancelled,
+    renew,
     listen: () => new Promise<void>((resolve, reject) => (server.once('error', reject), server.listen(FAKE_MONREM_PORT, '127.0.0.1', () => resolve()))),
     close: () => new Promise<void>((r) => server.close(() => r())),
   }

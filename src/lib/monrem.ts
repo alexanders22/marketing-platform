@@ -31,7 +31,13 @@ export type MonremTx = {
   hash?: string | null
   integrity_hash?: string | null
   hpp_url?: string | null
+  // Set on charges of a recurring billing subscription.
+  subscription?: { id: string | number; status?: string | null } | null
 }
+
+// A recurring billing plan, made in the Merchant Portal (amount in major units).
+export type MonremPlan = { id: number; name: string | null; ref_id: string | null; amount: string; currency?: { code: string } | null; billing_frequency: number | null; is_active: boolean }
+export type MonremSubscription = { id: string | number; status: string; ref_id?: string; transaction?: MonremTx | null; transactions?: MonremTx[] | null }
 
 export class MonremError extends Error {}
 
@@ -75,6 +81,8 @@ async function call<T>(path: string, init: { method?: string; body?: unknown } =
 export type CheckoutInput = {
   orderId: string
   amount: number
+  // A recurring billing plan's ref_id: the payment starts a subscription.
+  recurringRef?: string
   currency: string
   description: string
   ip: string
@@ -90,7 +98,7 @@ export async function hppCheckout(i: CheckoutInput) {
     method: 'POST',
     body: {
       order_id: i.orderId,
-      amount: i.amount,
+      ...(i.recurringRef ? { recurring_billing_reference: i.recurringRef } : { amount: i.amount }),
       currency: i.currency,
       description: i.description.slice(0, 120),
       ip_address: i.ip,
@@ -108,6 +116,33 @@ export async function hppCheckout(i: CheckoutInput) {
   if (!tx.hpp_url) throw new MonremError('Monrem did not return a checkout link')
   return tx as MonremTx & { hpp_url: string }
 }
+
+// The terminal's recurring billing plans (a few pages at most).
+export async function listPlans() {
+  const out: MonremPlan[] = []
+  for (let page = 1; page <= 5; page++) {
+    const r = await call<{ data: MonremPlan[]; meta?: { last_page?: number } }>(`/recurring-billing-plan?page=${page}`)
+    out.push(...(r.data ?? []))
+    if (!r.meta?.last_page || page >= r.meta.last_page) break
+  }
+  return out
+}
+
+export const getSubscription = (id: string) => call<{ data: MonremSubscription }>(`/recurring-billing-subscription/${encodeURIComponent(id)}`).then((r) => r.data)
+export const cancelSubscription = (id: string) => call<{ data: MonremSubscription }>(`/recurring-billing-subscription/${encodeURIComponent(id)}/cancel`, { method: 'POST' }).then((r) => r.data)
+
+// The subscription a first payment started, when its callback didn't say.
+export async function findSubscription(orderId: string) {
+  for (let page = 1; page <= 3; page++) {
+    const r = await call<{ data: MonremSubscription[]; meta?: { last_page?: number } }>(`/recurring-billing-subscription?page=${page}`)
+    const hit = (r.data ?? []).find((x) => x.transaction?.order_id === orderId || x.transactions?.some((t) => t.order_id === orderId))
+    if (hit) return hit
+    if (!r.meta?.last_page || page >= r.meta.last_page) break
+  }
+  return null
+}
+
+export const subscriptionActive = (status: string | null | undefined) => /^active$/i.test(String(status ?? '').trim())
 
 export const txStatus = (orderId: string) => call<MonremTx>(`/status?order_id=${encodeURIComponent(orderId)}`)
 

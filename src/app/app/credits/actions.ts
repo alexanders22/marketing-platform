@@ -1,14 +1,15 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { z } from 'zod'
 import { requireContext } from '@/lib/context'
 import { monremEnabled } from '@/lib/monrem'
-import { startCheckout, type Purchase } from '@/lib/payments'
+import { cancelAutoRenew, startCheckout, type Purchase } from '@/lib/payments'
 
 const Input = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('PACK'), credits: z.number().int().positive() }),
-  z.object({ kind: z.literal('PLAN'), plan: z.enum(['STARTER', 'TEAM', 'AGENCY']), cycle: z.enum(['MONTHLY', 'YEARLY']) }),
+  z.object({ kind: z.literal('PLAN'), plan: z.enum(['STARTER', 'TEAM', 'AGENCY']), cycle: z.enum(['MONTHLY', 'YEARLY']), autoRenew: z.boolean().optional() }),
 ])
 
 // Opens Monrem's payment page for a credit pack or a plan period.
@@ -21,4 +22,13 @@ export async function checkout(raw: z.input<typeof Input>): Promise<{ url?: stri
   const h = await headers()
   const ip = (h.get('x-forwarded-for') ?? '').split(',')[0].trim() || h.get('x-real-ip') || '127.0.0.1'
   return startCheckout({ accountId: account.id, user, country: account.country, ip, purchase: parsed.data as Purchase })
+}
+
+// Turns auto-renewal off; the paid period runs to its end.
+export async function cancelRenewal(): Promise<{ error?: string }> {
+  const { account, role } = await requireContext()
+  if (role !== 'OWNER' && role !== 'ADMIN') return { error: 'Only the account owner or an admin can change billing' }
+  const res = await cancelAutoRenew(account.id)
+  revalidatePath('/app/credits')
+  return res
 }

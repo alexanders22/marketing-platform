@@ -11,6 +11,7 @@ import { yearlyTotal } from '@/lib/plans'
 import { vatParts } from '@/lib/tax'
 import { WORKSPACE_COOKIE } from '@/lib/context'
 import { forgetPricing, getPlans } from '@/lib/credits'
+import { cancelAutoRenew, RECURRING_KEY, type RecurringRefs } from '@/lib/payments'
 import { prisma } from '@/lib/prisma'
 import { ACTION_KEYS, VEO_PLANS, type Pricing } from '@/lib/pricing'
 import type { Economics } from '@/lib/economics'
@@ -153,6 +154,9 @@ export async function deleteAccount(accountId: string, _: AdminState, f: FormDat
   const account = await prisma.account.findUnique({ where: { id: accountId }, select: { name: true } })
   if (!account) redirect('/admin/companies')
   if (text(f, 'confirm') !== account.name) return { error: `Type “${account.name}” to confirm` }
+  // Monrem would keep charging a deleted account.
+  const stopped = await cancelAutoRenew(accountId)
+  if (stopped.error) return { error: `Auto-renewal could not be cancelled at Monrem: ${stopped.error}` }
   await prisma.$transaction(async (tx) => {
     await tx.workspace.deleteMany({ where: { accountId } })
     await tx.account.delete({ where: { id: accountId } })
@@ -382,5 +386,22 @@ export async function saveEconomics(input: Economics): Promise<AdminState> {
   })
   await logAdmin(admin, 'economics.update', 'setting', 'economics', {})
   revalidatePath('/admin/economics')
+  return { ok: 'Saved' }
+}
+
+/* ─── Card payments: auto-renewal plans ────────────────────────────────── */
+
+// Which Monrem recurring billing plan renews each of our plans and cycles.
+export async function saveRecurringPlans(_: AdminState, f: FormData): Promise<AdminState> {
+  const admin = await requireSuperAdmin()
+  const refs: RecurringRefs = {}
+  for (const plan of ['STARTER', 'TEAM', 'AGENCY'] as const)
+    for (const cycle of ['MONTHLY', 'YEARLY'] as const) {
+      const v = text(f, `${plan}_${cycle}`).slice(0, 100)
+      if (v) refs[`${plan}_${cycle}`] = v
+    }
+  await prisma.setting.upsert({ where: { key: RECURRING_KEY }, create: { key: RECURRING_KEY, value: refs, updatedBy: admin.id }, update: { value: refs, updatedBy: admin.id } })
+  await logAdmin(admin, 'payments.recurring', 'setting', RECURRING_KEY, refs)
+  revalidatePath('/admin/payments')
   return { ok: 'Saved' }
 }

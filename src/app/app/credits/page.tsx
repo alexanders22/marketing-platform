@@ -8,9 +8,10 @@ import { creditValue, getPlans, getPricing } from '@/lib/credits'
 import { VAT } from '@/lib/tax'
 import { prisma } from '@/lib/prisma'
 import { monremEnabled } from '@/lib/monrem'
-import { syncPayment } from '@/lib/payments'
+import { recurringOption, syncPayment } from '@/lib/payments'
 import { billingState, yearlyTotal } from '@/lib/plans'
 import { BuyButton } from './BuyButton'
+import { CancelRenewal, PlanPay } from './PlanPay'
 
 export const metadata: Metadata = { title: 'Plan & credits — Loudpilot' }
 
@@ -46,6 +47,8 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
   const gel = (usd: number) => `₾${Math.round(usd * value.gelPerUsd).toLocaleString('en-US')}`
   const trial = account.trialEndsAt && account.trialEndsAt > new Date()
   const active = billingState(account) === 'active'
+  const renewing = await prisma.subscription.findFirst({ where: { accountId: account.id, status: 'ACTIVE' } })
+  const renew = plan && !renewing ? { MONTHLY: Boolean(await recurringOption(plan.id, 'MONTHLY')), YEARLY: Boolean(await recurringOption(plan.id, 'YEARLY')) } : { MONTHLY: false, YEARLY: false }
 
   return (
     <div className="max-w-3xl">
@@ -66,19 +69,20 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
                   ? `${account.billingCycle === 'YEARLY' ? 'Yearly' : 'Monthly'} billing`
                   : 'Pick a plan to start your free trial.'}
           </p>
-          {plan && (
-            <div className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Pay for the plan">
-              <div>
-                <BuyButton purchase={{ kind: 'PLAN', plan: plan.id, cycle: 'MONTHLY' }} disabled={cantPay} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800">
-                  {active ? 'Extend' : 'Pay'} 1 month · ${plan.monthly}
-                </BuyButton>
-              </div>
-              <div>
-                <BuyButton purchase={{ kind: 'PLAN', plan: plan.id, cycle: 'YEARLY' }} disabled={cantPay} className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold hover:bg-zinc-50">
-                  1 year · ${yearlyTotal(plan.monthly)}
-                </BuyButton>
-              </div>
+          {renewing ? (
+            <div className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800 ring-1 ring-emerald-200">
+              <p>
+                Renews automatically every {renewing.cycle === 'YEARLY' ? 'year' : 'month'}
+                {account.paidUntil ? ` — next charge around ${account.paidUntil.toLocaleDateString('en-GB')}` : ''}.
+              </p>
+              {canPay && (
+                <div className="mt-1">
+                  <CancelRenewal until={account.paidUntil?.toLocaleDateString('en-GB') ?? 'the end of the paid period'} />
+                </div>
+              )}
             </div>
+          ) : (
+            plan && <PlanPay plan={plan.id} monthly={`$${plan.monthly}`} yearly={`$${yearlyTotal(plan.monthly)}`} renew={renew} active={active} disabled={cantPay} />
           )}
           <Link href="/app/plan" className={`inline-block text-sm font-medium ${plan ? 'mt-3 text-indigo-600 hover:underline' : 'mt-4 rounded-lg bg-zinc-900 px-4 py-2 font-semibold text-white hover:bg-zinc-800'}`}>
             {plan ? 'Change plan' : 'Choose a plan'}
@@ -163,12 +167,12 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
 }
 
 // What happened to the payment the customer just came back from.
-function PaymentResult({ p, paidUntil }: { p: { status: string; kind: string; credits: number | null; statusDescription: string | null }; paidUntil: Date | null }) {
+function PaymentResult({ p, paidUntil }: { p: { status: string; kind: string; credits: number | null; statusDescription: string | null; recurringRef: string | null }; paidUntil: Date | null }) {
   if (p.status === 'APPROVED')
     return (
       <p role="status" className="mb-4 flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200">
         <CheckCircle2 size={16} className="shrink-0" />
-        {p.kind === 'PACK' ? `Payment received — ${p.credits?.toLocaleString('en-US')} credits added.` : `Payment received — your plan is paid until ${paidUntil?.toLocaleDateString('en-GB')}.`}
+        {p.kind === 'PACK' ? `Payment received — ${p.credits?.toLocaleString('en-US')} credits added.` : `Payment received — your plan is paid until ${paidUntil?.toLocaleDateString('en-GB')}${p.recurringRef ? ' and renews automatically' : ''}.`}
       </p>
     )
   if (p.status === 'DECLINED')
