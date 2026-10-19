@@ -52,8 +52,10 @@ async function accessToken(fresh = false) {
     body: JSON.stringify({ grant_type: 'password', client_id: Number(e.clientId) || e.clientId, client_secret: e.clientSecret, username: e.username, password: e.password }),
     signal: AbortSignal.timeout(20_000),
   })
-  const data = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; message?: string }
-  if (!res.ok || !data.access_token) throw new MonremError(`Monrem sign-in failed (${res.status})${data.message ? `: ${data.message}` : ''}`)
+  // Monrem says why under "messages" (e.g. "Client authentication failed": wrong keys, or live keys on the sandbox).
+  const data = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; message?: string; messages?: string }
+  const why = data.message ?? data.messages
+  if (!res.ok || !data.access_token) throw new MonremError(`Monrem sign-in failed (${res.status})${why ? `: ${why}` : ''}`)
   // Tokens live about a year; renew a day early.
   token = { value: data.access_token, until: Date.now() + Math.max(60, (data.expires_in ?? 3600) - 86_400) * 1000 }
   return token.value
