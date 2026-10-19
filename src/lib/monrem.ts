@@ -120,11 +120,33 @@ export async function hppCheckout(i: CheckoutInput) {
       billing_city: i.billing.city,
       billing_post_code: i.billing.postCode,
       billing_country: i.billing.country,
-      ...(i.billing.state ? { billing_state: i.billing.state } : {}),
+      billing_state: i.billing.state,
     },
   })
   if (!tx.hpp_url) throw new MonremError('Monrem did not return a checkout link')
   return tx as MonremTx & { hpp_url: string }
+}
+
+// Whether Monrem's payment page may be shown in a frame on our page: its
+// X-Frame-Options / frame-ancestors decide (checked once an hour per host).
+// MONREM_EMBED=0 always sends the customer to Monrem instead.
+const framing = new Map<string, { ok: boolean; until: number }>()
+export async function canEmbed(url: string) {
+  if (process.env.MONREM_EMBED === '0') return false
+  const host = new URL(url).host
+  const known = framing.get(host)
+  if (known && known.until > Date.now()) return known.ok
+  let ok = false
+  try {
+    const res = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: AbortSignal.timeout(5000) })
+    const xfo = (res.headers.get('x-frame-options') ?? '').toLowerCase()
+    const ancestors = /frame-ancestors([^;]*)/i.exec(res.headers.get('content-security-policy') ?? '')?.[1].trim().toLowerCase()
+    ok = res.ok && !xfo && (ancestors === undefined || ancestors.split(/\s+/).some((s) => s === '*' || s === 'https:' || s.endsWith('loudpilot.app')))
+  } catch {
+    ok = false
+  }
+  framing.set(host, { ok, until: Date.now() + 3600_000 })
+  return ok
 }
 
 // The terminal's recurring billing plans (a few pages at most).

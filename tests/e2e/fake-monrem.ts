@@ -33,6 +33,9 @@ export function startFakeMonrem() {
   const subs = new Map<string, Sub>()
   const cancelled: string[] = []
   let n = 0
+  // Monrem's page refuses frames on 127.0.0.1 and allows them on localhost, so
+  // a test picks the flow by the host the checkout link uses.
+  let framing = false
 
   const txOf = (o: Order) => ({
     ...signed({ order_id: o.order_id, status: o.status, amount: o.amount, currency: o.currency }),
@@ -59,7 +62,8 @@ export function startFakeMonrem() {
     }
     if (req.method === 'POST' && url.pathname === '/v2/hpp/checkout') {
       if (!authed) return json(401, { message: 'Unauthenticated.' })
-      for (const f of ['order_id', 'currency', 'description', 'ip_address', 'referer_url', 'return_url', 'customer_first_name', 'customer_last_name', 'customer_email', 'customer_phone', 'billing_first_name', 'billing_last_name', 'billing_street', 'billing_city', 'billing_post_code', 'billing_country']) if (!body[f]) return json(422, { message: 'Invalid', errors: { [f]: [`The ${f.replace(/_/g, ' ')} field is required when customer token is not present.`] } })
+      for (const f of ['order_id', 'currency', 'description', 'ip_address', 'referer_url', 'return_url', 'customer_first_name', 'customer_last_name', 'customer_email', 'customer_phone', 'billing_first_name', 'billing_last_name', 'billing_street', 'billing_city', 'billing_post_code', 'billing_state', 'billing_country']) if (!body[f]) return json(422, { message: 'Invalid', errors: { [f]: [`The ${f.replace(/_/g, ' ')} field is required when customer token is not present.`] } })
+      for (const f of ['customer_first_name', 'customer_last_name', 'billing_first_name', 'billing_last_name']) if (!/^[A-Za-z ]+$/.test(String(body[f]))) return json(422, { message: 'Invalid', errors: { [f]: ['Must contain only letters and spaces'] } })
       const plan = body.recurring_billing_reference ? FAKE_PLANS.find((x) => x.ref_id === body.recurring_billing_reference) : null
       if (body.recurring_billing_reference && !plan) return json(422, { message: 'Invalid', errors: { recurring_billing_reference: ['Unknown plan'] } })
       const o: Order = {
@@ -73,7 +77,7 @@ export function startFakeMonrem() {
         body,
       }
       orders.set(o.order_id, o)
-      return json(200, { ...txOf(o), hpp_url: `${BASE}/pay/${o.order_id}` })
+      return json(200, { ...txOf(o), hpp_url: `${framing ? `http://localhost:${FAKE_MONREM_PORT}` : BASE}/pay/${o.order_id}` })
     }
     if (req.method === 'GET' && url.pathname === '/status') {
       if (!authed) return json(401, { message: 'Unauthenticated.' })
@@ -106,7 +110,7 @@ export function startFakeMonrem() {
       const o = orders.get(pay[1])
       if (!o) return json(404, { message: 'Unknown order' })
       if (!pay[2]) {
-        res.writeHead(200, { 'content-type': 'text/html' })
+        res.writeHead(200, { 'content-type': 'text/html', ...(req.headers.host?.startsWith('localhost') ? {} : { 'x-frame-options': 'DENY' }) })
         return res.end(
           `<!doctype html><title>Monrem checkout</title><h1>Pay ${(o.amount / 100).toFixed(2)} ${o.currency}</h1><p>${o.body.description}</p>` +
             `<a href="/pay/${o.order_id}/approve">Pay now</a> <a href="/pay/${o.order_id}/decline">Decline</a> <a href="/pay/${o.order_id}/silent">Pay without callback</a>`,
@@ -144,6 +148,7 @@ export function startFakeMonrem() {
     subs,
     cancelled,
     renew,
+    allowFraming: (on: boolean) => void (framing = on),
     listen: () => new Promise<void>((resolve, reject) => (server.once('error', reject), server.listen(FAKE_MONREM_PORT, '127.0.0.1', () => resolve()))),
     close: () => new Promise<void>((r) => server.close(() => r())),
   }

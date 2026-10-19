@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { z } from 'zod'
-import { addressDraft, BillingAddress, savedAddress } from '@/lib/billing-address'
+import { addressDraft, BillingAddress, savedAddress, type AddressForm } from '@/lib/billing-address'
 import { requireContext } from '@/lib/context'
 import { monremEnabled } from '@/lib/monrem'
 import { cancelAutoRenew, startCheckout, type Purchase } from '@/lib/payments'
@@ -19,8 +19,8 @@ const Input = z.discriminatedUnion('kind', [
 // (needAddress), and an address sent along is saved for next time.
 export async function checkout(
   raw: z.input<typeof Input>,
-  address?: z.input<typeof BillingAddress>,
-): Promise<{ url?: string; error?: string; needAddress?: BillingAddress }> {
+  address?: AddressForm,
+): Promise<{ url?: string; embed?: boolean; error?: string; needAddress?: Required<AddressForm> }> {
   const { account, user, role } = await requireContext()
   if (role !== 'OWNER' && role !== 'ADMIN') return { error: 'Only the account owner or an admin can pay' }
   if (!monremEnabled()) return { error: 'Card payments are not available yet' }
@@ -39,7 +39,7 @@ export async function checkout(
   return startCheckout({ accountId: account.id, user, billing, ip, purchase: parsed.data as Purchase })
 }
 
-export async function saveBillingAddress(address: z.input<typeof BillingAddress>): Promise<{ error?: string }> {
+export async function saveBillingAddress(address: AddressForm): Promise<{ error?: string }> {
   const { account, role } = await requireContext()
   if (role !== 'OWNER' && role !== 'ADMIN') return { error: 'Only the account owner or an admin can change billing' }
   const a = BillingAddress.safeParse(address)
