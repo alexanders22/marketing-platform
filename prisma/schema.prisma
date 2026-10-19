@@ -88,6 +88,8 @@ model Account {
   // Paid through this date (booked by a super admin until card payments
   // exist). Plan credits are granted each month while it is in the future.
   paidUntil       DateTime?
+  // The payer's billing address for card payments {street, city, postCode, country}.
+  billingAddress  Json?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 

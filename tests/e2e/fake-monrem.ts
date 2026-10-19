@@ -59,7 +59,7 @@ export function startFakeMonrem() {
     }
     if (req.method === 'POST' && url.pathname === '/v2/hpp/checkout') {
       if (!authed) return json(401, { message: 'Unauthenticated.' })
-      for (const f of ['order_id', 'currency', 'description', 'ip_address', 'referer_url', 'return_url']) if (!body[f]) return json(422, { message: 'Invalid', errors: { [f]: [`The ${f} field is required.`] } })
+      for (const f of ['order_id', 'currency', 'description', 'ip_address', 'referer_url', 'return_url', 'billing_street', 'billing_city', 'billing_country']) if (!body[f]) return json(422, { message: 'Invalid', errors: { [f]: [`The ${f.replace(/_/g, ' ')} field is required when customer token is not present.`] } })
       const plan = body.recurring_billing_reference ? FAKE_PLANS.find((x) => x.ref_id === body.recurring_billing_reference) : null
       if (body.recurring_billing_reference && !plan) return json(422, { message: 'Invalid', errors: { recurring_billing_reference: ['Unknown plan'] } })
       const o: Order = {
@@ -116,7 +116,7 @@ export function startFakeMonrem() {
       o.status = pay[2] === 'decline' ? 'DECLINED' : 'APPROVED'
       // A recurring plan's first payment starts the subscription.
       if (o.status === 'APPROVED' && o.body.recurring_billing_reference) {
-        const id = `sub-${++n}`
+        const id = `sub-${Date.now()}-${++n}`
         subs.set(id, { id, ref_id: String(o.body.recurring_billing_reference), status: 'active', first: o, renewals: [] })
         o.subscription = id
       }

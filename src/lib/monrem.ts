@@ -52,8 +52,10 @@ async function accessToken(fresh = false) {
     body: JSON.stringify({ grant_type: 'password', client_id: Number(e.clientId) || e.clientId, client_secret: e.clientSecret, username: e.username, password: e.password }),
     signal: AbortSignal.timeout(20_000),
   })
-  const data = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; message?: string }
-  if (!res.ok || !data.access_token) throw new MonremError(`Monrem sign-in failed (${res.status})${data.message ? `: ${data.message}` : ''}`)
+  // Monrem says why under "messages" (e.g. "Client authentication failed": wrong keys, or live keys on the sandbox).
+  const data = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; message?: string; messages?: string }
+  const why = data.message ?? data.messages
+  if (!res.ok || !data.access_token) throw new MonremError(`Monrem sign-in failed (${res.status})${why ? `: ${why}` : ''}`)
   // Tokens live about a year; renew a day early.
   token = { value: data.access_token, until: Date.now() + Math.max(60, (data.expires_in ?? 3600) - 86_400) * 1000 }
   return token.value
@@ -71,8 +73,9 @@ async function call<T>(path: string, init: { method?: string; body?: unknown } =
     if (res.status === 401 && attempt === 0) continue
     const data = (await res.json().catch(() => ({}))) as T & { message?: string; errors?: Record<string, string[]> }
     if (!res.ok) {
-      const first = data.errors ? Object.values(data.errors).flat()[0] : undefined
-      throw new MonremError(`Monrem: ${first ?? data.message ?? `error ${res.status}`}`)
+      // Every validation error at once, so one failed checkout shows all that is missing.
+      const all = data.errors ? Object.values(data.errors).flat().join(' ') : ''
+      throw new MonremError(`Monrem: ${all || data.message || `error ${res.status}`}`)
     }
     return data
   }
@@ -89,7 +92,8 @@ export type CheckoutInput = {
   refererUrl: string
   returnUrl: string
   callbackUrl: string
-  customer: { firstName: string; lastName: string; email: string; country?: string | null }
+  customer: { firstName: string; lastName: string; email: string }
+  billing: { street: string; city: string; postCode: string; country: string }
 }
 
 // A hosted checkout: the customer is sent to hpp_url to pay.
@@ -110,7 +114,10 @@ export async function hppCheckout(i: CheckoutInput) {
       customer_email: i.customer.email,
       billing_first_name: i.customer.firstName,
       billing_last_name: i.customer.lastName,
-      ...(i.customer.country ? { billing_country: i.customer.country } : {}),
+      billing_street: i.billing.street,
+      billing_city: i.billing.city,
+      billing_country: i.billing.country,
+      ...(i.billing.postCode ? { billing_post_code: i.billing.postCode } : {}),
     },
   })
   if (!tx.hpp_url) throw new MonremError('Monrem did not return a checkout link')

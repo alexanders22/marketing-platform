@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { CheckCircle2, Clock, Coins, XCircle } from 'lucide-react'
 import { PageHeader } from '@/components/EmptyState'
+import { savedAddress } from '@/lib/billing-address'
 import { requireContext } from '@/lib/context'
 import { creditMoney } from '@/lib/money'
 import { creditValue, getPlans, getPricing } from '@/lib/credits'
@@ -10,6 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { monremEnabled } from '@/lib/monrem'
 import { recurringOption, syncPayment } from '@/lib/payments'
 import { billingState, yearlyTotal } from '@/lib/plans'
+import { BillingAddressLine } from './AddressDialog'
 import { BuyButton } from './BuyButton'
 import { CancelRenewal, PlanPay } from './PlanPay'
 
@@ -35,6 +37,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
   // Re-read: a fulfilled payment changed the balance or the plan.
   const account = paid ? await prisma.account.findUniqueOrThrow({ where: { id: acct.id } }) : acct
   const canPay = monremEnabled() && (role === 'OWNER' || role === 'ADMIN')
+  const billing = savedAddress(account.billingAddress)
   const cantPay = !monremEnabled() ? 'Card payments are being set up' : !canPay ? 'Only the account owner or an admin can pay' : undefined
   const entries = await prisma.creditEntry.findMany({
     where: { accountId: account.id },
@@ -136,6 +139,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
           </a>{' '}
           and we add them today.
         </p>
+        {canPay && billing && <BillingAddressLine address={billing} />}
       </section>
 
       <section className="mt-6 rounded-xl border border-zinc-200">
