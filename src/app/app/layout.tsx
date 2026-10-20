@@ -77,10 +77,21 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
           )}
           {billingState(account) === 'expired' && !asAdmin && (
             <div className="-mt-1 mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-violet-50 px-4 py-2.5 text-sm text-violet-900 ring-1 ring-violet-200">
-              <span>Your free trial has ended. Choose how to continue — your posts, channels and credits are kept.</span>
-              <Link href="/app/plan" className="ml-auto font-medium underline">
-                Plans
-              </Link>
+              {account.paidUntil ? (
+                <>
+                  <span>Your plan ended on {account.paidUntil.toLocaleDateString('en-GB')}. Renew to keep going — your posts, channels and credits are kept.</span>
+                  <Link href="/app/credits?renew=1" className="ml-auto font-medium underline">
+                    Renew
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <span>Your free trial has ended. Choose how to continue — your posts, channels and credits are kept.</span>
+                  <Link href="/app/plan" className="ml-auto font-medium underline">
+                    Plans
+                  </Link>
+                </>
+              )}
             </div>
           )}
           <Suspense fallback={null}>

@@ -90,6 +90,8 @@ model Account {
   paidUntil       DateTime?
   // The payer's billing address for card payments {street, city, postCode, country}.
   billingAddress  Json?
+  // Last renewal reminder emailed: "<stage>:<paidUntil ISO>" (once per stage and period).
+  renewalReminder String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
