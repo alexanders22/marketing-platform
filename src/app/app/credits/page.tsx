@@ -60,6 +60,28 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
 
       {paid && <EscapeFrame />}
       {paid && <PaymentResult p={paid} paidUntil={account.paidUntil} />}
+      {/* From the renewal reminder email: one button for the plan and cycle they have. */}
+      {q.renew === '1' && plan && !renewing && !paid && (
+        <section aria-label="Renew your plan" className="mb-4 rounded-xl bg-violet-50 p-4 ring-1 ring-violet-200">
+          <p className="font-semibold text-violet-950">Renew your {plan.name} plan</p>
+          <p className="mt-0.5 text-sm text-violet-900">
+            {active
+              ? `Paid until ${account.paidUntil!.toLocaleDateString('en-GB')}. Renewing adds a ${account.billingCycle === 'YEARLY' ? 'year' : 'month'} from that date.`
+              : account.paidUntil
+                ? `It ended on ${account.paidUntil.toLocaleDateString('en-GB')}. Renewing starts a new ${account.billingCycle === 'YEARLY' ? 'year' : 'month'} today.`
+                : `Pay to keep using your ${plan.name} plan.`}
+          </p>
+          <div className="mt-3">
+            <BuyButton
+              purchase={{ kind: 'PLAN', plan: plan.id, cycle: account.billingCycle }}
+              disabled={cantPay}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
+            >
+              Renew 1 {account.billingCycle === 'YEARLY' ? `year · $${yearlyTotal(plan.monthly)}` : `month · $${plan.monthly}`}
+            </BuyButton>
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-zinc-200 p-5">
@@ -70,7 +92,9 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
               ? `Paid until ${account.paidUntil!.toLocaleDateString('en-GB')}`
               : plan && trial
                 ? `Free trial until ${account.trialEndsAt!.toLocaleDateString('en-GB')}`
-                : plan
+                : plan && account.paidUntil
+                  ? `Ended on ${account.paidUntil.toLocaleDateString('en-GB')}`
+                  : plan
                   ? `${account.billingCycle === 'YEARLY' ? 'Yearly' : 'Monthly'} billing`
                   : 'Pick a plan to start your free trial.'}
           </p>

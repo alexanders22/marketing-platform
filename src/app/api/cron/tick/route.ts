@@ -5,6 +5,7 @@ import { dispatchAlerts, holidayRemindersDue } from '@/lib/alerts'
 import { grantPlanCreditsDue } from '@/lib/billing'
 import { syncPendingPayments, syncSubscriptionsDue } from '@/lib/payments'
 import { refreshDossiersDue } from '@/lib/dossier'
+import { renewalRemindersDue } from '@/lib/renewal-reminders'
 import { checkAllGoals } from '@/lib/goals'
 import { syncInboxDue } from '@/lib/inbox'
 import { syncWebsitesDue } from '@/lib/ga'
@@ -25,6 +26,7 @@ let lastPlanCredits = 0
 let lastHolidays = 0
 let lastPayments = 0
 let lastSubscriptions = 0
+let lastReminders = 0
 
 export async function POST(req: Request) {
   const given = Buffer.from(req.headers.get('x-khma-cron') ?? '')
@@ -90,6 +92,12 @@ export async function POST(req: Request) {
     lastSubscriptions = Date.now()
     subscriptions = await syncSubscriptionsDue(new Date(), q.get('subscriptions') === '1').catch((e) => (console.error('subscriptions sync failed', e), 0))
   }
+  // Plans about to end (or just ended) without auto-renewal: email the owners, hourly.
+  let reminders = 0
+  if (q.get('reminders') === '1' || Date.now() - lastReminders > 60 * 60 * 1000) {
+    lastReminders = Date.now()
+    reminders = await renewalRemindersDue().catch((e) => (console.error('renewal reminders failed', e), 0))
+  }
   const alerts = await dispatchAlerts()
-  return Response.json({ published, insights, ads, website, inbox, clips, goals, dossiers, planCredits, holidays, payments, subscriptions, alerts })
+  return Response.json({ published, insights, ads, website, inbox, clips, goals, dossiers, planCredits, holidays, payments, subscriptions, reminders, alerts })
 }
