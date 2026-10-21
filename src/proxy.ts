@@ -16,7 +16,7 @@ export function proxy(req: NextRequest) {
   }
   // Optimistic check only: no cookie → straight to login. The real session
   // validation happens server-side in requireUser().
-  if ((path === '/app' || path.startsWith('/app/')) && !req.cookies.has('khma_session')) {
+  if ((path === '/app' || path.startsWith('/app/') || path === '/demo-shop') && !req.cookies.has('khma_session')) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
   return NextResponse.next()
@@ -45,5 +45,6 @@ export const config = {
     '/terms',
     '/data-deletion',
     '/b/:path*',
+    '/demo-shop',
   ],
 }

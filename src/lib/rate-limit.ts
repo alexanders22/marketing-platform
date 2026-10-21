@@ -23,3 +23,11 @@ export function recordFailure(key: string, windowMs: number) {
 export function clearFailures(key: string) {
   buckets.delete(key)
 }
+
+// Counts a request; true once `key` went over `limit` in the window (public
+// endpoints: tag events, chat messages).
+export function overLimit(key: string, limit: number, windowMs: number) {
+  if (isLimited(key, limit)) return true
+  recordFailure(key, windowMs)
+  return false
+}

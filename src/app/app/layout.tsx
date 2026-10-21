@@ -33,10 +33,12 @@ function planLabel(a: { plan: string; trialEndsAt: Date | null; paidUntil: Date 
 // Light app shell (the marketing site stays dark).
 export default async function AppLayout({ children }: LayoutProps<'/app'>) {
   const { user, account, workspace, brand, role, companies, asAdmin } = await requireContext()
-  const [alerts, recommendations, inbox, creditPrices, pilot, value] = await Promise.all([
+  const [alerts, recommendations, social, website, creditPrices, pilot, value] = await Promise.all([
     prisma.alert.count({ where: { workspaceId: workspace.id, readAt: null } }),
     prisma.recommendation.count({ where: { workspaceId: workspace.id, status: 'OPEN' } }),
     prisma.conversation.count({ where: { workspaceId: workspace.id, unread: { gt: 0 } } }),
+    // Website chats a person has to answer.
+    prisma.chatConversation.count({ where: { workspaceId: workspace.id, status: 'HUMAN', unread: { gt: 0 } } }),
     prices(),
     role === 'EDITOR' ? null : interviewState(workspace.id),
     creditValue(),
@@ -52,7 +54,7 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
         planLabel={planLabel(account)}
         alerts={alerts}
         recommendations={recommendations}
-        inbox={inbox}
+        inbox={social + website}
         companies={companies.map((c) => ({ id: c.id, name: c.name, logoUrl: c.logoUrl, paused: c.paused }))}
         currentId={workspace.id}
         canAddCompany={asAdmin || role !== 'EDITOR'}

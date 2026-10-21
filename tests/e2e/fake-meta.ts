@@ -117,6 +117,9 @@ export function startFakeMeta() {
     if (path === '/me/adaccounts')
       return json(200, { data: [{ id: 'act_1', name: 'Bloom Ads', account_status: 1, currency: 'GEL', timezone_name: 'Asia/Tbilisi' }] })
 
+    // Conversions API (Loudpilot Tag → pixel).
+    if (req.method === 'POST' && /^\/\d+\/events$/.test(path)) return json(200, { events_received: JSON.parse(params.data ?? '[]').length, fbtrace_id: 'trace-1' })
+
     if (req.method === 'GET' && path === '/act_1/adspixels')
       return json(200, { data: [{ id: '1234567890123456', name: 'Bloom pixel', last_fired_time: ago(90) }] })
     if (req.method === 'GET' && path === '/1234567890123456/stats') {
