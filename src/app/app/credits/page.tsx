@@ -9,7 +9,7 @@ import { creditValue, getPlans, getPricing } from '@/lib/credits'
 import { VAT } from '@/lib/tax'
 import { prisma } from '@/lib/prisma'
 import { monremEnabled } from '@/lib/monrem'
-import { recurringOption, syncPayment } from '@/lib/payments'
+import { recurringOption, syncPayment, TEST_PAYMENT } from '@/lib/payments'
 import { billingState, yearlyTotal } from '@/lib/plans'
 import { BillingAddressLine } from './AddressDialog'
 import { BuyButton } from './BuyButton'
@@ -30,7 +30,7 @@ const REASON: Record<string, string> = {
 }
 
 export default async function CreditsPage({ searchParams }: PageProps<'/app/credits'>) {
-  const { account: acct, role } = await requireContext()
+  const { account: acct, role, user, asAdmin } = await requireContext()
   const q = await searchParams
   // Back from Monrem's payment page: ask Monrem if the callback hasn't arrived yet.
   let paid = typeof q.payment === 'string' ? await prisma.payment.findFirst({ where: { id: q.payment, accountId: acct.id } }) : null
@@ -167,6 +167,31 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
         </p>
         {canPay && billing && <BillingAddressLine address={billing} />}
       </section>
+
+      {/* Real ₾1 charges to try the whole flow; only super admins, in their own account. */}
+      {canPay && user.role === 'SUPER_ADMIN' && !asAdmin && (
+        <section aria-label="Test payments" className="mt-6 rounded-xl border border-dashed border-amber-300 bg-amber-50/60 p-5">
+          <h2 className="font-semibold text-amber-950">Test payments</h2>
+          <p className="mt-0.5 text-sm text-amber-900">
+            Only super admins see this. A real card charge of 1.00 in the terminal&apos;s currency, booked like any payment.
+            {plan && ` The plan test adds a month of ${plan.name} and its ${plan.credits.toLocaleString('en-US')} credits.`}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <div>
+              <BuyButton purchase={{ kind: 'PACK', credits: TEST_PAYMENT.credits, test: true }} className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600">
+                Test pack · {TEST_PAYMENT.credits} credits for 1.00
+              </BuyButton>
+            </div>
+            {plan && (
+              <div>
+                <BuyButton purchase={{ kind: 'PLAN', plan: plan.id, cycle: 'MONTHLY', test: true }} className="rounded-lg border border-amber-400 bg-white px-3 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                  Test plan · {plan.name} 1 month for 1.00
+                </BuyButton>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="mt-6 rounded-xl border border-zinc-200">
         <h2 className="border-b border-zinc-100 px-5 py-3.5 font-semibold">History</h2>

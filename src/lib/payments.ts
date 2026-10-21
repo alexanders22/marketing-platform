@@ -33,10 +33,19 @@ import { prisma } from './prisma'
 // its own. Each approved charge (callback, or found when the ticker reads the
 // subscription) becomes a Payment of its own and extends paidUntil once.
 
-export type Purchase = { kind: 'PACK'; credits: number } | { kind: 'PLAN'; plan: PlanId; cycle: BillingCycle; autoRenew?: boolean }
+// test: a super admin's real ₾1 (or $1) charge to try the whole payment flow.
+export type Purchase = { kind: 'PACK'; credits: number; test?: boolean } | { kind: 'PLAN'; plan: PlanId; cycle: BillingCycle; autoRenew?: boolean; test?: boolean }
+
+// Test payments: 1.00 in the terminal's currency for a few credits or a plan month.
+export const TEST_PAYMENT = { amount: 100, credits: 10 }
 
 // The price in USD (VAT included) and what it buys.
 async function quote(p: Purchase) {
+  if (p.test && p.kind === 'PACK') return p.credits === TEST_PAYMENT.credits ? { usd: 1, label: `TEST: ${p.credits} Loudpilot credits` } : null
+  if (p.test && p.kind === 'PLAN') {
+    const plan = (await getPlans()).find((x) => x.id === p.plan)
+    return plan && p.cycle === 'MONTHLY' ? { usd: 1, label: `TEST: Loudpilot ${plan.name} plan, 1 month` } : null
+  }
   if (p.kind === 'PACK') {
     const pack = (await getPricing()).packs.find((x) => x.credits === p.credits)
     if (!pack) return null
@@ -108,9 +117,9 @@ export async function startCheckout(o: {
   const q = await quote(o.purchase)
   if (!q || q.usd <= 0) return { error: 'This is not for sale' }
   const p = o.purchase
-  const recurring = p.kind === 'PLAN' && p.autoRenew ? await recurringOption(p.plan, p.cycle) : null
+  const recurring = p.kind === 'PLAN' && p.autoRenew && !p.test ? await recurringOption(p.plan, p.cycle) : null
   if (p.kind === 'PLAN' && p.autoRenew && !recurring) return { error: 'Auto-renewal is not available for this plan right now — pay once instead.' }
-  const { currency, amount } = recurring ?? (await inCurrency(q.usd))
+  const { currency, amount } = recurring ?? (p.test ? { currency: monremCurrency(), amount: TEST_PAYMENT.amount } : await inCurrency(q.usd))
   const payment = await prisma.payment.create({
     data: {
       accountId: o.accountId,

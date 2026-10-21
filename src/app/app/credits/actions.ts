@@ -10,8 +10,8 @@ import { cancelAutoRenew, startCheckout, type Purchase } from '@/lib/payments'
 import { prisma } from '@/lib/prisma'
 
 const Input = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('PACK'), credits: z.number().int().positive() }),
-  z.object({ kind: z.literal('PLAN'), plan: z.enum(['STARTER', 'TEAM', 'AGENCY']), cycle: z.enum(['MONTHLY', 'YEARLY']), autoRenew: z.boolean().optional() }),
+  z.object({ kind: z.literal('PACK'), credits: z.number().int().positive(), test: z.boolean().optional() }),
+  z.object({ kind: z.literal('PLAN'), plan: z.enum(['STARTER', 'TEAM', 'AGENCY']), cycle: z.enum(['MONTHLY', 'YEARLY']), autoRenew: z.boolean().optional(), test: z.boolean().optional() }),
 ])
 
 // Opens Monrem's payment page for a credit pack or a plan period. Monrem needs
@@ -21,11 +21,13 @@ export async function checkout(
   raw: z.input<typeof Input>,
   address?: AddressForm,
 ): Promise<{ url?: string; embed?: boolean; error?: string; needAddress?: Required<AddressForm> }> {
-  const { account, user, role } = await requireContext()
+  const { account, user, role, asAdmin } = await requireContext()
   if (role !== 'OWNER' && role !== 'ADMIN') return { error: 'Only the account owner or an admin can pay' }
   if (!monremEnabled()) return { error: 'Card payments are not available yet' }
   const parsed = Input.safeParse(raw)
   if (!parsed.success) return { error: 'Unknown purchase' }
+  // ₾1 test payments: super admins, in an account of their own (not one they're viewing).
+  if (parsed.data.test && (user.role !== 'SUPER_ADMIN' || asAdmin)) return { error: 'Unknown purchase' }
   let billing = savedAddress(account.billingAddress)
   if (address) {
     const a = BillingAddress.safeParse(address)

@@ -168,6 +168,38 @@ test('when Monrem allows framing, the payment page opens in a window on our page
   }
 })
 
+test('super admins get ₾1 test payments for a pack and a plan month; others never see them', async () => {
+  const testPayments = page.getByRole('region', { name: 'Test payments' })
+  await page.goto('/app/credits')
+  await expect(page.getByRole('heading', { name: 'Buy more credits' })).toBeVisible()
+  await expect(testPayments).toHaveCount(0)
+
+  sql(`update "User" set role='SUPER_ADMIN' where id in (select "userId" from "AccountMember" where "accountId"='${accountId}')`)
+  try {
+    const before = balance()
+    await page.reload()
+    await testPayments.getByRole('button', { name: /^Test pack · 10 credits for 1\.00/ }).click()
+    await page.waitForURL(/\/pay\//)
+    await expect(page.getByRole('heading', { name: 'Pay 1.00 USD' })).toBeVisible()
+    await page.getByRole('link', { name: 'Pay now' }).click()
+    await expect(page.getByText('Payment received — 10 credits added.')).toBeVisible()
+    expect(balance()).toBe(before + 10)
+    expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PACK', '100', 'USD', 'true'])
+
+    // A month of the current plan, booked like a real one.
+    const until = paidUntil()
+    await testPayments.getByRole('button', { name: /^Test plan · .* 1 month for 1\.00/ }).click()
+    await page.waitForURL(/\/pay\//)
+    await expect(page.getByRole('heading', { name: 'Pay 1.00 USD' })).toBeVisible()
+    await page.getByRole('link', { name: 'Pay now' }).click()
+    await expect(page.getByText(/Payment received — your plan is paid until/)).toBeVisible()
+    expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PLAN', '100', 'USD', 'true'])
+    expect(paidUntil() - until).toBeGreaterThan(27 * DAY)
+  } finally {
+    sql(`update "User" set role='USER' where id in (select "userId" from "AccountMember" where "accountId"='${accountId}')`)
+  }
+})
+
 test.describe('auto-renewal', () => {
   test.beforeAll(() => {
     // Starter monthly renews at the same $29; the yearly Monrem plan has an old price, so it can't.
