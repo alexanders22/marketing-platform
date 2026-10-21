@@ -58,6 +58,13 @@ export function extendPaidUntil(current: Date | null, periods: number, cycle: Bi
   return addMonths(from, periods * (cycle === 'YEARLY' ? 12 : 1))
 }
 
+// Switching plans mid-period: the unused time of the old plan keeps its
+// money's worth, as time on the new plan at the new plan's price.
+export function convertRemaining(paidUntil: Date | null, oldMonthly: number, newMonthly: number, now = new Date()) {
+  if (!paidUntil || paidUntil <= now || !(oldMonthly > 0) || !(newMonthly > 0)) return paidUntil
+  return new Date(now.getTime() + ((paidUntil.getTime() - now.getTime()) * oldMonthly) / newMonthly)
+}
+
 // A payment for `periods` billing cycles: paidUntil moves forward from today
 // (or from the current paid date, if still running), the trial ends, and
 // this month's credits arrive.

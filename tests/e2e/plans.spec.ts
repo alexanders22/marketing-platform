@@ -51,6 +51,32 @@ test('Starter has one seat; Team invites teammates by email up to five seats', a
   await expect(page.getByText(/4\s*of\s*5\s*seats used/)).toBeVisible()
 })
 
+test('an invitation sent on Team cannot be used once the plan has shrunk to Starter', async ({ page, browser }) => {
+  const { email } = await newAccount(page, 'shrink')
+  const id = acct(email)
+  sql(`update "Account" set plan='TEAM' where id='${id}'`)
+  await page.goto('/app/team')
+  const mate = uniqueEmail('late')
+  await page.getByLabel('Teammate email').fill(mate)
+  await page.getByRole('button', { name: 'Send invite' }).click()
+  await expect(page.getByText(`Invitation sent to ${mate}`)).toBeVisible()
+  sql(`update "Account" set plan='STARTER' where id='${id}'`)
+
+  const mail = await latestMail(mate, 'invited you')
+  const other = await browser.newPage()
+  await other.goto(linkFrom(mail.Text, '/auth/invite?token='))
+  await other.getByRole('button', { name: 'Join the team' }).click()
+  await expect(other.getByText("The team is full on its current plan, so the invitation can't be used.")).toBeVisible()
+  expect(sql(`select count(*) from "AccountMember" where "accountId"='${id}'`)).toBe('1')
+  // Not used up: once a seat is back (plan upgraded), the same link works.
+  sql(`update "Account" set plan='TEAM' where id='${id}'`)
+  await other.goto(linkFrom(mail.Text, '/auth/invite?token='))
+  await other.getByRole('button', { name: 'Join the team' }).click()
+  await other.waitForURL(/\/app/)
+  expect(sql(`select count(*) from "AccountMember" where "accountId"='${id}'`)).toBe('2')
+  await other.close()
+})
+
 test('a trial is not a payment; a recorded payment unlocks paid features and grants plan credits', async ({ page, browser }) => {
   const { email } = await newAccount(page, 'bill')
   const id = acct(email)

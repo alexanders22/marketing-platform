@@ -168,6 +168,35 @@ test('when Monrem allows framing, the payment page opens in a window on our page
   }
 })
 
+test('during a paid period a dearer plan is bought, not picked; the unused time is converted', async () => {
+  // Paid Starter with about 30 days left.
+  sql(`update "Account" set plan='STARTER', "billingCycle"='MONTHLY', "paidUntil"=now() + interval '30 days' where id='${accountId}'`)
+  await page.goto('/app/plan')
+  await page.getByRole('button', { name: 'Upgrade to Agency' }).click()
+  await page.waitForURL(/\/app\/credits\?upgrade=AGENCY/)
+  // Nothing changed yet.
+  expect(sql(`select plan from "Account" where id='${accountId}'`)).toBe('STARTER')
+  const box = page.getByRole('region', { name: 'Upgrade your plan' })
+  // 30 days of $29 Starter are worth about 4 days of $199 Agency.
+  await expect(box.getByText(/The (29|30) days left of Starter become 4 days of Agency/)).toBeVisible()
+  await box.getByRole('button', { name: 'Pay for Agency · $199 / month' }).click()
+  await page.waitForURL(/\/pay\//)
+  await expect(page.getByRole('heading', { name: 'Pay 199.00 USD' })).toBeVisible()
+  await page.getByRole('link', { name: 'Pay now' }).click()
+  await expect(page.getByText(/Payment received — your plan is paid until/)).toBeVisible()
+  expect(sql(`select plan from "Account" where id='${accountId}'`)).toBe('AGENCY')
+  // A month from today plus the converted days.
+  const days = Number(sql(`select extract(epoch from "paidUntil" - now()) / 86400 from "Account" where id='${accountId}'`))
+  expect(days).toBeGreaterThan(31)
+  expect(days).toBeLessThan(37)
+
+  // A cheaper plan applies at once, without payment.
+  await page.goto('/app/plan')
+  await page.getByRole('button', { name: 'Switch to Starter' }).click()
+  await page.waitForURL(/\/app\/credits$/)
+  expect(sql(`select plan from "Account" where id='${accountId}'`)).toBe('STARTER')
+})
+
 test('super admins get ₾1 test payments for a pack and a plan month; others never see them', async () => {
   const testPayments = page.getByRole('region', { name: 'Test payments' })
   await page.goto('/app/credits')

@@ -10,6 +10,7 @@ import { VAT } from '@/lib/tax'
 import { prisma } from '@/lib/prisma'
 import { monremEnabled } from '@/lib/monrem'
 import { recurringOption, syncPayment, TEST_PAYMENT } from '@/lib/payments'
+import { convertRemaining } from '@/lib/billing'
 import { billingState, yearlyTotal } from '@/lib/plans'
 import { BillingAddressLine } from './AddressDialog'
 import { BuyButton } from './BuyButton'
@@ -51,6 +52,16 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
   const gel = (usd: number) => `₾${Math.round(usd * value.gelPerUsd).toLocaleString('en-US')}`
   const trial = account.trialEndsAt && account.trialEndsAt > new Date()
   const active = billingState(account) === 'active'
+  const upgradeTo = plans.find((p) => p.id === q.upgrade && p.id !== account.plan)
+  const upgrade =
+    upgradeTo && plan && active && account.paidUntil
+      ? (() => {
+          const now = new Date()
+          const converted = convertRemaining(account.paidUntil, plan.monthly, upgradeTo.monthly, now)!
+          const days = (d: Date) => Math.max(0, Math.round((d.getTime() - now.getTime()) / 86_400_000))
+          return { plan: upgradeTo, cycle: q.cycle === 'YEARLY' ? ('YEARLY' as const) : ('MONTHLY' as const), daysLeft: days(account.paidUntil), daysConverted: days(converted) }
+        })()
+      : null
   const renewing = await prisma.subscription.findFirst({ where: { accountId: account.id, status: 'ACTIVE' } })
   const renew = plan && !renewing ? { MONTHLY: Boolean(await recurringOption(plan.id, 'MONTHLY')), YEARLY: Boolean(await recurringOption(plan.id, 'YEARLY')) } : { MONTHLY: false, YEARLY: false }
 
@@ -60,6 +71,24 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
 
       {paid && <EscapeFrame />}
       {paid && <PaymentResult p={paid} paidUntil={account.paidUntil} />}
+      {/* A dearer plan picked during a paid period: bought, with the rest of the old plan converted. */}
+      {upgrade && plan && (
+        <section aria-label="Upgrade your plan" className="mb-4 rounded-xl bg-indigo-50 p-4 ring-1 ring-indigo-200">
+          <p className="font-semibold text-indigo-950">Upgrade to {upgrade.plan.name}</p>
+          <p className="mt-0.5 text-sm text-indigo-900">
+            The {upgrade.daysLeft} days left of {plan.name} become {upgrade.daysConverted} days of {upgrade.plan.name}, and a {upgrade.cycle === 'YEARLY' ? 'year' : 'month'} is added on top.
+          </p>
+          <div className="mt-3">
+            <BuyButton
+              purchase={{ kind: 'PLAN', plan: upgrade.plan.id, cycle: upgrade.cycle }}
+              disabled={cantPay}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
+            >
+              Pay for {upgrade.plan.name} · {upgrade.cycle === 'YEARLY' ? `$${yearlyTotal(upgrade.plan.monthly)} / year` : `$${upgrade.plan.monthly} / month`}
+            </BuyButton>
+          </div>
+        </section>
+      )}
       {/* From the renewal reminder email: one button for the plan and cycle they have. */}
       {q.renew === '1' && plan && !renewing && !paid && (
         <section aria-label="Renew your plan" className="mb-4 rounded-xl bg-violet-50 p-4 ring-1 ring-violet-200">

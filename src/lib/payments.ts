@@ -1,6 +1,6 @@
 import 'server-only'
 import { Prisma, type BillingCycle, type Payment } from '@prisma/client'
-import { extendPaidUntil, grantPlanCredits } from './billing'
+import { convertRemaining, extendPaidUntil, grantPlanCredits } from './billing'
 import { phoneParts, type BillingAddress } from './billing-address'
 import { getPlans, getPricing } from './credits'
 import { gelPerUsd } from './fx'
@@ -226,6 +226,7 @@ export async function applyStatus(tx: MonremTx, subscriptionId?: string): Promis
 
 // Credits or plan time, once: the fulfilledAt claim and the booking share a transaction.
 async function fulfil(id: string) {
+  const plans = await getPlans()
   const done = await prisma.$transaction(async (tx) => {
     const claimed = await tx.payment.updateMany({ where: { id, status: 'APPROVED', fulfilledAt: null }, data: { fulfilledAt: new Date() } })
     if (claimed.count === 0) return null
@@ -244,11 +245,14 @@ async function fulfil(id: string) {
       })
       await tx.account.update({ where: { id: p.accountId }, data: { creditBalance: { increment: p.credits } } })
     } else if (p.kind === 'PLAN' && p.plan && p.cycle) {
-      const a = await tx.account.findUniqueOrThrow({ where: { id: p.accountId }, select: { paidUntil: true } })
+      const a = await tx.account.findUniqueOrThrow({ where: { id: p.accountId }, select: { paidUntil: true, plan: true } })
       const now = new Date()
+      // Another plan: the rest of the old one's paid time is converted first.
+      const price = (id: string) => plans.find((x) => x.id === id)?.monthly ?? 0
+      const from = a.plan !== p.plan ? convertRemaining(a.paidUntil, price(a.plan), price(p.plan), now) : a.paidUntil
       await tx.account.update({
         where: { id: p.accountId },
-        data: { plan: p.plan, billingCycle: p.cycle, paidUntil: extendPaidUntil(a.paidUntil, p.periods ?? 1, p.cycle, now), trialEndsAt: now },
+        data: { plan: p.plan, billingCycle: p.cycle, paidUntil: extendPaidUntil(from, p.periods ?? 1, p.cycle, now), trialEndsAt: now },
       })
     }
     return p

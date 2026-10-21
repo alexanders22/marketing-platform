@@ -16,7 +16,8 @@ const TINT = {
 }
 
 // Ocoya-style "Choose your plan" panel. Closing it skips the plan for now.
-export function PlanPicker({ current, after = '/app', prices }: { current?: PlanId | null; after?: string; prices?: PickerPrices }) {
+// paid: the current plan is paid for — others are an upgrade (paid) or a switch.
+export function PlanPicker({ current, after = '/app', prices, paid = false }: { current?: PlanId | null; after?: string; prices?: PickerPrices; paid?: boolean }) {
   const router = useRouter()
   const [yearly, setYearly] = useState(false)
   const [pending, start] = useTransition()
@@ -32,6 +33,8 @@ export function PlanPicker({ current, after = '/app', prices }: { current?: Plan
         setBusy(null)
         return
       }
+      // A dearer plan during a paid period: pay for it first.
+      if (res.pay) return router.push(res.pay)
       router.push(after)
       router.refresh()
     })
@@ -92,6 +95,7 @@ export function PlanPicker({ current, after = '/app', prices }: { current?: Plan
             const shown = yearly ? yearlyTotal(p.monthly) : p.monthly
             const Icon = ICON[p.id]
             const isCurrent = current === p.id
+            const currentMonthly = prices?.plans.find((x) => x.id === current)?.monthly ?? PLANS.find((x) => x.id === current)?.monthly ?? 0
             return (
               <div
                 key={p.id}
@@ -126,7 +130,7 @@ export function PlanPicker({ current, after = '/app', prices }: { current?: Plan
                       : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
                   }`}
                 >
-                  {busy === p.id ? 'Starting…' : isCurrent ? 'Current plan' : `Start ${TRIAL_DAYS}-day free trial`}
+                  {busy === p.id ? 'Starting…' : isCurrent ? 'Current plan' : paid ? (p.monthly > currentMonthly ? `Upgrade to ${p.name}` : `Switch to ${p.name}`) : `Start ${TRIAL_DAYS}-day free trial`}
                 </button>
                 <p className="mt-5 text-xs font-semibold tracking-wide text-zinc-500">WHAT&apos;S INCLUDED</p>
                 <ul className="mt-2 space-y-2.5 text-sm text-zinc-700">
