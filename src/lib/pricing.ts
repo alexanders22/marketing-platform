@@ -35,6 +35,8 @@ export const ACTIONS = {
   aiSearch: { label: 'AI search visibility check', unit: 'check', credits: 10, costUsd: 0.2 },
   styleImage: { label: 'Copy a style from an image', unit: 'image', credits: 1, costUsd: 0.003 },
   styleVideo: { label: 'Copy a style from a video', unit: 'video', credits: 2, costUsd: 0.03 },
+  chatConversation: { label: 'Website chat conversation (AI answers)', unit: 'conversation', credits: 1, costUsd: 0.01 },
+  chatSetup: { label: 'Website assistant set-up', unit: 'set-up', credits: 2, costUsd: 0.01 },
 } as const
 
 export type Action = keyof typeof ACTIONS

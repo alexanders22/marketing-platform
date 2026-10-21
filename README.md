@@ -46,3 +46,19 @@ Partners address workspaces by **their own id** (`externalId`); a key only reach
 | GET  | `/api/v1/workspaces/:externalId` | Workspace + registration state + balance |
 | POST | `/api/v1/workspaces/:externalId/signup` | Short registration `{ name, email, country?, currency?, acceptTerms: true }` — required before buying/spending credits |
 | GET  | `/api/v1/workspaces/:externalId/credits` | Balance + last 50 ledger entries |
+
+## Loudpilot Tag and website chat
+
+One script on the customer's website: `<script async src="https://loudpilot.app/t.js" data-site="lp_…">`
+(Website → Loudpilot Tag). Developer guide for companies: `/docs/website`.
+
+- `src/lib/tag-script.ts` — the browser code served as `/t.js` (tracking) and `/w.js` (chat widget).
+- `src/lib/tag.ts` — sources (UTM, click ids, referrer), visitors, events; `POST /api/tag/collect` (browser),
+  `POST /api/tag/v1/events` (company servers, site secret as Bearer or signed body).
+- `src/lib/capi.ts` — conversions to the Meta pixel (Conversions API), every tick.
+- `src/lib/tag-report.ts` — sources → leads / sales / spend / return, and each converted person's path.
+- `src/lib/chatbot.ts` — the assistant (Gemini with tools): answers from the brief, looks up private data only
+  through the company's endpoint (signed with the site secret; customer id only from a verified `user_hash`),
+  hands red flags to people (e-mail, Telegram), one credit per conversation. Public API: `/api/chat/send`, `/api/chat/poll`.
+- `/demo-shop` — a test storefront with the workspace's tag; the chat works there before it is switched on.
+

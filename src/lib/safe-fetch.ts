@@ -156,3 +156,43 @@ export async function safeFetchBytes(
     clearTimeout(timer)
   }
 }
+
+// POSTs JSON to a user-supplied URL (a company's data endpoint) with the
+// same network guard. Redirects are not followed: a POST must land where it
+// was configured. Returns the status and the (size-limited) body text.
+export async function safePostJson(
+  input: string,
+  body: string,
+  { headers = {}, maxBytes = 200_000, timeoutMs = 8000 }: { headers?: Record<string, string>; maxBytes?: number; timeoutMs?: number } = {},
+): Promise<{ status: number; text: string }> {
+  const url = new URL(input)
+  assertUrl(url)
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const res = await undiciFetch(url, {
+      method: 'POST',
+      redirect: 'manual',
+      signal: ctrl.signal,
+      dispatcher: agent,
+      body,
+      headers: { 'user-agent': 'LoudpilotBot/1.0 (+https://loudpilot.app)', 'content-type': 'application/json', accept: 'application/json', ...headers },
+    })
+    const reader = res.body?.getReader()
+    const chunks: Uint8Array[] = []
+    let size = 0
+    while (reader) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > maxBytes) {
+        await reader.cancel()
+        break
+      }
+      chunks.push(value)
+    }
+    return { status: res.status, text: Buffer.concat(chunks).toString('utf8') }
+  } finally {
+    clearTimeout(timer)
+  }
+}

@@ -7,6 +7,7 @@ import { syncPendingPayments, syncSubscriptionsDue } from '@/lib/payments'
 import { refreshDossiersDue } from '@/lib/dossier'
 import { renewalRemindersDue } from '@/lib/renewal-reminders'
 import { checkAllGoals } from '@/lib/goals'
+import { forwardConversionsDue } from '@/lib/capi'
 import { syncInboxDue } from '@/lib/inbox'
 import { syncWebsitesDue } from '@/lib/ga'
 import { advanceClipsDue } from '@/lib/veo'
@@ -98,6 +99,8 @@ export async function POST(req: Request) {
     lastReminders = Date.now()
     reminders = await renewalRemindersDue().catch((e) => (console.error('renewal reminders failed', e), 0))
   }
+  // Website conversions from the Loudpilot Tag → Meta Conversions API.
+  const conversions = await forwardConversionsDue().catch((e) => (console.error('conversions api failed', e), 0))
   const alerts = await dispatchAlerts()
-  return Response.json({ published, insights, ads, website, inbox, clips, goals, dossiers, planCredits, holidays, payments, subscriptions, reminders, alerts })
+  return Response.json({ published, insights, ads, website, inbox, clips, goals, dossiers, planCredits, holidays, payments, subscriptions, reminders, conversions, alerts })
 }

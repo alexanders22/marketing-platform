@@ -273,6 +273,9 @@ model Workspace {
   businessFacts    BusinessFact[]
   styleRefs        StyleRef[]
   interviews       StrategyInterview[]
+  site             Site?
+  chatBot          ChatBot?
+  chatConversations ChatConversation[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -1412,4 +1415,231 @@ model WebsiteAudit {
   createdAt   DateTime  @default(now())
 
   @@index([workspaceId, kind, createdAt])
+}
+
+// ─── Loudpilot Tag (website tracking) ────────────────────────────────────────
+// One script on the company website (/t.js?…data-site="key") records visits
+// from ads and what people do, forwards conversions to Meta (Conversions
+// API) and loads the chat widget (ChatBot). See src/lib/tag.ts.
+
+model Site {
+  id              String    @id @default(cuid())
+  workspaceId     String    @unique
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // Public id in the snippet ("lp_…"); not a secret.
+  key             String    @unique
+  // Hosts the tag accepts events from (and subdomains); empty = any.
+  domains         String[]
+  // Signs identity (user_hash), server events and Loudpilot's calls to the
+  // company's data endpoint. AES-256-GCM encrypted (src/lib/crypto.ts).
+  secretEnc       String
+  // Wait for loudpilot('consent', true) before recording anything.
+  consentRequired Boolean   @default(false)
+  // Forms with an email or phone field count as a Lead.
+  autoForms       Boolean   @default(true)
+  // Forward conversions to this Meta pixel through the Conversions API, with
+  // the company's own CAPI token or else the connected ad account's token.
+  capi            Boolean   @default(false)
+  pixelId         String?
+  capiTokenEnc    String?
+  capiError       String?
+  // Which events are forwarded.
+  capiEvents      String[]  @default(["Lead", "Purchase", "CompleteRegistration", "Schedule"])
+  // Also send them through the pixel on the page with the same event id, so
+  // Meta counts each once (when the site does not send them to the pixel itself).
+  pixelMirror     Boolean   @default(false)
+  lastEventAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  visitors      Visitor[]
+  visits        Visit[]
+  events        TagEvent[]
+  conversations ChatConversation[]
+}
+
+// A browser (first-party cookie), and the person once they identify.
+model Visitor {
+  id          String   @id @default(cuid())
+  siteId      String
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  cookieId    String
+  // The company's own user id — only when signed with the site secret.
+  userId      String?
+  // sha256 of the normalised email / phone (what Meta matches on); the
+  // address itself is kept only masked, for display.
+  emailHash   String?
+  phoneHash   String?
+  contact     String?
+  name        String?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  visits        Visit[]
+  events        TagEvent[]
+  conversations ChatConversation[]
+
+  @@unique([siteId, cookieId])
+  @@index([siteId, lastSeenAt])
+  @@index([siteId, userId])
+}
+
+// A session: one arrival on the site (30 minutes without activity, or a new
+// ad click, start another) and where it came from.
+model Visit {
+  id         String   @id @default(cuid())
+  siteId     String
+  site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  visitorId  String
+  visitor    Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  // Session id from the browser.
+  sid        String
+  landingUrl String
+  referrer   String?
+  // utm_* (or a guess from the referrer / click id: facebook / paid …).
+  source     String?
+  medium     String?
+  campaign   String?
+  content    String?
+  term       String?
+  // fbclid | gclid | ttclid | msclkid and its value.
+  clickKind  String?
+  clickId    String?
+  // Meta browser ids (_fbc / _fbp) for the Conversions API.
+  fbc        String?
+  fbp        String?
+  userAgent  String?
+  device     String?
+  country    String?
+  pages      Int      @default(0)
+  // From the Tag page's test shop: shown live, left out of the reports.
+  test       Boolean  @default(false)
+  startedAt  DateTime @default(now())
+  lastAt     DateTime @default(now())
+
+  events TagEvent[]
+
+  @@unique([siteId, sid])
+  @@index([siteId, startedAt])
+  @@index([visitorId, startedAt])
+}
+
+// Something that happened: page_view, Lead, Purchase, Contact … from the
+// browser (web), the company's server (server) or the chat (chat).
+model TagEvent {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  visitId   String?
+  visit     Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  visitorId String?
+  visitor   Visitor? @relation(fields: [visitorId], references: [id], onDelete: SetNull)
+  name      String
+  // Same id twice is one event (retries; also Meta's dedup key).
+  eventId   String
+  source    String   @default("web")
+  url       String?
+  title     String?
+  value     Float?
+  currency  String?
+  props     Json?
+  test      Boolean  @default(false)
+  // Conversions API: pending → sent | failed. Null = not forwarded. The IP
+  // is kept only until then.
+  capi      String?
+  capiError String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@unique([siteId, eventId])
+  @@index([siteId, createdAt])
+  @@index([siteId, name, createdAt])
+  @@index([visitorId, createdAt])
+  @@index([capi, createdAt])
+}
+
+// ─── Website chat (support bot) ──────────────────────────────────────────────
+// The assistant on the company website, loaded by the Loudpilot Tag. It
+// answers from what it knows about the company, looks up private data only
+// through the company's own endpoint (actions), and hands red-flag topics to
+// a person. See src/lib/chatbot.ts.
+
+model ChatBot {
+  id             String    @id @default(cuid())
+  workspaceId    String    @unique
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  enabled        Boolean   @default(false)
+  name           String    @default("Assistant")
+  greeting       String    @default("Hi! How can I help you?")
+  // Main prompt: who the bot is and how it answers (written from the website,
+  // edited by the owner) and extra facts / answers it must know.
+  instructions   String    @default("")
+  knowledge      String    @default("")
+  // Languages it answers in (English names); empty = the visitor's language.
+  languages      String[]
+  // Topics a person must handle: the bot hands over at once.
+  redFlags       String[]
+  color          String    @default("#4f46e5")
+  // "right" | "left"
+  position       String    @default("right")
+  // Who hears about hand-overs.
+  notifyEmails   String[]
+  telegramChatId String?
+  telegramName   String?
+  // The company's data endpoint and what the bot may ask it:
+  // [{ key, description, params: string[], verified: boolean }].
+  actionsUrl     String?
+  actions        Json      @default("[]")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model ChatConversation {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  siteId        String
+  site          Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  visitorId     String?
+  visitor       Visitor?  @relation(fields: [visitorId], references: [id], onDelete: SetNull)
+  // BOT (the assistant answers) | HUMAN (handed over, a person answers) | CLOSED.
+  status        String    @default("BOT")
+  // The company's own user id, verified with the site secret.
+  userId        String?
+  // Contact the visitor left for a call-back.
+  name          String?
+  email         String?
+  phone         String?
+  pageUrl       String?
+  handoffReason String?
+  handoffAt     DateTime?
+  // One charge per conversation, on the bot's first answer.
+  chargedAt     DateTime?
+  botReplies    Int       @default(0)
+  // Visitor messages nobody on the team has seen yet.
+  unread        Int       @default(0)
+  lastMessageAt DateTime  @default(now())
+  lastText      String?
+  test          Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  messages ChatMessage[]
+
+  @@index([workspaceId, lastMessageAt])
+}
+
+model ChatMessage {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // VISITOR | BOT | AGENT (a teammate) | NOTE (system line, e.g. "handed over").
+  role           String
+  text           String
+  // Data lookups behind a bot answer: [{ action, ok, ms }] — never the data.
+  tools          Json?
+  sentById       String?
+  createdAt      DateTime         @default(now())
+
+  @@index([conversationId, createdAt])
 }
