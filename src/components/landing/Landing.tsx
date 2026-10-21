@@ -1,7 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
 import { CreditHints } from "@/components/CreditHints";
-import { creditValue, getPlans } from "@/lib/credits";
+import { creditValue, pickerPrices } from "@/lib/credits";
 import {
   ArrowRight,
   BarChart3,
@@ -66,7 +66,7 @@ const NETWORKS: { icon: Icon; name: string; color: string }[] = [
 // come from Admin → Pricing; credit amounts show their ₾/$ value on hover.
 export async function Landing({ lang }: { lang: Lang }) {
   const c = COPY[lang];
-  const [plans, value] = await Promise.all([getPlans(), creditValue()]);
+  const [prices, value] = await Promise.all([pickerPrices(), creditValue()]);
   return (
     <div lang={lang} className="overflow-x-clip">
       <Header lang={lang} />
@@ -82,7 +82,7 @@ export async function Landing({ lang }: { lang: Lang }) {
         <section id="pricing" className="border-y border-white/5 bg-zinc-900/30 py-24">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <SectionHead eyebrow={c.pricing.eyebrow} title={c.pricing.title} sub={c.pricing.sub} />
-            <Pricing lang={lang} plans={plans.map((p) => ({ id: p.id, monthly: p.monthly, credits: p.credits, bundle: p.bundle }))} gelPerUsd={value.gelPerUsd} />
+            <Pricing lang={lang} plans={prices.plans} />
           </div>
         </section>
         <WhatYouGet c={c} />

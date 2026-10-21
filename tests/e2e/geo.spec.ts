@@ -39,7 +39,7 @@ test('a JavaScript-only site that blocks ChatGPT search', async () => {
   home = '<html><head><title>App</title></head><body><div id="root"></div><script src="/app.js"></script></body></html>'
   robots = 'User-agent: OAI-SearchBot\nDisallow: /\n\nUser-agent: GPTBot\nDisallow: /\n\nUser-agent: *\nAllow: /\n'
   await page.goto('/app/website/ai')
-  await expect(page.getByRole('button', { name: /Ask AI search · 5 credits/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Ask AI search · 10 credits/ })).toBeVisible()
   await page.getByRole('button', { name: 'Check the site' }).click()
   await expect(row('AI assistants may read the site')).toHaveAttribute('data-status', 'bad')
   await expect(row('AI assistants may read the site')).toContainText('blocks OAI-SearchBot')
@@ -71,5 +71,5 @@ test('visibility in real AI search answers', async () => {
   await expect(page.getByLabel('AI visibility')).toBeVisible({ timeout: 220_000 })
   expect(await page.getByRole('list', { name: 'Questions' }).getByRole('listitem').count()).toBeGreaterThanOrEqual(3)
   await expect(page.getByRole('list', { name: 'Sources' })).toBeVisible()
-  expect(balance()).toBe(before - 5)
+  expect(balance()).toBe(before - 10)
 })

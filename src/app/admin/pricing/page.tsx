@@ -25,7 +25,7 @@ export default async function AdminPricing() {
   ])
   // Times = charges minus the ones given back.
   const refundsOf = (a: string) => refunded.find((r) => r.action === a)?._count._all ?? 0
-  const plans = PLANS.map((p) => ({ id: p.id, name: p.name, monthly: pricing.plans[p.id].monthly, credits: pricing.plans[p.id].credits }))
+  const plans = PLANS.map((p) => ({ id: p.id, name: p.name, ...pricing.plans[p.id] }))
   const used = Object.fromEntries(
     usage
       .filter((u) => u.action && (ACTION_KEYS as string[]).includes(u.action) && (u._sum.units ?? 0) > 0)
@@ -48,8 +48,9 @@ export default async function AdminPricing() {
       </div>
       <PricingEditor initial={pricing} plans={plans} used={used} />
       <p className={`${card} text-xs text-zinc-500`}>
-        Provider costs are estimates to start from — Gemini text ~$0.001–0.03 per call, Gemini image ~$0.039, Veo 3.1 Lite/Fast/Standard per second of clip. Check your Google
-        Cloud billing and put your real numbers here.
+        Provider costs are estimates to start from — Gemini text ~$0.001–0.03 per call, Gemini 3.1 Flash Image ~$0.067 per 1K image (2.5 Flash Image ~$0.039), Veo 3.1
+        Lite/Fast/Standard per second of clip. Check your Google Cloud billing and put your real numbers here. Default credits: one credit per $0.02 of cost or less, so even
+        the cheapest credit (Agency, paid yearly) earns twice its cost.
       </p>
     </div>
   )

@@ -62,10 +62,10 @@ test('a credit pack: Monrem checkout, callback, credits added once', async () =>
   await form.getByLabel('Phone', { exact: true }).fill('555 12-34-56')
   await form.getByRole('button', { name: 'Continue to payment' }).click()
   await page.waitForURL(new RegExp(`127.0.0.1:${FAKE_MONREM_PORT}/pay/`))
-  await expect(page.getByRole('heading', { name: 'Pay 10.00 USD' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Pay 8.00 USD' })).toBeVisible()
   const [id] = lastPayment()
   const order = monrem.orders.get(id)!
-  expect(order.body).toMatchObject({ amount: 1000, currency: 'USD', callback_url: webhook, billing_street: '1 Rustaveli Ave', billing_city: 'Tbilisi', billing_post_code: '0108', billing_country: 'GE', customer_phone: '555123456', customer_phone_code: '995', customer_first_name: 'Nino', customer_last_name: 'Beridze', billing_first_name: 'Nino', billing_last_name: 'Beridze' })
+  expect(order.body).toMatchObject({ amount: 800, currency: 'USD', callback_url: webhook, billing_street: '1 Rustaveli Ave', billing_city: 'Tbilisi', billing_post_code: '0108', billing_country: 'GE', customer_phone: '555123456', customer_phone_code: '995', customer_first_name: 'Nino', customer_last_name: 'Beridze', billing_first_name: 'Nino', billing_last_name: 'Beridze' })
   expect(order.body).toMatchObject({ billing_state: 'Tbilisi' })
   expect(String(order.body.return_url)).toContain(`/app/credits?payment=${id}`)
 
@@ -74,7 +74,7 @@ test('a credit pack: Monrem checkout, callback, credits added once', async () =>
   await expect(page.getByText('Payment received — 100 credits added.')).toBeVisible()
   expect(balance()).toBe(before + 100)
   await expect(page.getByText('Billing: Nino Beridze, 1 Rustaveli Ave, Tbilisi, Tbilisi, 0108, Georgia · +995 555 12 34 56')).toBeVisible()
-  expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PACK', '1000', 'USD', 'true'])
+  expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PACK', '800', 'USD', 'true'])
   expect(sql(`select count(*) from "CreditEntry" where "idempotencyKey"='payment:${id}' and reason='PURCHASE' and amount=100`)).toBe('1')
 
   // Replayed callbacks and a reload never add credits twice.
@@ -156,7 +156,7 @@ test('when Monrem allows framing, the payment page opens in a window on our page
     await expect(pay).toBeVisible()
     expect(page.url()).toMatch(/\/app\/credits$/)
     const frame = page.frameLocator('iframe[title="Monrem payment"]')
-    await expect(frame.getByRole('heading', { name: 'Pay 10.00 USD' })).toBeVisible()
+    await expect(frame.getByRole('heading', { name: 'Pay 8.00 USD' })).toBeVisible()
     // Paid inside the frame: the return page takes over the tab.
     await frame.getByRole('link', { name: 'Pay now' }).click()
     await page.waitForURL(/\/app\/credits\?payment=/)

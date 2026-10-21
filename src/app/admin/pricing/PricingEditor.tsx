@@ -5,7 +5,7 @@ import { ACTIONS, ACTION_KEYS, type Action, type Pricing } from '@/lib/pricing'
 import { netOf, VAT } from '@/lib/tax'
 import { savePricing } from '../actions'
 
-type Plan = { id: string; name: string; monthly: number; credits: number }
+type Plan = { id: string; name: string; monthly: number; monthlyGel: number; credits: number }
 type Used = Record<string, { credits: number; units: number; count: number }>
 
 const usd = (n: number) => (Math.abs(n) >= 100 ? `$${n.toFixed(0)}` : Math.abs(n) >= 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(3)}`)
@@ -17,9 +17,9 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
   const [p, setP] = useState<Pricing>(initial)
   // Price and credits as being edited.
   const plans = planNames.map((pl) => ({ ...pl, ...p.plans[pl.id as keyof Pricing['plans']] }))
-  const setPlan = (id: string, field: 'monthly' | 'credits', v: string) =>
+  const setPlan = (id: string, field: 'monthly' | 'monthlyGel' | 'credits', v: string) =>
     setP((cur) => ({ ...cur, plans: { ...cur.plans, [id]: { ...cur.plans[id as keyof Pricing['plans']], [field]: Math.max(0, field === 'credits' ? Math.round(Number(v) || 0) : Number(v) || 0) } } }))
-  const setPack = (i: number, field: 'credits' | 'priceUsd', v: string) =>
+  const setPack = (i: number, field: 'credits' | 'priceUsd' | 'priceGel', v: string) =>
     setP((cur) => ({ ...cur, packs: cur.packs.map((pk, j) => (j === i ? { ...pk, [field]: Math.max(0, field === 'credits' ? Math.round(Number(v) || 0) : Number(v) || 0) } : pk)) }))
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>()
   const [pending, start] = useTransition()
@@ -73,8 +73,10 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
     <div className="space-y-5">
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <h2 className="font-semibold">Plans</h2>
-        <p className="mt-1 text-sm text-zinc-500">Price a month (incl. VAT) and the credits each plan refills every month. The landing page, the plan picker and new payments use them.</p>
-        <ul className="mt-3 grid gap-3 sm:grid-cols-3">
+        <p className="mt-1 text-sm text-zinc-500">
+          Price a month (incl. VAT) and the credits each plan refills every month. The lari price is fixed, not converted: cards are charged it when the Monrem terminal takes lari. The landing page, the plan picker and new payments use them.
+        </p>
+        <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {plans.map((pl) => (
             <li key={pl.id} className="rounded-xl bg-zinc-50 p-3 text-sm ring-1 ring-zinc-200">
               <p className="font-medium">{pl.name}</p>
@@ -83,6 +85,13 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
                 <span className="flex items-center gap-1">
                   $
                   <input type="number" min="1" step="1" value={pl.monthly} onChange={(e) => setPlan(pl.id, 'monthly', e.target.value)} aria-label={`Price of ${pl.name}`} className={input} />
+                </span>
+              </label>
+              <label className="mt-1.5 flex items-center justify-between gap-2">
+                In lari
+                <span className="flex items-center gap-1">
+                  ₾
+                  <input type="number" min="1" step="1" value={pl.monthlyGel} onChange={(e) => setPlan(pl.id, 'monthlyGel', e.target.value)} aria-label={`${pl.name} lari price`} className={input} />
                 </span>
               </label>
               <label className="mt-1.5 flex items-center justify-between gap-2">
@@ -107,6 +116,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
             <tr>
               <th className="py-1.5 font-medium">Credits</th>
               <th className="py-1.5 font-medium">Price</th>
+              <th className="py-1.5 font-medium">In lari</th>
               <th className="py-1.5 text-right font-medium">Per credit (net)</th>
               <th className="py-1.5 text-right font-medium">Discount</th>
               <th className="py-1.5 text-right font-medium">Margin if all used{mixCost === null ? ' (worst case)' : ''}</th>
@@ -129,6 +139,12 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
                       <input type="number" min="0" step="1" value={pk.priceUsd} onChange={(e) => setPack(i, 'priceUsd', e.target.value)} aria-label={`Price of pack ${i + 1}`} className={input} />
                     </span>
                   </td>
+                  <td className="py-2">
+                    <span className="inline-flex items-center gap-1">
+                      ₾
+                      <input type="number" min="0" step="1" value={pk.priceGel} onChange={(e) => setPack(i, 'priceGel', e.target.value)} aria-label={`Pack ${i + 1} lari price`} className={input} />
+                    </span>
+                  </td>
                   <td className="py-2 text-right tabular-nums">{usd(net / Math.max(1, pk.credits))}</td>
                   <td className="py-2 text-right tabular-nums">{pct(1 - pk.priceUsd / Math.max(0.0001, pk.credits * p.creditPriceUsd))}</td>
                   <td className={`py-2 text-right tabular-nums ${marginTone(m)}`}>{pct(m)}</td>
@@ -143,7 +159,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
           </tbody>
         </table>
         {p.packs.length < 8 && (
-          <button onClick={() => setP((cur) => ({ ...cur, packs: [...cur.packs, { credits: 1000, priceUsd: 90 }] }))} className="mt-2 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
+          <button onClick={() => setP((cur) => ({ ...cur, packs: [...cur.packs, { credits: 1000, priceUsd: 65, priceGel: 175 }] }))} className="mt-2 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
             Add a pack
           </button>
         )}
@@ -256,7 +272,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <h2 className="font-semibold">AI clips (Veo) per month</h2>
         <p className="mt-1 text-sm text-zinc-500">Seconds of clips each paid plan may generate per calendar month. Trials get none. Our cost if the whole allowance goes to each quality:</p>
-        <ul className="mt-3 grid gap-3 sm:grid-cols-3">
+        <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {plans.map((pl) => {
             const secs = p.veoSecondsPerMonth[pl.id as keyof Pricing['veoSecondsPerMonth']] ?? 0
             return (
@@ -291,7 +307,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
         <p className="mt-1 text-sm text-zinc-500">
           A customer uses the full Veo allowance on the costliest clip quality and every other credit on <b>{ACTIONS[worst].label}</b> ({usd(costPerCredit)} per credit).
         </p>
-        <ul className="mt-3 grid gap-3 sm:grid-cols-3">
+        <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {plans.map((pl) => {
             const w = worstFor(pl)
             const cost = w.cost
@@ -303,7 +319,10 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
                 <p className="mt-1 text-zinc-600">
                   {usd(net)} in (after VAT) · {usd(cost)} out
                 </p>
-                <p className={`mt-0.5 ${marginTone(m)}`}>margin {pct(m)}</p>
+                <p className={`mt-0.5 ${marginTone(m)}`}>
+                  margin {pct(m)}
+                  {cost > 0 && <span className="text-zinc-500"> · {(net / cost).toFixed(1)}× the AI cost</span>}
+                </p>
                 <p className="mt-0.5 text-xs text-zinc-500">clips on {ACTIONS[w.q].label.replace('AI clip · ', '')}</p>
               </li>
             )

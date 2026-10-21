@@ -76,7 +76,7 @@ test('a copied picture style: in Studio and in every image style picker', async 
   await expect(card).toBeVisible()
   await card.click()
   await expect(page.getByText('New images in “Rustic Artisan Dark”')).toBeVisible()
-  await expect(page.getByRole('button', { name: /Make 2 · 2 credits/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Make 2 · 8 credits/ })).toBeVisible()
   await page.getByRole('button', { name: /Make 2/ }).click()
   await expect(page.getByRole('alert').filter({ hasText: 'Describe the picture' })).toBeVisible()
 

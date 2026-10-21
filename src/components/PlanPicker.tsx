@@ -2,14 +2,15 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, CheckCircle2, Clapperboard, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Share2, UserRound, Users, X, Code2 } from 'lucide-react'
+import { Building2, CheckCircle2, Clapperboard, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Share2, Sprout, UserRound, Users, X, Code2 } from 'lucide-react'
 import { DEFAULT_PRICING } from '@/lib/pricing'
 import { BUNDLES, PLANS, TRIAL_DAYS, yearlyTotal, type PickerPrices, type PlanId } from '@/lib/plans'
 import { VAT } from '@/lib/tax'
 import { choosePlan } from '@/app/app/plan/actions'
 
-const ICON = { STARTER: Rocket, TEAM: Users, AGENCY: Building2 }
+const ICON = { SOLO: Sprout, STARTER: Rocket, TEAM: Users, AGENCY: Building2 }
 const TINT = {
+  SOLO: 'bg-amber-50 text-amber-600',
   STARTER: 'bg-emerald-50 text-emerald-600',
   TEAM: 'bg-sky-50 text-sky-600',
   AGENCY: 'bg-indigo-50 text-indigo-600',
@@ -85,11 +86,12 @@ export function PlanPicker({ current, after = '/app', prices }: { current?: Plan
 
         {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {PLANS.map((base) => {
             const live = prices?.plans.find((x) => x.id === base.id)
-            const p = { ...base, monthly: live?.monthly ?? base.monthly, credits: live?.credits ?? base.credits, bundle: live?.bundle ?? BUNDLES[base.id], veo: live?.veo ?? DEFAULT_PRICING.veoSecondsPerMonth[base.id] }
+            const p = { ...base, monthly: live?.monthly ?? base.monthly, monthlyGel: live?.monthlyGel ?? base.monthlyGel, credits: live?.credits ?? base.credits, bundle: live?.bundle ?? BUNDLES[base.id], veo: live?.veo ?? DEFAULT_PRICING.veoSecondsPerMonth[base.id] }
             const shown = yearly ? yearlyTotal(p.monthly) : p.monthly
+            const shownGel = yearly ? yearlyTotal(p.monthlyGel) : p.monthlyGel
             const Icon = ICON[p.id]
             const isCurrent = current === p.id
             return (
@@ -114,7 +116,7 @@ export function PlanPicker({ current, after = '/app', prices }: { current?: Plan
                 <p className="mt-4 text-3xl font-semibold text-zinc-900">
                   ${shown.toLocaleString()}
                   <span className="text-base font-normal text-zinc-500"> / {yearly ? 'year' : 'month'}</span>
-                  <span className="ml-2 text-sm font-normal text-zinc-400">≈ ₾{Math.round(shown * (prices?.gelPerUsd ?? 2.7)).toLocaleString()}</span>
+                  <span className="ml-2 text-sm font-normal text-zinc-400">₾{shownGel.toLocaleString('en-US')}</span>
                 </p>
                 <p className="text-xs text-zinc-500">{yearly ? 'Billed yearly' : 'Billed monthly'} · incl. {Math.round(VAT.rate * 100)}% VAT</p>
                 <button
@@ -140,7 +142,7 @@ export function PlanPicker({ current, after = '/app', prices }: { current?: Plan
                   <Row icon={PenLine} label="AI-written posts" value={p.bundle.posts.toLocaleString()} />
                   <Row icon={ImageIcon} label="AI images" value={p.bundle.images.toLocaleString()} />
                   <Row icon={Film} label="AI videos with voice-over" value={p.bundle.videos.toLocaleString()} />
-                  <Row icon={Clapperboard} label="AI clips (Veo)" value={`${p.veo}s`} />
+                  <Row icon={Clapperboard} label="AI clips (Veo)" value={p.veo ? `${p.veo}s` : '—'} />
                   <Row icon={FileText} label="Blog articles" value={p.bundle.articles.toLocaleString()} />
                   <Row icon={Compass} label="Strategy plans" value={p.bundle.strategies.toLocaleString()} />
                 </ul>

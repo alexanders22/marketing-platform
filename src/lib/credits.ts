@@ -29,10 +29,16 @@ export async function getPricing(): Promise<Pricing> {
     plans: Object.fromEntries(
       Object.entries(DEFAULT_PRICING.plans).map(([id, d]) => {
         const s = saved.plans?.[id as keyof Pricing['plans']]
-        return [id, { monthly: s && s.monthly > 0 ? s.monthly : d.monthly, credits: s && s.credits > 0 ? Math.round(s.credits) : d.credits }]
+        return [id, { monthly: s && s.monthly > 0 ? s.monthly : d.monthly, monthlyGel: s && s.monthlyGel > 0 ? s.monthlyGel : d.monthlyGel, credits: s && s.credits > 0 ? Math.round(s.credits) : d.credits }]
       }),
     ) as Pricing['plans'],
-    packs: Array.isArray(saved.packs) && saved.packs.length ? saved.packs.filter((x) => x.credits > 0 && x.priceUsd > 0) : DEFAULT_PRICING.packs,
+    packs:
+      Array.isArray(saved.packs) && saved.packs.length
+        ? saved.packs
+            .filter((x) => x.credits > 0 && x.priceUsd > 0)
+            // A pack saved before lari prices: the default pack's, else at ~2.7 ₾/$.
+            .map((x) => ({ ...x, priceGel: x.priceGel > 0 ? x.priceGel : (DEFAULT_PRICING.packs.find((d) => d.credits === x.credits)?.priceGel ?? Math.round(x.priceUsd * 2.7)) }))
+        : DEFAULT_PRICING.packs,
   }
   cached = { at: Date.now(), value }
   return value
@@ -54,10 +60,9 @@ export async function creditValue(): Promise<{ usd: number; gelPerUsd: number }>
 }
 
 export async function pickerPrices(): Promise<PickerPrices> {
-  const [pricing, rate] = await Promise.all([getPricing(), gelPerUsd()])
+  const pricing = await getPricing()
   return {
-    plans: plansWith(pricing.plans).map((p) => ({ id: p.id, monthly: p.monthly, credits: p.credits, bundle: p.bundle, veo: pricing.veoSecondsPerMonth[p.id] })),
-    gelPerUsd: rate,
+    plans: plansWith(pricing.plans).map((p) => ({ id: p.id, monthly: p.monthly, monthlyGel: p.monthlyGel, credits: p.credits, bundle: p.bundle, veo: pricing.veoSecondsPerMonth[p.id] })),
   }
 }
 

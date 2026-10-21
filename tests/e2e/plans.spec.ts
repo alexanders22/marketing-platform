@@ -68,7 +68,7 @@ test('a trial is not a payment; a recorded payment unlocks paid features and gra
   await admin.getByRole('textbox', { name: 'Note' }).first().fill('bank transfer #1')
   await admin.getByRole('button', { name: 'Record payment' }).click()
   // Starter $29, VAT included: $4.42 of it is 18% VAT.
-  await expect(admin.getByText(/Paid until \d{4}-\d{2}-\d{2} · \$29 incl\. \$4\.42 VAT · \+300 credits/)).toBeVisible()
+  await expect(admin.getByText(/Paid until \d{4}-\d{2}-\d{2} · \$29 incl\. \$4\.42 VAT · \+400 credits/)).toBeVisible()
   // A second month paid ahead: paid longer, but this month's credits only once.
   await admin.getByRole('textbox', { name: 'Note' }).first().fill('bank transfer #2')
   await admin.getByRole('button', { name: 'Record payment' }).click()
@@ -78,7 +78,7 @@ test('a trial is not a payment; a recorded payment unlocks paid features and gra
   await expect(admin.getByText('VAT 18% to pay')).toBeVisible()
   await admin.close()
   expect(Number(sql(`select extract(day from "paidUntil" - now()) from "Account" where id='${id}'`))).toBeGreaterThan(55)
-  expect(sql(`select "creditBalance" from "Account" where id='${id}'`)).toBe('350')
+  expect(sql(`select "creditBalance" from "Account" where id='${id}'`)).toBe('450')
   expect(sql(`select count(*) from "CreditEntry" where "accountId"='${id}' and "idempotencyKey" like 'plan:%'`)).toBe('1')
 
   await page.reload()

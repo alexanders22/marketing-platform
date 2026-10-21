@@ -4,11 +4,12 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import type { AddressForm } from '@/lib/billing-address'
+import type { PlanId } from '@/lib/plans'
 import { checkout } from './actions'
 import { AddressDialog } from './AddressDialog'
 import { PayFrame } from './PayFrame'
 
-type Purchase = { kind: 'PACK'; credits: number } | { kind: 'PLAN'; plan: 'STARTER' | 'TEAM' | 'AGENCY'; cycle: 'MONTHLY' | 'YEARLY'; autoRenew?: boolean }
+type Purchase = { kind: 'PACK'; credits: number } | { kind: 'PLAN'; plan: PlanId; cycle: 'MONTHLY' | 'YEARLY'; autoRenew?: boolean }
 
 // Opens Monrem's payment page: in a window over this page when Monrem allows
 // it, else in the tab; the customer comes back to /app/credits. The first

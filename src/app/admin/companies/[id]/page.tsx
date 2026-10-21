@@ -284,6 +284,7 @@ export default async function AdminCompany({ params }: PageProps<'/admin/compani
                   Plan
                   <select name="plan" defaultValue={a.plan} className={input}>
                     <option value="NONE">No plan</option>
+                    <option value="SOLO">Solo</option>
                     <option value="STARTER">Starter</option>
                     <option value="TEAM">Team</option>
                     <option value="AGENCY">Agency</option>
