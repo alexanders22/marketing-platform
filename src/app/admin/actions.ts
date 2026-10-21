@@ -27,7 +27,7 @@ const AccountForm = z.object({
   email: z.email('Enter a valid email'),
   country: z.string().max(60),
   currency: z.string().regex(/^[A-Z]{3}$/, 'Currency is a 3-letter code like GEL'),
-  plan: z.enum(['NONE', 'SOLO', 'STARTER', 'TEAM', 'AGENCY']),
+  plan: z.enum(['NONE', 'STARTER', 'TEAM', 'AGENCY']),
   billingCycle: z.enum(['MONTHLY', 'YEARLY']),
   trialEndsAt: z.string(),
   alertEmails: z.boolean(),

@@ -28,13 +28,14 @@ export async function grantPlanCredits(accountId: string, now = new Date()) {
   return prisma.$transaction(async (tx) => {
     const a = await tx.account.findUnique({ where: { id: accountId }, select: { plan: true, trialEndsAt: true, paidUntil: true } })
     if (!a || billingState(a, now) !== 'active') return 0
-    const credits = (await getPlans()).find((p) => p.id === a.plan)?.credits ?? 0
+    const plan = (await getPlans()).find((p) => p.id === a.plan)
+    const credits = plan?.credits ?? 0
     if (credits <= 0) return 0
     const start = periodStart(a.paidUntil!, now)
     const idempotencyKey = `plan:${accountId}:${start.toISOString().slice(0, 10)}`
     if (await tx.creditEntry.findUnique({ where: { idempotencyKey }, select: { id: true } })) return 0
     await tx.creditEntry.create({
-      data: { accountId, amount: credits, reason: 'GRANT', idempotencyKey, note: `${a.plan[0]}${a.plan.slice(1).toLowerCase()} plan credits` },
+      data: { accountId, amount: credits, reason: 'GRANT', idempotencyKey, note: `${plan?.name ?? a.plan} plan credits` },
     })
     await tx.account.update({ where: { id: accountId }, data: { creditBalance: { increment: credits } } })
     return credits

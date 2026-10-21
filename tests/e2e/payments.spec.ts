@@ -170,7 +170,7 @@ test('when Monrem allows framing, the payment page opens in a window on our page
 
 test.describe('auto-renewal', () => {
   test.beforeAll(() => {
-    // Starter monthly renews at the same $29; the yearly Monrem plan has an old price, so it can't.
+    // Start monthly renews at the same $29; the yearly Monrem plan has an old price, so it can't.
     sql(`update "Account" set plan='STARTER' where id='${accountId}'`)
     sql(`insert into "Setting"(key, value, "updatedAt") values ('monremPlans', '{"STARTER_MONTHLY":"ref-starter-m","STARTER_YEARLY":"ref-starter-y-old"}', now()) on conflict (key) do update set value=excluded.value`)
   })

@@ -42,7 +42,7 @@ export const ACTIONS = {
 export type Action = keyof typeof ACTIONS
 export const ACTION_KEYS = Object.keys(ACTIONS) as Action[]
 
-// Every plan has a Veo allowance (Solo's is 0 seconds).
+// Every plan has a Veo allowance.
 export const VEO_PLANS = PLAN_IDS
 export type VeoPlan = PlanId
 
@@ -72,7 +72,7 @@ export const DEFAULT_PACKS: CreditPack[] = [
 
 export const DEFAULT_PRICING: Pricing = {
   creditPriceUsd: 0.08,
-  veoSecondsPerMonth: { SOLO: 0, STARTER: 16, TEAM: 60, AGENCY: 160 },
+  veoSecondsPerMonth: { STARTER: 10, TEAM: 30, AGENCY: 120 },
   plans: Object.fromEntries(PLANS.map((p) => [p.id, { monthly: p.monthly, monthlyGel: p.monthlyGel, credits: p.credits }])) as Pricing['plans'],
   packs: DEFAULT_PACKS,
   actions: Object.fromEntries(ACTION_KEYS.map((k) => [k, { credits: ACTIONS[k].credits, costUsd: ACTIONS[k].costUsd }])) as Pricing['actions'],

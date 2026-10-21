@@ -109,6 +109,7 @@ model Account {
 
 enum Plan {
   NONE
+  // Retired: its accounts moved to STARTER.
   SOLO
   STARTER
   TEAM

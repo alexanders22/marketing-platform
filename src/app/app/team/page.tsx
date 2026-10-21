@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/EmptyState'
 import { requireContext } from '@/lib/context'
 import { PLANS } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
-import { seatLimit, seatsUsed } from '@/lib/team'
+import { seatsUsed } from '@/lib/team'
 import { InviteForm, MemberActions, RevokeButton } from './TeamForms'
 
 export const metadata: Metadata = { title: 'Team — Loudpilot' }
@@ -23,9 +23,8 @@ export default async function TeamPage() {
     prisma.invitation.findMany({ where: { accountId: account.id, acceptedAt: null, expiresAt: { gt: now } }, orderBy: { createdAt: 'desc' } }),
     seatsUsed(account.id),
   ])
-  const limit = seatLimit(account.plan)
   const canManage = role !== 'EDITOR' || asAdmin
-  const full = seats.used >= limit && !asAdmin
+  const noPlan = account.plan === 'NONE' && !asAdmin
   const plan = PLANS.find((p) => p.id === account.plan)
 
   return (
@@ -37,18 +36,18 @@ export default async function TeamPage() {
 
       <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl bg-zinc-50 px-4 py-3 text-sm ring-1 ring-zinc-200">
         <span>
-          <b className="tabular-nums">{seats.used}</b> of <b className="tabular-nums">{limit}</b> seat{limit === 1 ? '' : 's'} used
+          <b className="tabular-nums">{seats.members}</b> member{seats.members === 1 ? '' : 's'}
           {seats.pending > 0 && <span className="text-zinc-500"> · {seats.pending} invitation{seats.pending === 1 ? '' : 's'} pending</span>}
         </span>
-        <span className="text-zinc-500">{plan ? `${plan.name} plan` : 'No plan'}</span>
-        {full && (
+        <span className="text-zinc-500">{plan ? `${plan.name} plan · unlimited users` : 'No plan'}</span>
+        {noPlan && (
           <Link href="/app/plan" className="ml-auto font-medium text-indigo-700 hover:underline">
-            Need more seats? See plans
+            See plans
           </Link>
         )}
       </div>
 
-      {canManage && <InviteForm disabled={full} limit={limit} />}
+      {canManage && <InviteForm disabled={noPlan} />}
 
       <ul className="mt-6 divide-y divide-zinc-100 rounded-xl border border-zinc-200">
         {members.map((m) => (

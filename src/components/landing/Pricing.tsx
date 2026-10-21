@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, Check, Clapperboard, Code2, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Sparkles, Sprout, UserRound, Users } from "lucide-react";
+import { Building2, Check, Clapperboard, Code2, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Sparkles, Users } from "lucide-react";
 import { BUNDLES, PLANS as PLAN_LIMITS, type PickerPrices } from "@/lib/plans";
 import { DEFAULT_PRICING } from "@/lib/pricing";
 import { COPY, type Lang } from "./i18n";
 import { SIGNUP } from "./site";
 
 const LOOK = {
-  SOLO: { icon: Sprout, tint: "bg-amber-400/15 text-amber-300" },
   STARTER: { icon: Rocket, tint: "bg-emerald-400/15 text-emerald-300" },
   TEAM: { icon: Users, tint: "bg-sky-400/15 text-sky-300" },
   AGENCY: { icon: Building2, tint: "bg-violet-400/15 text-violet-300" },
@@ -41,7 +40,7 @@ export function Pricing({ lang = "en", plans }: { lang?: Lang; plans: PickerPric
         ))}
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-5 md:grid-cols-3">
         {PLAN_LIMITS.map((base) => {
           // Prices, credits and clip seconds as set in Admin → Pricing.
           const live = plans.find((x) => x.id === base.id);
@@ -96,7 +95,6 @@ export function Pricing({ lang = "en", plans }: { lang?: Lang; plans: PickerPric
               </Link>
               <p className="mt-8 text-xs font-medium uppercase tracking-wider text-zinc-500">{t.included}</p>
               <ul className="mt-3 space-y-3 text-sm">
-                <Row icon={UserRound} label={t.users} value={p.users} />
                 <Row icon={Building2} label={t.companies} value={p.companies} />
                 <Row icon={Sparkles} label={t.profiles} value={p.profiles} />
                 <Row icon={Code2} label={t.api} value={p.api ? "✓" : "—"} />
@@ -150,11 +148,11 @@ export function Pricing({ lang = "en", plans }: { lang?: Lang; plans: PickerPric
   );
 }
 
-// List prices for 5 people and 20 social profiles (vendors' websites, Oct 2026).
+// List prices for 5 people and 15 social profiles (vendors' websites, Oct 2026).
 const RIVALS: { tool: string; plan: string; price: number; basis?: "buffer" | "hootsuite" | "sprout"; us?: true }[] = [
-  { tool: "Loudpilot", plan: "Team", price: 79, us: true },
+  { tool: "Loudpilot", plan: "Business", price: 75, us: true },
   { tool: "Ocoya", plan: "Team", price: 79 },
-  { tool: "Buffer", plan: "Team", price: 200, basis: "buffer" },
+  { tool: "Buffer", plan: "Team", price: 150, basis: "buffer" },
   { tool: "Hootsuite", plan: "Professional", price: 995, basis: "hootsuite" },
   { tool: "Sprout Social", plan: "Professional", price: 1495, basis: "sprout" },
 ];

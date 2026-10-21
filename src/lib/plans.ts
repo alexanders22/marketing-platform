@@ -1,6 +1,9 @@
 // Plan limits used by the plan picker, credits page
 // and (later) billing.
-export type PlanId = 'SOLO' | 'STARTER' | 'TEAM' | 'AGENCY'
+// Three plans (Start, Business, Agency). The ids stay STARTER / TEAM / AGENCY
+// (database, payments, Monrem plans); SOLO was retired — its accounts moved to
+// STARTER. People are not limited: every plan has unlimited users.
+export type PlanId = 'STARTER' | 'TEAM' | 'AGENCY'
 
 export const PLANS: {
   id: PlanId
@@ -10,7 +13,6 @@ export const PLANS: {
   // conversion — charged as is when the terminal takes lari).
   monthly: number
   monthlyGel: number
-  users: number
   profiles: number
   // Companies (brands) one account can run, each with its own channels.
   companies: number
@@ -18,37 +20,24 @@ export const PLANS: {
   popular?: boolean
 }[] = [
   {
-    id: 'SOLO',
-    name: 'Solo',
-    blurb: 'For a small shop or a freelancer posting for one brand.',
-    monthly: 15,
-    monthlyGel: 39,
-    users: 1,
-    profiles: 3,
-    companies: 1,
-    credits: 150,
-  },
-  {
     id: 'STARTER',
-    name: 'Starter',
-    blurb: 'For founders and small brands running their own marketing.',
+    name: 'Start',
+    blurb: 'For a small business doing its own marketing.',
     monthly: 29,
     monthlyGel: 79,
-    users: 1,
     profiles: 5,
-    companies: 2,
-    credits: 400,
+    companies: 1,
+    credits: 200,
   },
   {
     id: 'TEAM',
-    name: 'Team',
-    blurb: 'For marketing teams handling a few brands and ad accounts.',
-    monthly: 79,
-    monthlyGel: 219,
-    users: 5,
-    profiles: 20,
-    companies: 10,
-    credits: 1200,
+    name: 'Business',
+    blurb: 'For growing businesses with a few brands, ads and a team.',
+    monthly: 75,
+    monthlyGel: 199,
+    profiles: 15,
+    companies: 3,
+    credits: 700,
     popular: true,
   },
   {
@@ -56,11 +45,10 @@ export const PLANS: {
     name: 'Agency',
     blurb: 'For agencies and partners serving many clients at once.',
     monthly: 199,
-    monthlyGel: 549,
-    users: 20,
+    monthlyGel: 529,
     profiles: 100,
-    companies: 50,
-    credits: 3300,
+    companies: 25,
+    credits: 2500,
   },
 ]
 
@@ -71,10 +59,9 @@ export const PLAN_IDS = PLANS.map((p) => p.id)
 // (checked in tests); credits stay the mechanism, so the mix is flexible.
 export type Bundle = { posts: number; images: number; videos: number; articles: number; strategies: number }
 export const BUNDLES: Record<PlanId, Bundle> = {
-  SOLO: { posts: 30, images: 20, videos: 5, articles: 2, strategies: 1 },
-  STARTER: { posts: 60, images: 50, videos: 10, articles: 4, strategies: 2 },
-  TEAM: { posts: 180, images: 150, videos: 40, articles: 15, strategies: 6 },
-  AGENCY: { posts: 600, images: 400, videos: 100, articles: 40, strategies: 20 },
+  STARTER: { posts: 40, images: 20, videos: 10, articles: 4, strategies: 1 },
+  TEAM: { posts: 120, images: 60, videos: 30, articles: 12, strategies: 4 },
+  AGENCY: { posts: 400, images: 250, videos: 80, articles: 40, strategies: 15 },
 }
 
 // The plans with the prices and credits super admins set (Admin → Pricing):
@@ -103,12 +90,12 @@ export const TRIAL_CREDITS = 50
 
 export const yearlyTotal = (monthly: number) => monthly * 10
 
-// What an account may have: the plan's numbers, or a single seat before a
-// plan is picked.
-export type Limits = { companies: number; users: number; profiles: number; api: boolean }
+// What an account may have: the plan's numbers, or the smallest before a plan
+// is picked. Users are never limited.
+export type Limits = { companies: number; profiles: number; api: boolean }
 export function planLimits(plan: string): Limits {
   const p = PLANS.find((x) => x.id === plan)
-  return p ? { companies: p.companies, users: p.users, profiles: p.profiles, api: p.id === 'AGENCY' } : { companies: 1, users: 1, profiles: 2, api: false }
+  return p ? { companies: p.companies, profiles: p.profiles, api: p.id === 'AGENCY' } : { companies: 1, profiles: 2, api: false }
 }
 export const companyLimit = (plan: string) => planLimits(plan).companies
 

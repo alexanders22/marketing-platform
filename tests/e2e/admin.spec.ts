@@ -37,6 +37,8 @@ async function addCompanyManually(page: Page, name: string) {
 }
 
 test('a customer adds a second company and switches between them', async () => {
+  // Business includes 3 companies.
+  sql(`update "Account" set plan='TEAM' where id='${accountId}'`)
   await addCompanyManually(customer, 'Arca Rentals')
   await customer.waitForURL(/\/app\/dashboard/)
   await expect(customer.getByRole('button', { name: 'Company: Arca Rentals' }).first()).toBeVisible()
@@ -47,10 +49,11 @@ test('a customer adds a second company and switches between them', async () => {
   await customer.getByRole('list', { name: 'Companies' }).getByRole('button', { name: 'Arca Development' }).click()
   await expect(customer.getByRole('button', { name: 'Company: Arca Development' }).first()).toBeVisible()
 
-  // Starter includes 2 companies: the third is refused before the form.
+  // Start includes 1 company: with 2 already, the next is refused before the form.
+  sql(`update "Account" set plan='STARTER' where id='${accountId}'`)
   await customer.goto('/onboarding/company')
   await expect(customer.getByRole('heading', { name: 'Company limit reached' })).toBeVisible()
-  await expect(customer.getByText('Your plan includes 2 companies and you have 2. Upgrade to add more.')).toBeVisible()
+  await expect(customer.getByText('Your plan includes 1 company and you have 2. Upgrade to add more.')).toBeVisible()
   expect(sql(`select count(*) from "Workspace" where "accountId"='${accountId}'`)).toBe('2')
 })
 
@@ -72,7 +75,7 @@ test('super admin: find the company, edit the plan, book credits', async () => {
   await admin.getByLabel('Search companies').fill(customerEmail)
   await admin.getByRole('button', { name: 'Search' }).click()
   await admin.getByRole('link', { name: 'Arca Development' }).click()
-  await expect(admin.getByText('2 of 2 on this plan')).toBeVisible()
+  await expect(admin.getByText('2 of 1 on this plan')).toBeVisible()
 
   await admin.getByLabel('Plan').selectOption('TEAM')
   await admin.getByRole('button', { name: 'Save', exact: true }).click()
