@@ -9,6 +9,7 @@ import { palette, resizeDoc, SIZES, TEMPLATE_CATEGORIES, TEMPLATES, type DesignD
 import { createDesign, deleteDesign, duplicateDesign } from './actions'
 import { confirmDialog } from '@/components/ui/Dialog'
 import { StyledImages } from './StyledImages'
+import { ShowMore } from '@/components/ShowMore'
 
 type Design = { id: string; name: string; width: number; height: number; data: DesignDoc; preview: string | null; updatedAt: string }
 
@@ -137,40 +138,42 @@ export function StudioHome({
         </div>
       ) : (
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
-          {shown.map((d) => (
-            <div key={d.id} className="group relative">
-              <Link href={`/app/studio/${d.id}${q2}`} className="block">
-                <div className="grid aspect-square place-items-center overflow-hidden rounded-xl bg-zinc-100 ring-1 ring-zinc-200 transition group-hover:ring-zinc-400">
-                  {d.preview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={d.preview} alt="" className="max-h-full max-w-full object-contain" />
-                  ) : (
-                    <DesignPreview doc={d.data} w={d.width} h={d.height} width={d.width >= d.height ? 180 : 180 * (d.width / d.height)} />
-                  )}
+          <ShowMore first={15} step={15}>
+            {shown.map((d) => (
+              <div key={d.id} className="group relative">
+                <Link href={`/app/studio/${d.id}${q2}`} className="block">
+                  <div className="grid aspect-square place-items-center overflow-hidden rounded-xl bg-zinc-100 ring-1 ring-zinc-200 transition group-hover:ring-zinc-400">
+                    {d.preview ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={d.preview} alt="" className="max-h-full max-w-full object-contain" />
+                    ) : (
+                      <DesignPreview doc={d.data} w={d.width} h={d.height} width={d.width >= d.height ? 180 : 180 * (d.width / d.height)} />
+                    )}
+                  </div>
+                  <p className="mt-2 truncate text-sm font-medium">{d.name}</p>
+                  <p className="text-xs text-zinc-500">
+                    {d.width}×{d.height} · {new Date(d.updatedAt).toLocaleDateString('en-GB')}
+                  </p>
+                </Link>
+                <div className="absolute top-2 right-2 flex gap-1 md:hidden md:group-hover:flex">
+                  <button
+                    onClick={() => start(async () => { const r = await duplicateDesign(d.id); if (r.id) router.refresh() })}
+                    className="grid h-7 w-7 place-items-center rounded-lg bg-white shadow"
+                    aria-label="Duplicate"
+                  >
+                    <Copy size={13} />
+                  </button>
+                  <button
+                    onClick={async () => (await confirmDialog(`Delete “${d.name}”?`, { confirm: 'Delete', danger: true })) && start(async () => { await deleteDesign(d.id); router.refresh() })}
+                    className="grid h-7 w-7 place-items-center rounded-lg bg-white text-red-600 shadow"
+                    aria-label="Delete"
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 </div>
-                <p className="mt-2 truncate text-sm font-medium">{d.name}</p>
-                <p className="text-xs text-zinc-500">
-                  {d.width}×{d.height} · {new Date(d.updatedAt).toLocaleDateString('en-GB')}
-                </p>
-              </Link>
-              <div className="absolute top-2 right-2 flex gap-1 md:hidden md:group-hover:flex">
-                <button
-                  onClick={() => start(async () => { const r = await duplicateDesign(d.id); if (r.id) router.refresh() })}
-                  className="grid h-7 w-7 place-items-center rounded-lg bg-white shadow"
-                  aria-label="Duplicate"
-                >
-                  <Copy size={13} />
-                </button>
-                <button
-                  onClick={async () => (await confirmDialog(`Delete “${d.name}”?`, { confirm: 'Delete', danger: true })) && start(async () => { await deleteDesign(d.id); router.refresh() })}
-                  className="grid h-7 w-7 place-items-center rounded-lg bg-white text-red-600 shadow"
-                  aria-label="Delete"
-                >
-                  <Trash2 size={13} />
-                </button>
               </div>
-            </div>
-          ))}
+            ))}
+          </ShowMore>
         </div>
       )}
     </>

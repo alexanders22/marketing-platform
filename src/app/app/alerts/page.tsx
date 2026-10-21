@@ -5,6 +5,7 @@ import { LocalTime } from '@/components/LocalTime'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 import { AlertControls } from './AlertControls'
+import { ShowMore } from '@/components/ShowMore'
 
 export const metadata: Metadata = { title: 'Alerts — Loudpilot' }
 
@@ -44,26 +45,28 @@ export default async function AlertsPage() {
         </section>
       ) : (
         <ul className="divide-y divide-zinc-100 rounded-xl border border-zinc-200">
-          {alerts.map((a) => (
-            <li key={a.id} className={`flex gap-3 p-4 ${a.readAt ? '' : 'bg-indigo-50/40'}`}>
-              <span className="mt-0.5 shrink-0">{ICON[a.severity]}</span>
-              <div className="min-w-0 flex-1">
-                <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                  {a.title}
-                  {!a.readAt && <span className="rounded-full bg-indigo-600 px-1.5 py-px text-[10px] font-semibold text-white">NEW</span>}
-                </p>
-                <p className="mt-1 text-sm text-zinc-600">{a.body}</p>
-                <p className="mt-1.5 flex flex-wrap gap-3 text-xs text-zinc-400">
-                  <LocalTime iso={a.createdAt.toISOString()} options={{ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }} />
-                  {a.href && (
-                    <Link href={a.href} className="font-medium text-indigo-600 hover:underline">
-                      Open
-                    </Link>
-                  )}
-                </p>
-              </div>
-            </li>
-          ))}
+          <ShowMore as="li">
+            {alerts.map((a) => (
+              <li key={a.id} className={`flex gap-3 p-4 ${a.readAt ? '' : 'bg-indigo-50/40'}`}>
+                <span className="mt-0.5 shrink-0">{ICON[a.severity]}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                    {a.title}
+                    {!a.readAt && <span className="rounded-full bg-indigo-600 px-1.5 py-px text-[10px] font-semibold text-white">NEW</span>}
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-600">{a.body}</p>
+                  <p className="mt-1.5 flex flex-wrap gap-3 text-xs text-zinc-400">
+                    <LocalTime iso={a.createdAt.toISOString()} options={{ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }} />
+                    {a.href && (
+                      <Link href={a.href} className="font-medium text-indigo-600 hover:underline">
+                        Open
+                      </Link>
+                    )}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ShowMore>
         </ul>
       )}
     </div>

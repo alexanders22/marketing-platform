@@ -39,6 +39,7 @@ import { DateFilter } from './DateFilter'
 import { ProfileReadiness } from './ProfileReadiness'
 import { SummaryCard } from './SummaryCard'
 import { SyncButton } from './SyncButton'
+import { ShowMore } from '@/components/ShowMore'
 
 export const metadata: Metadata = { title: 'Dashboard — Loudpilot' }
 
@@ -536,53 +537,55 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
-                    {d.campaigns.map((r) => {
-                      const s = statusOf(r.status)
-                      const gs = goalOf.get(r.id)
-                      const G = gs ? GOAL_STATUS[gs] : null
-                      return (
-                        <tr key={r.id} className="transition hover:bg-violet-50/40">
-                          <td className="max-w-[260px] px-4 py-3">
-                            <Link href={`/app/dashboard/ads/${r.id}?days=${period}`} className="block truncate font-medium hover:underline">
-                              {r.name}
-                            </Link>
-                            <span className="block truncate text-xs text-zinc-500">
-                              {r.account}
-                              {r.dailyBudget ? ` · ${formatMoney(r.dailyBudget, r.currency)}/day` : r.lifetimeBudget ? ` · ${formatMoney(r.lifetimeBudget, r.currency)} total` : ''}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3">
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ${s.cls}`}>{s.label}</span>
-                          </td>
-                          <td className="px-3 py-3">
-                            {G ? (
-                              <Link href="/app/goals" className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-zinc-700 hover:underline">
-                                <G.icon size={13} style={{ color: G.ring }} /> {G.label}
+                    <ShowMore as="tr" colSpan={8}>
+                      {d.campaigns.map((r) => {
+                        const s = statusOf(r.status)
+                        const gs = goalOf.get(r.id)
+                        const G = gs ? GOAL_STATUS[gs] : null
+                        return (
+                          <tr key={r.id} className="transition hover:bg-violet-50/40">
+                            <td className="max-w-[260px] px-4 py-3">
+                              <Link href={`/app/dashboard/ads/${r.id}?days=${period}`} className="block truncate font-medium hover:underline">
+                                {r.name}
                               </Link>
-                            ) : (
-                              <Link href="/app/goals" className="text-xs text-zinc-400 hover:text-zinc-700">
-                                + set
-                              </Link>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 text-right tabular-nums">{formatMoney(r.spend, r.currency)}</td>
-                          <td className="px-3 py-3 text-right tabular-nums">
-                            {formatNumber(r.results)} <span className="text-xs text-zinc-400">{r.resultLabel.toLowerCase()}</span>
-                          </td>
-                          <td className="px-3 py-3 text-right tabular-nums">
-                            {r.costPerResult === null ? '—' : formatMoney(r.costPerResult, r.currency)}
-                            {r.perThousand && r.costPerResult !== null && <span className="text-xs text-zinc-400"> / 1k</span>}
-                            <div className="mt-0.5">
-                              <DeltaPill cur={r.costPerResult} prev={r.prevCostPerResult} lowerIsBetter />
-                            </div>
-                          </td>
-                          <td className="px-3 py-3 text-right tabular-nums">{formatPercent(r.ctr)}</td>
-                          <td className="px-4 py-3">
-                            <Sparkline values={r.spark} color={C.spend} unit={{ kind: 'money', currency: r.currency }} label={`${r.name}: daily spend`} height={28} />
-                          </td>
-                        </tr>
-                      )
-                    })}
+                              <span className="block truncate text-xs text-zinc-500">
+                                {r.account}
+                                {r.dailyBudget ? ` · ${formatMoney(r.dailyBudget, r.currency)}/day` : r.lifetimeBudget ? ` · ${formatMoney(r.lifetimeBudget, r.currency)} total` : ''}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3">
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ${s.cls}`}>{s.label}</span>
+                            </td>
+                            <td className="px-3 py-3">
+                              {G ? (
+                                <Link href="/app/goals" className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-zinc-700 hover:underline">
+                                  <G.icon size={13} style={{ color: G.ring }} /> {G.label}
+                                </Link>
+                              ) : (
+                                <Link href="/app/goals" className="text-xs text-zinc-400 hover:text-zinc-700">
+                                  + set
+                                </Link>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-right tabular-nums">{formatMoney(r.spend, r.currency)}</td>
+                            <td className="px-3 py-3 text-right tabular-nums">
+                              {formatNumber(r.results)} <span className="text-xs text-zinc-400">{r.resultLabel.toLowerCase()}</span>
+                            </td>
+                            <td className="px-3 py-3 text-right tabular-nums">
+                              {r.costPerResult === null ? '—' : formatMoney(r.costPerResult, r.currency)}
+                              {r.perThousand && r.costPerResult !== null && <span className="text-xs text-zinc-400"> / 1k</span>}
+                              <div className="mt-0.5">
+                                <DeltaPill cur={r.costPerResult} prev={r.prevCostPerResult} lowerIsBetter />
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-right tabular-nums">{formatPercent(r.ctr)}</td>
+                            <td className="px-4 py-3">
+                              <Sparkline values={r.spark} color={C.spend} unit={{ kind: 'money', currency: r.currency }} label={`${r.name}: daily spend`} height={28} />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </ShowMore>
                   </tbody>
                 </table>
               </div>

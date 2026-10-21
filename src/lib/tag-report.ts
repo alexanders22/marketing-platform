@@ -133,7 +133,7 @@ export async function tagReport(siteId: string, workspaceId: string, days: numbe
     revenue,
     currency: conversions.find((e) => e.currency)?.currency ?? null,
   }
-  return { totals, sources, journeys: await journeys(siteId, people.slice(-15).reverse()) }
+  return { totals, sources, journeys: await journeys(siteId, people.slice(-50).reverse()) }
 }
 
 // The path of each converted person: visits (with where from), pages and

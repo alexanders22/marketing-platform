@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { visitLabel } from '@/lib/tag-report'
 import { When } from '../inbox/Thread'
 import { ChatThread, LiveChats } from './ChatThread'
+import { ShowMore } from '@/components/ShowMore'
 
 export const metadata: Metadata = { title: 'Website chat — Loudpilot' }
 
@@ -81,28 +82,30 @@ export default async function ChatPage({ searchParams }: PageProps<'/app/chat'>)
           <p className="px-6 py-12 text-center text-sm text-zinc-500">No chats here yet.</p>
         ) : (
           <ul aria-label="Chats" className="max-h-[calc(100vh-12rem)] divide-y divide-zinc-100 overflow-y-auto">
-            {conversations.map((c) => (
-              <li key={c.id}>
-                <Link href={link({ c: c.id })} className={`flex gap-3 px-3 py-3 ${c.id === selectedId ? 'bg-zinc-100' : 'hover:bg-zinc-50'}`}>
-                  <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${c.status === 'HUMAN' ? 'bg-amber-500' : c.status === 'BOT' ? 'bg-indigo-500' : 'bg-zinc-300'}`} aria-hidden />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className={`min-w-0 flex-1 truncate text-sm ${c.unread ? 'font-semibold' : 'font-medium'}`}>
-                        {c.name || c.phone || c.email || (c.userId ? `Customer ${c.userId}` : 'Visitor')}
-                        {c.test && <span className="ml-1.5 rounded bg-zinc-100 px-1 text-[10px] font-normal text-zinc-500">test</span>}
+            <ShowMore as="li">
+              {conversations.map((c) => (
+                <li key={c.id}>
+                  <Link href={link({ c: c.id })} className={`flex gap-3 px-3 py-3 ${c.id === selectedId ? 'bg-zinc-100' : 'hover:bg-zinc-50'}`}>
+                    <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${c.status === 'HUMAN' ? 'bg-amber-500' : c.status === 'BOT' ? 'bg-indigo-500' : 'bg-zinc-300'}`} aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className={`min-w-0 flex-1 truncate text-sm ${c.unread ? 'font-semibold' : 'font-medium'}`}>
+                          {c.name || c.phone || c.email || (c.userId ? `Customer ${c.userId}` : 'Visitor')}
+                          {c.test && <span className="ml-1.5 rounded bg-zinc-100 px-1 text-[10px] font-normal text-zinc-500">test</span>}
+                        </span>
+                        <span className="shrink-0 text-[11px] text-zinc-500">
+                          <When iso={c.lastMessageAt.toISOString()} />
+                        </span>
                       </span>
-                      <span className="shrink-0 text-[11px] text-zinc-500">
-                        <When iso={c.lastMessageAt.toISOString()} />
+                      <span className="mt-0.5 flex items-center gap-1.5">
+                        <span className={`min-w-0 flex-1 truncate text-xs ${c.unread ? 'text-zinc-900' : 'text-zinc-500'}`}>{c.lastText}</span>
+                        {c.unread > 0 && <span className="rounded-full bg-indigo-600 px-1.5 py-px text-[11px] font-semibold text-white">{c.unread}</span>}
                       </span>
                     </span>
-                    <span className="mt-0.5 flex items-center gap-1.5">
-                      <span className={`min-w-0 flex-1 truncate text-xs ${c.unread ? 'text-zinc-900' : 'text-zinc-500'}`}>{c.lastText}</span>
-                      {c.unread > 0 && <span className="rounded-full bg-indigo-600 px-1.5 py-px text-[11px] font-semibold text-white">{c.unread}</span>}
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
+                  </Link>
+                </li>
+              ))}
+            </ShowMore>
           </ul>
         )}
       </section>
