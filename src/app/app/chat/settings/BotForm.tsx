@@ -79,7 +79,7 @@ export function BotForm({ initial, canManage, website, telegram }: { initial: Bo
         </div>
         {writeErr && <p className="text-sm text-red-600">{writeErr}</p>}
         {!website && <p className="text-sm text-amber-700">Add your website in Brand → Brand kit so the assistant can learn from it.</p>}
-        <p className="text-xs text-zinc-500">Writing from the website uses 2 credits. Check the result and fill in anything marked [fill in] — the assistant answers only from this.</p>
+        <p className="text-xs text-zinc-500">It writes a short start (2 credits): check it, fill in anything marked [fill in] and add the rest yourself — the assistant answers only from this.</p>
         <div>
           <label htmlFor="bot-instructions" className="text-sm font-medium">
             Main instructions
