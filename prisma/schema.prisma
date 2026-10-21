@@ -276,6 +276,7 @@ model Workspace {
   site             Site?
   chatBot          ChatBot?
   chatConversations ChatConversation[]
+  chatOperators    ChatOperator[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -599,6 +600,7 @@ model User {
   createdAt       DateTime  @default(now())
 
   memberships  AccountMember[]
+  chatOperators ChatOperator[]
   sessions     Session[]
   accessTokens AccessToken[]
 }
@@ -1621,12 +1623,41 @@ model ChatConversation {
   lastMessageAt DateTime  @default(now())
   lastText      String?
   test          Boolean   @default(false)
+  // The teammate the hand-over was given to (see ChatOperator).
+  operatorId    String?
+  operator      ChatOperator? @relation(fields: [operatorId], references: [id], onDelete: SetNull)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   messages ChatMessage[]
 
   @@index([workspaceId, lastMessageAt])
+  @@index([operatorId, status])
+}
+
+// A teammate who answers website chats the assistant hands over. Each new
+// hand-over goes to a free operator, in turn (src/lib/chatbot.ts
+// assignOperator), and the alert goes to that operator's own e-mail and
+// Telegram.
+model ChatOperator {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Off: gets no new chats (holiday, day off); keeps the ones they have.
+  active         Boolean   @default(true)
+  // Where alerts go; e-mail defaults to their sign-in address.
+  email          String?
+  telegramChatId String?
+  telegramName   String?
+  // Last hand-over given to them: the turn order among free operators.
+  lastAssignedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversations ChatConversation[]
+
+  @@unique([workspaceId, userId])
 }
 
 model ChatMessage {

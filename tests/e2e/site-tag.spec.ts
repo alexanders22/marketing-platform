@@ -173,6 +173,8 @@ async function say(text: string) {
 
 test('the assistant answers, looks up an order through the company endpoint, and hands red flags over', async () => {
   await page.goto('/app/chat/settings')
+  // The first answer is cut off (too long): it is asked once more.
+  gemini.cutNextSetup()
   await page.getByRole('button', { name: 'Write it from my website' }).click()
   await expect(page.getByLabel('Main instructions')).toHaveValue(/Bloom & Co\./)
   await expect(page.getByLabel('Red-flag topics')).toHaveValue('refund\ncomplaint')

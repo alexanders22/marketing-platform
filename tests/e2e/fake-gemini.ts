@@ -22,12 +22,14 @@ type Body = {
 
 export function startFakeGemini() {
   const requests: Body[] = []
+  // The next set-up answer stops half-way, as when it hits maxOutputTokens.
+  let cutNext = false
   const server: Server = createServer(async (req, res) => {
     let raw = ''
     for await (const chunk of req) raw += chunk
-    const reply = (parts: Part[]) => {
+    const reply = (parts: Part[], finishReason = 'STOP') => {
       res.writeHead(200, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ candidates: [{ content: { role: 'model', parts }, finishReason: 'STOP', index: 0 }] }))
+      res.end(JSON.stringify({ candidates: [{ content: { role: 'model', parts }, finishReason, index: 0 }] }))
     }
     if (!req.url?.includes(':generateContent')) {
       res.writeHead(404)
@@ -38,6 +40,10 @@ export function startFakeGemini() {
     const tools = body.tools?.flatMap((t) => t.functionDeclarations?.map((f) => f.name) ?? []) ?? []
     const call = (name: string, args: Record<string, unknown>) => reply([{ functionCall: { name, args } }])
 
+    if (body.generationConfig?.responseMimeType === 'application/json' && cutNext) {
+      cutNext = false
+      return reply([{ text: '{"instructions": "You are the assistant of Bloom' }], 'MAX_TOKENS')
+    }
     if (body.generationConfig?.responseMimeType === 'application/json')
       return reply([
         {
@@ -69,6 +75,7 @@ export function startFakeGemini() {
   })
   return {
     requests,
+    cutNextSetup: () => (cutNext = true),
     listen: () => new Promise<void>((r) => server.listen(FAKE_GEMINI_PORT, '127.0.0.1', () => r())),
     close: () => new Promise<void>((r) => server.close(() => r())),
   }

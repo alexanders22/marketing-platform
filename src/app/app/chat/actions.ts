@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { aiEnabled, LANGUAGES, writeChatSetup } from '@/lib/ai'
 import { aiError } from '@/lib/ai-health'
 import { CHAT_LANGUAGES } from '@/lib/chat-languages'
-import { actionKey, botActions, callAction, setConversationStatus, teamReply, type BotAction } from '@/lib/chatbot'
+import { actionKey, botActions, callAction, reassign, setConversationStatus, teamReply, type BotAction } from '@/lib/chatbot'
 import { requireContext } from '@/lib/context'
 import { balanceOf, charge, notEnough, prices } from '@/lib/credits'
 import { crawlSite, withDossier } from '@/lib/dossier'
@@ -165,30 +165,83 @@ export async function testLookup(
   return { ms: r.ms, response: r.response }
 }
 
-/* ─── Telegram hand-over alerts ────────────────────────────────────────── */
+/* ─── Operators ─────────────────────────────────────────────────────────── */
 
-// Static per company: "/start <code>" sent to Loudpilot's bot links a chat.
-const telegramCode = (workspaceId: string) => createHmac('sha256', `tg-chat:${process.env.KHMA_ENCRYPTION_KEY}`).update(workspaceId).digest('hex').slice(0, 24)
-
-export async function telegramLinks(): Promise<{ error?: string; person?: string; group?: string }> {
-  const { workspace } = await requireContext()
-  const name = await telegramBotName()
-  if (!name) return { error: 'Telegram alerts are not available on this server yet (no Loudpilot bot).' }
-  const code = telegramCode(workspace.id)
-  return { person: `https://t.me/${name}?start=${code}`, group: `https://t.me/${name}?startgroup=${code}` }
-}
-
-type Update = { update_id: number; message?: { text?: string; chat: { id: number; title?: string; username?: string; first_name?: string; type: string } } }
-
-export async function connectTelegram(): Promise<{ error?: string; name?: string }> {
+// Team members who answer handed-over chats, in turn (see assignOperator).
+export async function addOperator(userId: string): Promise<{ error?: string }> {
   let ctx
   try {
     ctx = await manager()
   } catch (e) {
     return { error: (e as Error).message }
   }
+  const member = await prisma.accountMember.findUnique({ where: { accountId_userId: { accountId: ctx.account.id, userId } } })
+  if (!member) return { error: 'Add them to the team first (Team → Invite).' }
+  await prisma.chatOperator.upsert({
+    where: { workspaceId_userId: { workspaceId: ctx.workspace.id, userId } },
+    create: { workspaceId: ctx.workspace.id, userId },
+    update: { active: true },
+  })
+  revalidatePath('/app/chat/settings')
+  return {}
+}
+
+// The operator's own row: managers change anyone's, an operator their own.
+async function ownOrManaged(operatorId: string) {
+  const ctx = await requireContext()
+  const op = await prisma.chatOperator.findFirst({ where: { id: operatorId, workspaceId: ctx.workspace.id } })
+  if (!op) throw new Error('Operator not found.')
+  if (ctx.role === 'EDITOR' && !ctx.asAdmin && op.userId !== ctx.user.id) throw new Error('Only the owner or an admin can change other operators.')
+  return { ctx, op }
+}
+
+export async function updateOperator(operatorId: string, data: { email?: string; active?: boolean }): Promise<{ error?: string }> {
+  try {
+    const { op } = await ownOrManaged(operatorId)
+    // Empty: back to their sign-in address.
+    const email = data.email === undefined ? undefined : data.email.trim() ? normEmail(data.email) : null
+    if (data.email?.trim() && !email) return { error: `"${data.email}" is not an e-mail address.` }
+    await prisma.chatOperator.update({
+      where: { id: op.id },
+      data: { ...(data.email !== undefined ? { email } : {}), ...(data.active !== undefined ? { active: data.active } : {}) },
+    })
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  revalidatePath('/app/chat/settings')
+  return {}
+}
+
+export async function removeOperator(operatorId: string): Promise<{ error?: string }> {
+  try {
+    const ctx = await manager()
+    // Their chats stay, unassigned (the relation is SET NULL).
+    await prisma.chatOperator.deleteMany({ where: { id: operatorId, workspaceId: ctx.workspace.id } })
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  revalidatePath('/app/chat/settings')
+  return {}
+}
+
+export async function reassignChat(conversationId: string, operatorId: string | null): Promise<{ error?: string }> {
+  const { workspace, user } = await requireContext()
+  await reassign(workspace.id, conversationId, operatorId, user.name || user.email)
+  revalidatePath('/app/chat')
+  return {}
+}
+
+/* ─── Telegram hand-over alerts ────────────────────────────────────────── */
+
+// Static per target: "/start <code>" sent to Loudpilot's bot links a chat —
+// the company's shared one, or one operator's own.
+const telegramCode = (target: string) => createHmac('sha256', `tg-chat:${process.env.KHMA_ENCRYPTION_KEY}`).update(target).digest('hex').slice(0, 24)
+const targetOf = (workspaceId: string, operatorId?: string) => (operatorId ? `op:${operatorId}` : workspaceId)
+
+// The person or group that sent "/start <code>" to Loudpilot's bot.
+type Update = { update_id: number; message?: { text?: string; chat: { id: number; title?: string; username?: string; first_name?: string; type: string } } }
+async function startedChat(code: string): Promise<{ id: string; name: string } | { error: string }> {
   if (!platformBot()) return { error: 'Telegram alerts are not available on this server yet.' }
-  const code = telegramCode(ctx.workspace.id)
   let updates: Update[]
   try {
     updates = await tg<Update[]>(platformBot(), 'getUpdates', { allowed_updates: ['message'], limit: 100 })
@@ -198,18 +251,47 @@ export async function connectTelegram(): Promise<{ error?: string; name?: string
   const hit = [...updates].reverse().find((u) => new RegExp(`^/start(@\\w+)?\\s+${code}$`).test(u.message?.text?.trim() ?? ''))
   if (!hit?.message) return { error: 'No message from you yet. Open the link, press Start (or add the bot to your group), then try again.' }
   const chat = hit.message.chat
-  const name = chat.title ?? (chat.username ? `@${chat.username}` : chat.first_name ?? 'Telegram chat')
-  await ensureBot(ctx.workspace.id)
-  await prisma.chatBot.update({ where: { workspaceId: ctx.workspace.id }, data: { telegramChatId: String(chat.id), telegramName: name } })
-  await tg(platformBot(), 'sendMessage', { chat_id: chat.id, text: `✅ Loudpilot will send website-chat hand-overs for ${ctx.workspace.name} here.` }).catch(() => {})
-  revalidatePath('/app/chat/settings')
-  return { name }
+  return { id: String(chat.id), name: chat.title ?? (chat.username ? `@${chat.username}` : chat.first_name ?? 'Telegram chat') }
 }
 
-export async function disconnectTelegram(): Promise<{ error?: string }> {
+export async function telegramLinks(operatorId?: string): Promise<{ error?: string; person?: string; group?: string }> {
+  const { workspace } = await requireContext()
+  const name = await telegramBotName()
+  if (!name) return { error: 'Telegram alerts are not available on this server yet (no Loudpilot bot).' }
+  const code = telegramCode(targetOf(workspace.id, operatorId))
+  return { person: `https://t.me/${name}?start=${code}`, group: `https://t.me/${name}?startgroup=${code}` }
+}
+
+export async function connectTelegram(operatorId?: string): Promise<{ error?: string; name?: string }> {
+  let ctx
   try {
-    const ctx = await manager()
-    await prisma.chatBot.updateMany({ where: { workspaceId: ctx.workspace.id }, data: { telegramChatId: null, telegramName: null } })
+    ctx = operatorId ? (await ownOrManaged(operatorId)).ctx : await manager()
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
+  const chat = await startedChat(telegramCode(targetOf(ctx.workspace.id, operatorId)))
+  if ('error' in chat) return { error: chat.error }
+  if (operatorId) {
+    await prisma.chatOperator.update({ where: { id: operatorId }, data: { telegramChatId: chat.id, telegramName: chat.name } })
+  } else {
+    await ensureBot(ctx.workspace.id)
+    await prisma.chatBot.update({ where: { workspaceId: ctx.workspace.id }, data: { telegramChatId: chat.id, telegramName: chat.name } })
+  }
+  const whose = operatorId ? 'chats handed to you' : 'website-chat hand-overs'
+  await tg(platformBot(), 'sendMessage', { chat_id: chat.id, text: `✅ Loudpilot will send ${whose} for ${ctx.workspace.name} here.` }).catch(() => {})
+  revalidatePath('/app/chat/settings')
+  return { name: chat.name }
+}
+
+export async function disconnectTelegram(operatorId?: string): Promise<{ error?: string }> {
+  try {
+    if (operatorId) {
+      const { op } = await ownOrManaged(operatorId)
+      await prisma.chatOperator.update({ where: { id: op.id }, data: { telegramChatId: null, telegramName: null } })
+    } else {
+      const ctx = await manager()
+      await prisma.chatBot.updateMany({ where: { workspaceId: ctx.workspace.id }, data: { telegramChatId: null, telegramName: null } })
+    }
   } catch (e) {
     return { error: (e as Error).message }
   }

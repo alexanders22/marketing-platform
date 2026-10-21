@@ -1,7 +1,7 @@
 import 'server-only'
 import { GoogleGenAI, type Part } from '@google/genai'
 import type { BrandKit } from '@prisma/client'
-import { noteAiFailure } from './ai-health'
+import { isProviderDown, noteAiFailure } from './ai-health'
 import type { ImageStyleDef } from './image-styles'
 import { COPY_RULES, MARKETING_PLAYBOOK } from './marketing-kb'
 
@@ -193,7 +193,14 @@ async function json<T>(system: string, prompt: string, maxOutputTokens: number, 
       abortSignal: AbortSignal.timeout(timeoutMs),
     },
   }))
-  return JSON.parse(res.text ?? 'null') as T
+  try {
+    return JSON.parse(res.text ?? 'null') as T
+  } catch {
+    // Usually the answer hit maxOutputTokens (thinking counts towards it,
+    // and Georgian takes several tokens a word): say so in the log.
+    const reason = res.candidates?.[0]?.finishReason ?? 'unknown'
+    throw new Error(`AI answer is not valid JSON (finish: ${reason}, ${res.text?.length ?? 0} chars)`)
+  }
 }
 
 export type PlannedPost = { angle: string; caption: string; hashtags: string[] }
@@ -1447,30 +1454,39 @@ export async function chatStep(system: string, contents: ChatTurn[], tools: Chat
 export type ChatSetup = { instructions: string; knowledge: string; greeting: string; redFlags: string[] }
 
 // The assistant's first brief, written from the company website and what
-// Loudpilot already knows: who it is, what it answers, the facts it needs,
-// and the topics a person should take.
+// Loudpilot already knows: who it is, the key facts and the topics a person
+// should take. Short on purpose — the owner adds the rest by hand.
 export async function writeChatSetup(brandName: string, brand: Brand | null, pages: { url: string; text: string }[], language: PostOptions['language']): Promise<ChatSetup> {
   const system = [
     'You set up the customer-support assistant for a company website. Read the pages and the brand details and write its brief.',
     'Use ONLY what the pages and details say. Never invent prices, policies, delivery times, guarantees or contacts. Where something customers will ask is missing, write "[fill in: …]" so the owner completes it.',
     'Return JSON {"instructions": string, "knowledge": string, "greeting": string, "redFlags": string[]}:',
-    '- instructions: 4–8 sentences — who the assistant is, what the company does and sells, who the customers are, the tone of voice, what it should help with (choosing, prices, delivery, booking, contacts) and where to send people (pages, phone).',
-    '- knowledge: a compact list of facts and answers to the questions customers ask most (products and prices, opening hours, addresses, delivery and returns, payment, contacts), one per line starting with "- ".',
+    'Keep it SHORT — a starting point the owner will extend by hand:',
+    '- instructions: 3–4 short sentences — who the assistant is, what the company sells and to whom, the tone, where to send people (page or phone).',
+    '- knowledge: at most 10 lines, one fact each starting with "- " (main products / prices, hours, address, delivery, payment, contacts). Only facts the pages state; no explanations.',
     '- greeting: one short friendly first message.',
-    '- redFlags: 3–6 short topics a person must handle (e.g. complaints and refunds, legal threats, medical questions, large or custom orders, anything about a payment problem).',
+    '- redFlags: 3–5 topics of 1–3 words that a person must handle (e.g. refund, complaint, payment problem).',
     `Write everything in ${language}.`,
     brandContext(brandName, brand),
   ].join('\n\n')
-  const body = pages.map((p) => `### ${p.url}\n${p.text}`).join('\n\n').slice(0, 50_000)
-  const out = await json<Partial<ChatSetup>>(system, `Company: ${brandName}\n\n${body || '(the website could not be read)'}`, 4000, 90_000, {
-    type: 'object',
-    properties: { instructions: { type: 'string' }, knowledge: { type: 'string' }, greeting: { type: 'string' }, redFlags: { type: 'array', items: { type: 'string' } } },
-    required: ['instructions', 'knowledge', 'greeting', 'redFlags'],
+  const body = pages.map((p) => `### ${p.url}\n${p.text}`).join('\n\n').slice(0, 30_000)
+  // A long brief in Georgian plus the model's thinking needs room: a cut-off
+  // answer is broken JSON. One retry, since the length varies run to run.
+  const ask = () =>
+    json<Partial<ChatSetup>>(system, `Company: ${brandName}\n\n${body || '(the website could not be read)'}`, 16_000, 120_000, {
+      type: 'object',
+      properties: { instructions: { type: 'string' }, knowledge: { type: 'string' }, greeting: { type: 'string' }, redFlags: { type: 'array', items: { type: 'string' } } },
+      required: ['instructions', 'knowledge', 'greeting', 'redFlags'],
+    })
+  const out = await ask().catch((e) => {
+    if (isProviderDown(e)) throw e
+    console.warn('writeChatSetup: retrying —', e instanceof Error ? e.message : e)
+    return ask()
   })
   return {
-    instructions: String(out?.instructions ?? '').trim().slice(0, 4000),
-    knowledge: String(out?.knowledge ?? '').trim().slice(0, 8000),
+    instructions: String(out?.instructions ?? '').trim().slice(0, 1500),
+    knowledge: String(out?.knowledge ?? '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 12).join('\n').slice(0, 2500),
     greeting: String(out?.greeting ?? '').trim().slice(0, 300),
-    redFlags: strList(out?.redFlags, 8, 120),
+    redFlags: strList(out?.redFlags, 5, 60),
   }
 }
