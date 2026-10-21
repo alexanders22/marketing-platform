@@ -6,9 +6,10 @@ import type { ImageStyleDef } from './image-styles'
 import { COPY_RULES, MARKETING_PLAYBOOK } from './marketing-kb'
 
 // GEMINI_API_KEY enables generation. GEMINI_MODEL / GEMINI_IMAGE_MODEL
-// override the defaults.
+// override the defaults. GEMINI_BASE_URL points at a fake Gemini (e2e only).
 const key = process.env.GEMINI_API_KEY
-const client = key ? new GoogleGenAI({ apiKey: key }) : null
+const baseUrl = process.env.NODE_ENV !== 'production' ? process.env.GEMINI_BASE_URL : undefined
+const client = key ? new GoogleGenAI({ apiKey: key, ...(baseUrl ? { httpOptions: { baseUrl } } : {}) }) : null
 const MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest'
 // Used when the main model stays overloaded (503) after retries.
 const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest'
@@ -1394,4 +1395,82 @@ export async function askAiSearch(question: string): Promise<AiAnswer> {
     .filter((s, i, all) => all.findIndex((x) => x.title === s.title) === i)
     .slice(0, 10)
   return { answer: (m ? text.slice(0, m.index) : text).trim().slice(0, 3000), businesses, sources }
+}
+
+// ─── Website chat ──────────────────────────────────────────────────────────
+
+export type ChatTurn = { role: 'user' | 'model'; parts: Part[] }
+export type ChatTool = { name: string; description: string; params: Record<string, { type: 'string'; description: string }>; required: string[] }
+export type ChatCall = { id?: string; name: string; args: Record<string, unknown> }
+
+// One step of the website assistant (src/lib/chatbot.ts): text for the
+// visitor, or tool calls to run first. `parts` go back into the next step.
+export async function chatStep(system: string, contents: ChatTurn[], tools: ChatTool[]): Promise<{ text: string; calls: ChatCall[]; parts: Part[] }> {
+  if (!client) throw new Error('AI is not configured')
+  const res = await retrying((model) =>
+    client.models.generateContent({
+      model,
+      contents,
+      config: {
+        systemInstruction: system,
+        temperature: 0.3,
+        maxOutputTokens: 1500,
+        abortSignal: AbortSignal.timeout(45_000),
+        ...(tools.length
+          ? {
+              tools: [
+                {
+                  functionDeclarations: tools.map((t) => ({
+                    name: t.name,
+                    description: t.description,
+                    parametersJsonSchema: { type: 'object', properties: t.params, required: t.required },
+                  })),
+                },
+              ],
+            }
+          : {}),
+      },
+    }),
+  )
+  const parts = res.candidates?.[0]?.content?.parts ?? []
+  return {
+    text: parts
+      .filter((p) => p.text && !p.thought)
+      .map((p) => p.text)
+      .join('')
+      .trim(),
+    calls: parts.flatMap((p) => (p.functionCall?.name ? [{ id: p.functionCall.id, name: p.functionCall.name, args: (p.functionCall.args ?? {}) as Record<string, unknown> }] : [])),
+    parts,
+  }
+}
+
+export type ChatSetup = { instructions: string; knowledge: string; greeting: string; redFlags: string[] }
+
+// The assistant's first brief, written from the company website and what
+// Loudpilot already knows: who it is, what it answers, the facts it needs,
+// and the topics a person should take.
+export async function writeChatSetup(brandName: string, brand: Brand | null, pages: { url: string; text: string }[], language: PostOptions['language']): Promise<ChatSetup> {
+  const system = [
+    'You set up the customer-support assistant for a company website. Read the pages and the brand details and write its brief.',
+    'Use ONLY what the pages and details say. Never invent prices, policies, delivery times, guarantees or contacts. Where something customers will ask is missing, write "[fill in: …]" so the owner completes it.',
+    'Return JSON {"instructions": string, "knowledge": string, "greeting": string, "redFlags": string[]}:',
+    '- instructions: 4–8 sentences — who the assistant is, what the company does and sells, who the customers are, the tone of voice, what it should help with (choosing, prices, delivery, booking, contacts) and where to send people (pages, phone).',
+    '- knowledge: a compact list of facts and answers to the questions customers ask most (products and prices, opening hours, addresses, delivery and returns, payment, contacts), one per line starting with "- ".',
+    '- greeting: one short friendly first message.',
+    '- redFlags: 3–6 short topics a person must handle (e.g. complaints and refunds, legal threats, medical questions, large or custom orders, anything about a payment problem).',
+    `Write everything in ${language}.`,
+    brandContext(brandName, brand),
+  ].join('\n\n')
+  const body = pages.map((p) => `### ${p.url}\n${p.text}`).join('\n\n').slice(0, 50_000)
+  const out = await json<Partial<ChatSetup>>(system, `Company: ${brandName}\n\n${body || '(the website could not be read)'}`, 4000, 90_000, {
+    type: 'object',
+    properties: { instructions: { type: 'string' }, knowledge: { type: 'string' }, greeting: { type: 'string' }, redFlags: { type: 'array', items: { type: 'string' } } },
+    required: ['instructions', 'knowledge', 'greeting', 'redFlags'],
+  })
+  return {
+    instructions: String(out?.instructions ?? '').trim().slice(0, 4000),
+    knowledge: String(out?.knowledge ?? '').trim().slice(0, 8000),
+    greeting: String(out?.greeting ?? '').trim().slice(0, 300),
+    redFlags: strList(out?.redFlags, 8, 120),
+  }
 }

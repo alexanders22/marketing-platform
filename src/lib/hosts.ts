@@ -26,6 +26,7 @@ const TERMINAL_PATHS = [
   '/connect',
   '/oauth/authorize',
   '/oauth/consent',
+  '/demo-shop',
 ]
 // Public pages — they belong to the site.
 const SITE_PATHS = ['/ka', '/ru', '/features', '/docs', '/privacy', '/terms', '/data-deletion', '/b']
