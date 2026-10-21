@@ -360,34 +360,89 @@ export async function handoff(conv: ChatConversation, reason: string, summary?: 
     where: { id: conv.id },
     data: { status: 'HUMAN', handoffReason: [reason, summary].filter(Boolean).join(' — ').slice(0, 600), handoffAt: new Date() },
   })
+  await assignOperator(conv)
   // The model says it in its own words; otherwise a short note does.
   const note = await say(conv, 'NOTE', sayIt || !summary ? HANDOFF_NOTE + (conv.email || conv.phone ? '' : ' You can leave your phone or e-mail here.') : HANDOFF_NOTE)
   after(() => notifyTeam(conv.id, reason).catch((e) => console.error('chat notify failed', e)))
   return note
 }
 
-// E-mail (the bot's list, else owners and admins) and Telegram.
+// An operator is busy while one of their handed-over chats had a message
+// in the last 30 minutes.
+const BUSY_MS = 30 * 60_000
+export const busySince = () => new Date(Date.now() - BUSY_MS)
+
+// Gives the hand-over to an operator: the one already on it if still active,
+// else a free one — the one who waited longest since their last chat — or,
+// when everyone is busy, the one with the fewest busy chats. Only operators
+// who are still members of the account count. Null when there are none.
+export async function assignOperator(conv: Pick<ChatConversation, 'id' | 'workspaceId' | 'operatorId'>) {
+  const ws = await prisma.workspace.findUnique({ where: { id: conv.workspaceId }, select: { accountId: true } })
+  if (!ws?.accountId) return null
+  const operators = await prisma.chatOperator.findMany({
+    where: { workspaceId: conv.workspaceId, active: true, user: { disabledAt: null, memberships: { some: { accountId: ws.accountId } } } },
+  })
+  if (!operators.length) return null
+  const current = operators.find((o) => o.id === conv.operatorId)
+  if (current) return current
+  const busy = await prisma.chatConversation.groupBy({
+    by: ['operatorId'],
+    where: { operatorId: { in: operators.map((o) => o.id) }, status: 'HUMAN', lastMessageAt: { gte: busySince() }, id: { not: conv.id } },
+    _count: { _all: true },
+  })
+  const load = (id: string) => busy.find((b) => b.operatorId === id)?._count._all ?? 0
+  const pick = [...operators].sort(
+    (a, b) => load(a.id) - load(b.id) || (a.lastAssignedAt?.getTime() ?? 0) - (b.lastAssignedAt?.getTime() ?? 0) || a.createdAt.getTime() - b.createdAt.getTime(),
+  )[0]
+  const now = new Date()
+  await prisma.$transaction([
+    prisma.chatConversation.update({ where: { id: conv.id }, data: { operatorId: pick.id } }),
+    prisma.chatOperator.update({ where: { id: pick.id }, data: { lastAssignedAt: now } }),
+  ])
+  return pick
+}
+
+// The alert: to the assigned operator's e-mail and Telegram, plus the
+// assistant's own alert addresses (a shared group, a manager). Without
+// operators: those addresses, else the account's owners and admins.
 export async function notifyTeam(conversationId: string, reason: string) {
   const conv = await prisma.chatConversation.findUnique({
     where: { id: conversationId },
-    include: { messages: { orderBy: { createdAt: 'desc' }, take: 6 }, workspace: { include: { chatBot: true } } },
+    include: {
+      messages: { orderBy: { createdAt: 'desc' }, take: 6 },
+      workspace: { include: { chatBot: true } },
+      operator: { include: { user: { select: { name: true, email: true } } } },
+    },
   })
   if (!conv) return
   const bot = conv.workspace.chatBot
+  const op = conv.operator
   const link = `${terminalUrl()}/app/chat?c=${conv.id}`
   const who = [conv.name, conv.phone, conv.email].filter(Boolean).join(', ') || 'a visitor (no contact yet)'
   const lines = conv.messages
     .reverse()
     .filter((m) => m.role !== 'NOTE')
     .map((m) => `${m.role === 'VISITOR' ? 'Visitor' : m.role === 'AGENT' ? 'Team' : 'Bot'}: ${m.text.slice(0, 300)}`)
-  const text = [`💬 ${conv.test ? '[Test] ' : ''}${conv.workspace.name}: website chat needs a person`, `Reason: ${reason}`, `Who: ${who}`, '', ...lines, '', `Answer: ${link}`].join('\n')
+  const text = [
+    `💬 ${conv.test ? '[Test] ' : ''}${conv.workspace.name}: website chat needs a person`,
+    ...(op ? [`Assigned to: ${op.user.name || op.user.email}`] : []),
+    `Reason: ${reason}`,
+    `Who: ${who}`,
+    '',
+    ...lines,
+    '',
+    `Answer: ${link}`,
+  ].join('\n')
 
-  if (bot?.telegramChatId && platformBot()) {
-    await tg(platformBot(), 'sendMessage', { chat_id: bot.telegramChatId, text: text.slice(0, 4000), link_preview_options: { is_disabled: true } }).catch((e) =>
-      console.error('chat telegram failed', e instanceof Error ? e.message : e),
-    )
+  const chats = [...new Set([op?.telegramChatId, bot?.telegramChatId].filter((c): c is string => Boolean(c)))]
+  if (platformBot()) {
+    for (const chat_id of chats) {
+      await tg(platformBot(), 'sendMessage', { chat_id, text: text.slice(0, 4000), link_preview_options: { is_disabled: true } }).catch((e) =>
+        console.error('chat telegram failed', e instanceof Error ? e.message : e),
+      )
+    }
   }
-  let emails = bot?.notifyEmails ?? []
+  let emails = [...(op ? [op.email || op.user.email] : []), ...(bot?.notifyEmails ?? [])]
   if (!emails.length && conv.workspace.accountId) {
     const members = await prisma.accountMember.findMany({ where: { accountId: conv.workspace.accountId, role: { in: ['OWNER', 'ADMIN'] } }, include: { user: { select: { email: true } } } })
     emails = members.map((m) => m.user.email)
@@ -395,12 +450,13 @@ export async function notifyTeam(conversationId: string, reason: string) {
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
   const html = `<div style="font-family:Inter,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#18181b">
 <p style="font-size:18px;font-weight:600;margin:0 0 12px">Website chat needs a person</p>
+${op ? `<p style="font-size:14px;margin:0 0 4px"><b>Assigned to:</b> ${esc(op.user.name || op.user.email)}</p>` : ''}
 <p style="font-size:14px;margin:0 0 4px"><b>Reason:</b> ${esc(reason)}</p>
 <p style="font-size:14px;margin:0 0 16px"><b>Who:</b> ${esc(who)}</p>
 <div style="font-size:14px;line-height:1.5;background:#f4f4f5;border-radius:8px;padding:12px;margin:0 0 20px">${lines.map(esc).join('<br>')}</div>
 <p style="margin:0"><a href="${link}" style="display:inline-block;padding:11px 20px;background:#18181b;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Answer in Loudpilot</a></p>
 </div>`
-  for (const to of emails) await sendMail(to, `${conv.test ? '[Test] ' : ''}Website chat: ${reason} — ${conv.workspace.name}`, text, html).catch((e) => console.error('chat mail failed', e))
+  for (const to of [...new Set(emails.map((e) => e.toLowerCase()))]) await sendMail(to, `${conv.test ? '[Test] ' : ''}Website chat: ${reason} — ${conv.workspace.name}`, text, html).catch((e) => console.error('chat mail failed', e))
 }
 
 /* ─── Team side ────────────────────────────────────────────────────────── */
@@ -409,12 +465,33 @@ export async function teamReply(workspaceId: string, conversationId: string, tex
   const conv = await prisma.chatConversation.findFirst({ where: { id: conversationId, workspaceId } })
   if (!conv) throw new Error('Conversation not found')
   const m = await prisma.chatMessage.create({ data: { conversationId: conv.id, role: 'AGENT', text: text.slice(0, 4000), sentById: userId } })
+  // Nobody had it yet: it is now the chat of whoever answered, if an operator.
+  const mine = conv.operatorId ? null : await prisma.chatOperator.findUnique({ where: { workspaceId_userId: { workspaceId, userId } } })
   // A person answered: the bot stays quiet until handed back.
   await prisma.chatConversation.update({
     where: { id: conv.id },
-    data: { status: 'HUMAN', unread: 0, lastMessageAt: m.createdAt, lastText: text.slice(0, 200), handoffAt: conv.handoffAt ?? new Date() },
+    data: {
+      status: 'HUMAN',
+      unread: 0,
+      lastMessageAt: m.createdAt,
+      lastText: text.slice(0, 200),
+      handoffAt: conv.handoffAt ?? new Date(),
+      ...(mine ? { operatorId: mine.id } : {}),
+    },
   })
   return m
+}
+
+// Hands the chat to another operator (or nobody) and alerts them.
+export async function reassign(workspaceId: string, conversationId: string, operatorId: string | null, byName: string) {
+  const conv = await prisma.chatConversation.findFirst({ where: { id: conversationId, workspaceId } })
+  const op = operatorId ? await prisma.chatOperator.findFirst({ where: { id: operatorId, workspaceId } }) : null
+  if (!conv || (operatorId && !op) || conv.operatorId === (op?.id ?? null)) return
+  await prisma.chatConversation.update({ where: { id: conv.id }, data: { operatorId: op?.id ?? null } })
+  if (op) {
+    await prisma.chatOperator.update({ where: { id: op.id }, data: { lastAssignedAt: new Date() } })
+    after(() => notifyTeam(conv.id, `Passed to you by ${byName}`).catch((e) => console.error('chat notify failed', e)))
+  }
 }
 
 export async function setConversationStatus(workspaceId: string, conversationId: string, status: 'BOT' | 'HUMAN' | 'CLOSED') {

@@ -2,17 +2,31 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Bot, Footprints, ShoppingBag } from 'lucide-react'
 import { requireContext } from '@/lib/context'
-import { botActions } from '@/lib/chatbot'
+import { botActions, busySince } from '@/lib/chatbot'
 import { prisma } from '@/lib/prisma'
 import { ensureSite } from '@/lib/tag'
 import { BotForm } from './BotForm'
+import { Operators } from './Operators'
 
 export const metadata: Metadata = { title: 'Website assistant — Loudpilot' }
 
 export default async function AssistantPage() {
-  const { workspace, role, asAdmin, brand } = await requireContext()
+  const { workspace, account, role, asAdmin, brand, user } = await requireContext()
   const canManage = role !== 'EDITOR' || asAdmin
-  const [site, bot] = await Promise.all([ensureSite(workspace.id), prisma.chatBot.findUnique({ where: { workspaceId: workspace.id } })])
+  const [site, bot, operators, members] = await Promise.all([
+    ensureSite(workspace.id),
+    prisma.chatBot.findUnique({ where: { workspaceId: workspace.id } }),
+    prisma.chatOperator.findMany({
+      where: { workspaceId: workspace.id },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        user: { select: { name: true, email: true } },
+        // Chats that make them busy (see assignOperator).
+        _count: { select: { conversations: { where: { status: 'HUMAN', lastMessageAt: { gte: busySince() } } } } },
+      },
+    }),
+    prisma.accountMember.findMany({ where: { accountId: account.id }, include: { user: { select: { id: true, name: true, email: true } } } }),
+  ])
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start gap-3">
@@ -43,6 +57,24 @@ export default async function AssistantPage() {
         canManage={canManage}
         website={brand?.website ?? null}
         telegram={bot?.telegramName ?? null}
+        hasOperators={operators.length > 0}
+        operators={
+          <Operators
+            canManage={canManage}
+            me={user.id}
+            members={members.map((m) => ({ userId: m.user.id, name: m.user.name, email: m.user.email }))}
+            operators={operators.map((o) => ({
+              id: o.id,
+              userId: o.userId,
+              name: o.user.name || o.user.email,
+              login: o.user.email,
+              email: o.email,
+              active: o.active,
+              telegram: o.telegramName,
+              open: o._count.conversations,
+            }))}
+          />
+        }
         initial={{
           enabled: bot?.enabled ?? false,
           name: bot?.name ?? 'Assistant',

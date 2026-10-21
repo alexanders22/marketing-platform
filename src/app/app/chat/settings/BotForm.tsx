@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useState, useTransition, type ReactNode } from 'react'
 import { Loader2, Plus, Send, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import { CHAT_LANGUAGES } from '@/lib/chat-languages'
 import type { BotAction } from '@/lib/chatbot'
-import { connectTelegram, disconnectTelegram, saveBot, telegramLinks, testLookup, writeFromWebsite, type BotSettings } from '../actions'
+import { saveBot, testLookup, writeFromWebsite, type BotSettings } from '../actions'
+import { TelegramConnect } from './TelegramConnect'
 
 const input = 'w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400 disabled:bg-zinc-50'
 const card = 'rounded-2xl border border-zinc-200 bg-white p-5'
@@ -19,7 +20,22 @@ const TEMPLATES: BotAction[] = [
   { key: 'booking', description: 'A booking or appointment: date, time and status. Ask for the booking number and the phone used for it.', params: ['booking_number', 'phone'], verified: false },
 ]
 
-export function BotForm({ initial, canManage, website, telegram }: { initial: BotSettings; canManage: boolean; website: string | null; telegram: string | null }) {
+export function BotForm({
+  initial,
+  canManage,
+  website,
+  telegram,
+  operators,
+  hasOperators,
+}: {
+  initial: BotSettings
+  canManage: boolean
+  website: string | null
+  telegram: string | null
+  // The operators list (saves on its own) and whether there are any.
+  operators: ReactNode
+  hasOperators: boolean
+}) {
   const router = useRouter()
   const [s, setS] = useState<BotSettings>(initial)
   const [saving, startSave] = useTransition()
@@ -120,13 +136,23 @@ export function BotForm({ initial, canManage, website, telegram }: { initial: Bo
           <p className="mb-1.5 text-xs text-zinc-500">One per line. On these the assistant stops, says a teammate will answer, asks for a contact and alerts your team.</p>
           <textarea id="bot-flags" rows={4} disabled={off} className={input} placeholder={'refund\ncomplaint\nlegal'} value={s.redFlags} onChange={(e) => set('redFlags', e.target.value)} />
         </div>
-        <div>
-          <label htmlFor="bot-emails" className="text-sm font-medium">
-            E-mail alerts to
-          </label>
-          <input id="bot-emails" disabled={off} className={input} placeholder="Owners and admins of the account" value={s.notifyEmails} onChange={(e) => set('notifyEmails', e.target.value)} />
+        {operators}
+        <div className="space-y-4 border-t border-zinc-100 pt-4">
+          <div>
+            <label htmlFor="bot-emails" className="text-sm font-medium">
+              {hasOperators ? 'Also e-mail every hand-over to' : 'E-mail alerts to'}
+            </label>
+            <input
+              id="bot-emails"
+              disabled={off}
+              className={input}
+              placeholder={hasOperators ? 'e.g. the manager (optional)' : 'Owners and admins of the account'}
+              value={s.notifyEmails}
+              onChange={(e) => set('notifyEmails', e.target.value)}
+            />
+          </div>
+          <TelegramConnect name={telegram} canManage={canManage} label={hasOperators ? 'Shared Telegram (every hand-over)' : 'Telegram alerts'} />
         </div>
-        <TelegramConnect name={telegram} canManage={canManage} />
       </section>
 
       <section className={`${card} space-y-4`}>
@@ -273,62 +299,6 @@ function LookupTest({ url, action }: { url: string; action: BotAction }) {
           {out}
         </pre>
       )}
-    </div>
-  )
-}
-
-function TelegramConnect({ name, canManage }: { name: string | null; canManage: boolean }) {
-  const router = useRouter()
-  const [links, setLinks] = useState<{ person?: string; group?: string }>()
-  const [err, setErr] = useState<string>()
-  const [pending, start] = useTransition()
-  if (name)
-    return (
-      <p className="flex flex-wrap items-center gap-2 text-sm">
-        Telegram alerts go to <b>{name}</b>.
-        {canManage && (
-          <button type="button" className="text-xs text-zinc-500 underline" onClick={() => start(async () => (await disconnectTelegram(), router.refresh()))}>
-            Disconnect
-          </button>
-        )}
-      </p>
-    )
-  return (
-    <div className="space-y-2 text-sm">
-      <p className="font-medium">Telegram alerts</p>
-      {!links ? (
-        <button type="button" disabled={!canManage || pending} className={button} onClick={() => start(async () => {
-          const r = await telegramLinks()
-          if (r.error) setErr(r.error)
-          else setLinks(r)
-        })}>
-          Connect Telegram
-        </button>
-      ) : (
-        <ol className="list-decimal space-y-1 pl-5 text-zinc-600">
-          <li>
-            Open{' '}
-            <a href={links.person} target="_blank" rel="noreferrer" className="text-indigo-600">
-              the Loudpilot bot
-            </a>{' '}
-            and press Start — or{' '}
-            <a href={links.group} target="_blank" rel="noreferrer" className="text-indigo-600">
-              add it to your team’s group
-            </a>
-            .
-          </li>
-          <li>
-            <button type="button" disabled={pending} className={button} onClick={() => start(async () => {
-              const r = await connectTelegram()
-              if (r.error) setErr(r.error)
-              else router.refresh()
-            })}>
-              {pending && <Loader2 size={15} className="animate-spin" />} I pressed Start — check
-            </button>
-          </li>
-        </ol>
-      )}
-      {err && <p className="text-red-600">{err}</p>}
     </div>
   )
 }

@@ -14,17 +14,27 @@ export const metadata: Metadata = { title: 'Website chat — Loudpilot' }
 
 const FILTERS = [
   { id: 'all', label: 'All' },
+  { id: 'mine', label: 'Mine' },
   { id: 'HUMAN', label: 'Needs a person' },
   { id: 'BOT', label: 'Assistant' },
   { id: 'CLOSED', label: 'Closed' },
 ]
 
 export default async function ChatPage({ searchParams }: PageProps<'/app/chat'>) {
-  const { workspace } = await requireContext()
+  const { workspace, user } = await requireContext()
   const sp = await searchParams
   const filter = FILTERS.some((f) => f.id === sp.f) ? String(sp.f) : 'all'
   const selectedId = typeof sp.c === 'string' ? sp.c : undefined
-  const where: Prisma.ChatConversationWhereInput = { workspaceId: workspace.id, ...(filter !== 'all' ? { status: filter } : {}) }
+  const operators = await prisma.chatOperator.findMany({ where: { workspaceId: workspace.id }, orderBy: { createdAt: 'asc' }, include: { user: { select: { name: true, email: true } } } })
+  const me = operators.find((o) => o.userId === user.id)
+  const where: Prisma.ChatConversationWhereInput = {
+    workspaceId: workspace.id,
+    ...(filter === 'mine' ? { operatorId: me?.id ?? '-' } : filter !== 'all' ? { status: filter } : {}),
+  }
+  const opName = (id: string | null) => {
+    const o = operators.find((x) => x.id === id)
+    return o ? o.user.name || o.user.email : null
+  }
   const [conversations, selected, bot] = await Promise.all([
     prisma.chatConversation.findMany({ where, orderBy: { lastMessageAt: 'desc' }, take: 100 }),
     selectedId
@@ -99,6 +109,7 @@ export default async function ChatPage({ searchParams }: PageProps<'/app/chat'>)
                       </span>
                       <span className="mt-0.5 flex items-center gap-1.5">
                         <span className={`min-w-0 flex-1 truncate text-xs ${c.unread ? 'text-zinc-900' : 'text-zinc-500'}`}>{c.lastText}</span>
+                        {opName(c.operatorId) && <span className="max-w-[96px] shrink-0 truncate rounded bg-amber-50 px-1.5 text-[10px] text-amber-800">{opName(c.operatorId)}</span>}
                         {c.unread > 0 && <span className="rounded-full bg-indigo-600 px-1.5 py-px text-[11px] font-semibold text-white">{c.unread}</span>}
                       </span>
                     </span>
@@ -125,8 +136,10 @@ export default async function ChatPage({ searchParams }: PageProps<'/app/chat'>)
               pageUrl: selected.pageUrl,
               reason: selected.handoffReason,
               test: selected.test,
+              operatorId: selected.operatorId,
               came: selected.visitor?.visits.map((v) => ({ at: v.startedAt.toISOString(), label: visitLabel(v) })) ?? [],
             }}
+            operators={operators.map((o) => ({ id: o.id, name: o.user.name || o.user.email }))}
             messages={selected.messages.map((m) => ({
               id: m.id,
               role: m.role,

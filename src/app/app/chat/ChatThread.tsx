@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { Bot, Database, Loader2, RefreshCw, Send, ShieldCheck } from 'lucide-react'
 import { LocalTime } from '@/components/LocalTime'
-import { changeStatus, markChatRead, sendTeamReply } from './actions'
+import { changeStatus, markChatRead, reassignChat, sendTeamReply } from './actions'
 
 const TIME: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
 
@@ -35,10 +35,11 @@ type Conv = {
   pageUrl: string | null
   reason: string | null
   test: boolean
+  operatorId: string | null
   came: { at: string; label: string }[]
 }
 
-export function ChatThread({ conversation: c, messages }: { conversation: Conv; messages: Msg[] }) {
+export function ChatThread({ conversation: c, messages, operators }: { conversation: Conv; messages: Msg[]; operators: { id: string; name: string }[] }) {
   const router = useRouter()
   const [text, setText] = useState('')
   const [err, setErr] = useState<string>()
@@ -71,6 +72,22 @@ export function ChatThread({ conversation: c, messages }: { conversation: Conv; 
           <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${c.status === 'HUMAN' ? 'bg-amber-50 text-amber-800' : c.status === 'BOT' ? 'bg-indigo-50 text-indigo-700' : 'bg-zinc-100 text-zinc-600'}`}>
             {c.status === 'HUMAN' ? 'Your team answers' : c.status === 'BOT' ? 'Assistant answers' : 'Closed'}
           </span>
+          {operators.length > 0 && (
+            <select
+              aria-label="Operator"
+              value={c.operatorId ?? ''}
+              disabled={switching}
+              onChange={(e) => startSwitch(async () => (await reassignChat(c.id, e.target.value || null), router.refresh()))}
+              className="rounded-lg border border-zinc-200 px-2 py-1 text-xs"
+            >
+              <option value="">No operator</option>
+              {operators.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          )}
           {c.status !== 'BOT' && (
             <button disabled={switching} onClick={() => status('BOT')} className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium hover:bg-zinc-50">
               <Bot size={13} /> Back to the assistant
