@@ -25,7 +25,7 @@ test('three ways to add an image', async () => {
   await expect(page.getByRole('button', { name: /Generate with AI/ })).toBeVisible()
   await page.getByRole('button', { name: /Generate with AI/ }).click()
   await expect(page.getByLabel('Describe the image')).toBeVisible()
-  await expect(page.getByRole('button', { name: /Generate · 1 credit/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Generate · 4 credits/ })).toBeVisible()
 })
 
 test('design in Studio from an empty new post comes back into it', async () => {
@@ -76,6 +76,6 @@ test('AI image is added to the post and charged', async () => {
   await page.getByRole('radio', { name: 'My own description' }).check()
   await page.getByLabel('Describe the image').fill('Croissants on a wooden table, morning light')
   await page.getByRole('radiogroup', { name: 'Image style' }).getByRole('radio', { name: 'Cinematic' }).click()
-  await page.getByRole('button', { name: /Generate · 1 credit/ }).click()
+  await page.getByRole('button', { name: /Generate · 4 credits/ }).click()
   await expect(page.getByRole('button', { name: 'Edit image in Studio' })).toHaveCount(3, { timeout: 150_000 })
 })

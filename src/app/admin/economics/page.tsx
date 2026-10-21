@@ -1,6 +1,7 @@
 import { getPlans, getPricing } from '@/lib/credits'
 import { DEFAULT_ECONOMICS, type Economics } from '@/lib/economics'
 import { gelPerUsd } from '@/lib/fx'
+import { monremCurrency } from '@/lib/monrem'
 import { TRIAL_CREDITS } from '@/lib/plans'
 import { ACTION_KEYS } from '@/lib/pricing'
 import { prisma } from '@/lib/prisma'
@@ -27,20 +28,22 @@ export default async function AdminEconomics() {
     cost += (u._sum.units ?? 0) * pricing.actions[u.action as (typeof ACTION_KEYS)[number]].costUsd
   }
   const saved = (row?.value ?? {}) as Partial<Economics>
+  // Cards charged in lari bring the fixed lari price, worth its dollars today.
+  const gel = monremCurrency() === 'GEL'
   const initial: Economics = { ...DEFAULT_ECONOMICS, ...saved, usagePct: { ...DEFAULT_ECONOMICS.usagePct, ...saved.usagePct }, customers: { ...DEFAULT_ECONOMICS.customers, ...saved.customers } }
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-semibold">Economics</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Fixed costs of the month against what every plan and credit pack leaves after VAT, card fees, taxes, partners and AI. Prices come from Pricing; $1 = ₾{rate.toFixed(4)} (National Bank of Georgia).
+          Fixed costs of the month against what every plan and credit pack leaves after VAT, card fees, taxes, partners and AI. Prices come from Pricing{gel ? ' (the lari prices, as cards are charged in lari)' : ''}; $1 = ₾{rate.toFixed(4)} (National Bank of Georgia).
           {row && ` Saved ${fmtDateTime(row.updatedAt)}${row.updatedBy ? ` by ${row.updatedBy}` : ''}.`}
         </p>
       </div>
       <EconomicsEditor
         initial={initial}
-        plans={plans.map((p) => ({ id: p.id, name: p.name, monthly: p.monthly, credits: p.credits }))}
-        packs={pricing.packs}
+        plans={plans.map((p) => ({ id: p.id, name: p.name, monthly: gel ? p.monthlyGel / rate : p.monthly, credits: p.credits }))}
+        packs={gel ? pricing.packs.map((pk) => ({ ...pk, priceUsd: pk.priceGel / rate })) : pricing.packs}
         gelPerUsd={rate}
         mixCost={credits > 0 ? cost / credits : null}
         trialCredits={TRIAL_CREDITS}

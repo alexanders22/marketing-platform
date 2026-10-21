@@ -7,7 +7,7 @@ import { z } from 'zod'
 import type { CreditReason, MemberRole } from '@prisma/client'
 import { logAdmin, requireSuperAdmin } from '@/lib/admin'
 import { bookPayment } from '@/lib/billing'
-import { yearlyTotal } from '@/lib/plans'
+import { PLAN_IDS, yearlyTotal } from '@/lib/plans'
 import { vatParts } from '@/lib/tax'
 import { WORKSPACE_COOKIE } from '@/lib/context'
 import { forgetPricing, getPlans } from '@/lib/credits'
@@ -27,7 +27,7 @@ const AccountForm = z.object({
   email: z.email('Enter a valid email'),
   country: z.string().max(60),
   currency: z.string().regex(/^[A-Z]{3}$/, 'Currency is a 3-letter code like GEL'),
-  plan: z.enum(['NONE', 'STARTER', 'TEAM', 'AGENCY']),
+  plan: z.enum(['NONE', 'SOLO', 'STARTER', 'TEAM', 'AGENCY']),
   billingCycle: z.enum(['MONTHLY', 'YEARLY']),
   trialEndsAt: z.string(),
   alertEmails: z.boolean(),
@@ -322,18 +322,22 @@ export async function savePricing(input: Pricing): Promise<AdminState> {
   const plans = {} as Pricing['plans']
   for (const pl of VEO_PLANS) {
     const monthly = Number(input.plans?.[pl]?.monthly)
+    const monthlyGel = Number(input.plans?.[pl]?.monthlyGel)
     const credits = Number(input.plans?.[pl]?.credits)
     if (!Number.isFinite(monthly) || monthly <= 0 || monthly > 100_000) return { error: `Price of ${pl} must be above $0` }
+    if (!Number.isFinite(monthlyGel) || monthlyGel <= 0 || monthlyGel > 300_000) return { error: `Lari price of ${pl} must be above ₾0` }
     if (!Number.isInteger(credits) || credits <= 0 || credits > 10_000_000) return { error: `Credits of ${pl} must be a whole number above 0` }
-    plans[pl] = { monthly: Math.round(monthly * 100) / 100, credits }
+    plans[pl] = { monthly: Math.round(monthly * 100) / 100, monthlyGel: Math.round(monthlyGel * 100) / 100, credits }
   }
   const packs: Pricing['packs'] = []
   for (const pk of (input.packs ?? []).slice(0, 8)) {
     const credits = Number(pk?.credits)
     const priceUsd = Number(pk?.priceUsd)
+    const priceGel = Number(pk?.priceGel)
     if (!Number.isInteger(credits) || credits <= 0 || credits > 1_000_000) return { error: 'Each pack needs a whole number of credits' }
     if (!Number.isFinite(priceUsd) || priceUsd <= 0 || priceUsd > 100_000) return { error: 'Each pack needs a price above $0' }
-    packs.push({ credits, priceUsd: Math.round(priceUsd * 100) / 100 })
+    if (!Number.isFinite(priceGel) || priceGel <= 0 || priceGel > 300_000) return { error: 'Each pack needs a lari price above ₾0' }
+    packs.push({ credits, priceUsd: Math.round(priceUsd * 100) / 100, priceGel: Math.round(priceGel * 100) / 100 })
   }
   packs.sort((a, b) => a.credits - b.credits)
   const value: Pricing = { creditPriceUsd: price, actions, veoSecondsPerMonth, plans, packs }
@@ -395,7 +399,7 @@ export async function saveEconomics(input: Economics): Promise<AdminState> {
 export async function saveRecurringPlans(_: AdminState, f: FormData): Promise<AdminState> {
   const admin = await requireSuperAdmin()
   const refs: RecurringRefs = {}
-  for (const plan of ['STARTER', 'TEAM', 'AGENCY'] as const)
+  for (const plan of PLAN_IDS)
     for (const cycle of ['MONTHLY', 'YEARLY'] as const) {
       const v = text(f, `${plan}_${cycle}`).slice(0, 100)
       if (v) refs[`${plan}_${cycle}`] = v

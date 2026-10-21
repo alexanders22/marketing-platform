@@ -61,7 +61,7 @@ test('a character keeps its look in AI clips: Pro/Cinema, 8 s, photos sent with 
   await expect(quality.getByRole('radio', { name: /Pro/ })).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByRole('radiogroup', { name: 'Clip length' }).getByRole('radio', { name: '8s' })).toHaveAttribute('aria-checked', 'true')
   await page.getByLabel('Clip description').fill('[test] Nino opens the door of a bright apartment and smiles')
-  await page.getByRole('button', { name: 'Generate · 32 credits' }).click()
+  await page.getByRole('button', { name: 'Generate · 64 credits' }).click()
   await expect(page.getByText(/Generating the AI clip/)).toBeVisible()
   expect(sql(`select "characterId"||':'||quality||':'||seconds||':'||("imageId" is null) from "ClipJob" where "videoId"='${videoId}'`)).toBe(`${charId}:pro:8:true`)
 })

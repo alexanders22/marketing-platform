@@ -8,9 +8,10 @@ import { creditMoney } from '@/lib/money'
 import { creditValue, getPlans, getPricing } from '@/lib/credits'
 import { VAT } from '@/lib/tax'
 import { prisma } from '@/lib/prisma'
-import { monremEnabled } from '@/lib/monrem'
+import { monremCurrency, monremEnabled } from '@/lib/monrem'
 import { recurringOption, syncPayment } from '@/lib/payments'
 import { billingState, yearlyTotal } from '@/lib/plans'
+import { priceLabel } from '@/lib/pricing'
 import { BillingAddressLine } from './AddressDialog'
 import { BuyButton } from './BuyButton'
 import { EscapeFrame } from './PayFrame'
@@ -48,7 +49,10 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
   const [plans, pricing, value] = await Promise.all([getPlans(), getPricing(), creditValue()])
   const plan = plans.find((p) => p.id === account.plan)
   const worth = creditMoney(account.creditBalance, value)
-  const gel = (usd: number) => `₾${Math.round(usd * value.gelPerUsd).toLocaleString('en-US')}`
+  // Plan prices in what the card is charged in.
+  const cur = monremCurrency()
+  const monthly = plan && priceLabel({ usd: plan.monthly, gel: plan.monthlyGel }, cur)
+  const yearly = plan && priceLabel({ usd: yearlyTotal(plan.monthly), gel: yearlyTotal(plan.monthlyGel) }, cur)
   const trial = account.trialEndsAt && account.trialEndsAt > new Date()
   const active = billingState(account) === 'active'
   const renewing = await prisma.subscription.findFirst({ where: { accountId: account.id, status: 'ACTIVE' } })
@@ -77,7 +81,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
               disabled={cantPay}
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
             >
-              Renew 1 {account.billingCycle === 'YEARLY' ? `year · $${yearlyTotal(plan.monthly)}` : `month · $${plan.monthly}`}
+              Renew 1 {account.billingCycle === 'YEARLY' ? `year · ${yearly}` : `month · ${monthly}`}
             </BuyButton>
           </div>
         </section>
@@ -111,7 +115,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
               )}
             </div>
           ) : (
-            plan && <PlanPay plan={plan.id} monthly={`$${plan.monthly}`} yearly={`$${yearlyTotal(plan.monthly)}`} renew={renew} active={active} disabled={cantPay} />
+            plan && <PlanPay plan={plan.id} monthly={monthly!} yearly={yearly!} renew={renew} active={active} disabled={cantPay} />
           )}
           <Link href="/app/plan" className={`inline-block text-sm font-medium ${plan ? 'mt-3 text-indigo-600 hover:underline' : 'mt-4 rounded-lg bg-zinc-900 px-4 py-2 font-semibold text-white hover:bg-zinc-800'}`}>
             {plan ? 'Change plan' : 'Choose a plan'}
@@ -146,10 +150,10 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
                 {save >= 0.05 && <span className="absolute -top-2.5 right-3 rounded-full bg-emerald-500 px-2 py-0.5 text-[11px] font-bold text-white">Save {Math.round(save * 100)}%</span>}
                 <p className="text-lg font-semibold">{pk.credits.toLocaleString()} credits</p>
                 <p className="mt-1 text-2xl font-semibold" data-no-credit-hint>
-                  {gel(pk.priceUsd)} <span className="text-sm font-normal text-zinc-500">· ${pk.priceUsd.toLocaleString('en-US')}</span>
+                  ₾{pk.priceGel.toLocaleString('en-US')} <span className="text-sm font-normal text-zinc-500">· ${pk.priceUsd.toLocaleString('en-US')}</span>
                 </p>
                 <p className="text-xs text-zinc-500" data-no-credit-hint>
-                  {gel(pk.priceUsd / pk.credits * 100)} per 100 credits
+                  ₾{((pk.priceGel / pk.credits) * 100).toFixed(2)} per 100 credits
                 </p>
                 <BuyButton purchase={{ kind: 'PACK', credits: pk.credits }} disabled={cantPay} className="mt-3 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800">
                   Buy

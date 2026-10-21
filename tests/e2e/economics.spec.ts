@@ -22,37 +22,41 @@ test.afterAll(async () => {
 test('hovering a credit amount shows its value in lari and dollars', async () => {
   await page.goto('/app/credits')
   await page.getByRole('link', { name: /50 credits left/ }).last().hover()
-  await expect(page.getByRole('tooltip')).toHaveText(/^50 credits ≈ ₾[\d.]+ · \$5\.00$/)
+  await expect(page.getByRole('tooltip')).toHaveText(/^50 credits ≈ ₾[\d.]+ · \$4\.00$/)
   // A button label deep in the app too.
   await page.goto('/app/strategy/new')
   await page.getByRole('button', { name: /Build my plan · 5 credits/ }).hover()
-  await expect(page.getByRole('tooltip')).toHaveText(/^5 credits ≈ ₾\d+\.\d\d · \$0\.50$/)
+  await expect(page.getByRole('tooltip')).toHaveText(/^5 credits ≈ ₾\d+\.\d\d · \$0\.40$/)
   await page.mouse.move(5, 500)
   await expect(page.getByRole('tooltip')).toHaveCount(0)
 })
 
 test('credits page: what the balance is worth, and packs to buy', async () => {
   await page.goto('/app/credits')
-  await expect(page.getByText(/^worth ≈ ₾[\d.]+ · \$5\.00$/)).toBeVisible()
+  await expect(page.getByText(/^worth ≈ ₾[\d.]+ · \$4\.00$/)).toBeVisible()
   const packs = page.getByRole('list', { name: 'Credit packs' }).getByRole('listitem')
   await expect(packs).toHaveCount(3)
   await expect(packs.nth(0)).toContainText('100 credits')
-  await expect(packs.nth(1)).toContainText('Save 10%')
-  await expect(packs.nth(2)).toContainText('Save 20%')
+  await expect(packs.nth(0)).toContainText('₾22 · $8')
+  await expect(packs.nth(1)).toContainText('Save 13%')
+  await expect(packs.nth(2)).toContainText('Save 25%')
+  await expect(packs.nth(2)).toContainText('₾16.25 per 100 credits')
   await expect(packs.nth(0).getByRole('button', { name: 'Buy' })).toBeDisabled()
 })
 
-test('plan prices show the lari equivalent (picker and landing)', async () => {
+test('plan prices show their fixed lari price (picker and landing)', async () => {
   await page.goto('/app/plan')
-  await expect(page.getByText(/^\$29 \/ month≈ ₾\d+$/)).toBeVisible()
+  await expect(page.getByText(/^\$15 \/ month₾39$/)).toBeVisible()
+  await expect(page.getByText(/^\$29 \/ month₾79$/)).toBeVisible()
   await page.goto('/')
-  await expect(page.locator('#pricing').getByText(/^≈ ₾\d+$/)).toHaveCount(3)
+  await expect(page.locator('#pricing').getByText(/^₾\d+$/)).toHaveText(['₾39', '₾79', '₾219', '₾549'])
 })
 
 test('admin: plans and packs are editable; economics shows margins and break-even', async () => {
   await page.goto('/admin/pricing')
   await expect(page.getByLabel('Price of Team')).toHaveValue('79')
-  await expect(page.getByLabel('Credits of Team')).toHaveValue('1500')
+  await expect(page.getByLabel('Team lari price')).toHaveValue('219')
+  await expect(page.getByLabel('Credits of Team')).toHaveValue('1200')
   await expect(page.getByLabel('Credits in pack 2')).toHaveValue('500')
 
   // Start from the defaults (an earlier run may have saved its numbers).
@@ -67,11 +71,11 @@ test('admin: plans and packs are editable; economics shows margins and break-eve
   await page.getByLabel(/^Free trials a month/).fill('0')
   await page.getByLabel('Customers paying yearly').fill('0')
   await page.getByLabel('AI cost of one credit').fill('0.01')
-  // Team: 79 → 66.95 without VAT − 1.98 card fee − 0.67 tax − 7.50 AI (1,500 × 50%) = 56.80.
+  // Team: 79 → 66.95 without VAT − 1.98 card fee − 0.67 tax − 6.00 AI (1,200 × 50%) = 58.30.
   const team = page.getByRole('row').filter({ hasText: /^Team/ })
-  await expect(team).toContainText('$56.80')
-  await expect(team).toContainText('85%')
-  // 1,000 ÷ 56.80 → 18 Team customers alone.
+  await expect(team).toContainText('$58.30')
+  await expect(team).toContainText('87%')
+  // 1,000 ÷ 58.30 → 18 Team customers alone.
   await expect(page.getByLabel('Break-even')).toContainText('Only Team: 18')
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByRole('status')).toHaveText('Saved')

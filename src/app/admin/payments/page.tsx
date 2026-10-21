@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import type { CreditReason } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { monremEnabled, type MonremPlan } from '@/lib/monrem'
+import { getPlans } from '@/lib/credits'
+import { monremCurrency, monremEnabled, type MonremPlan } from '@/lib/monrem'
 import { monremPlans, planAmount, recurringOption, recurringRefs } from '@/lib/payments'
-import { PLANS } from '@/lib/plans'
+import { yearlyTotal } from '@/lib/plans'
+import { priceLabel } from '@/lib/pricing'
 import { saveRecurringPlans } from '../actions'
 import { ActionForm } from '../ui'
 import { VAT } from '@/lib/tax'
@@ -45,7 +47,16 @@ export default async function AdminPayments({ searchParams }: PageProps<'/admin/
         prisma.subscription.findMany({ orderBy: { createdAt: 'desc' }, take: 30, include: { account: { select: { id: true, name: true } } } }),
       ])
     : [{}, { list: [] as MonremPlan[], error: null }, []]
-  const slots = PLANS.flatMap((p) => (['MONTHLY', 'YEARLY'] as const).map((cycle) => ({ plan: p, cycle, key: `${p.id}_${cycle}` as const })))
+  // Each slot with the price its Monrem plan must have (Admin → Pricing).
+  const cur = monremCurrency()
+  const slots = (await getPlans()).flatMap((p) =>
+    (['MONTHLY', 'YEARLY'] as const).map((cycle) => ({
+      plan: p,
+      cycle,
+      key: `${p.id}_${cycle}` as const,
+      price: priceLabel(cycle === 'YEARLY' ? { usd: yearlyTotal(p.monthly), gel: yearlyTotal(p.monthlyGel) } : { usd: p.monthly, gel: p.monthlyGel }, cur),
+    })),
+  )
   const ready = enabled ? await Promise.all(slots.map((x) => recurringOption(x.plan.id, x.cycle))) : []
   // Card payments approved in the last 30 days, per currency (amounts in cents, VAT included).
   const cardTotals = cards
@@ -131,7 +142,7 @@ export default async function AdminPayments({ searchParams }: PageProps<'/admin/
             <div className="grid gap-3 sm:grid-cols-2">
               {slots.map((x, i) => (
                 <label key={x.key} className="block text-sm font-medium text-zinc-700">
-                  {x.plan.name} · {x.cycle === 'YEARLY' ? 'yearly' : 'monthly'}{' '}
+                  {x.plan.name} · {x.cycle === 'YEARLY' ? 'yearly' : 'monthly'} · {x.price}{' '}
                   <span className={`text-xs font-normal ${ready[i] ? 'text-emerald-600' : 'text-zinc-400'}`}>{ready[i] ? '· renews automatically' : refs[x.key] ? '· price differs or plan inactive' : '· pay once only'}</span>
                   <select name={x.key} defaultValue={refs[x.key] ?? ''} aria-label={`${x.plan.name} ${x.cycle.toLowerCase()} recurring plan`} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm">
                     <option value="">— none —</option>

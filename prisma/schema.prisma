@@ -109,6 +109,7 @@ model Account {
 
 enum Plan {
   NONE
+  SOLO
   STARTER
   TEAM
   AGENCY

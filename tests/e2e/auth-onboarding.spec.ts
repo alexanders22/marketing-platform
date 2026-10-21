@@ -81,6 +81,7 @@ test.describe('onboarding', () => {
 
     // Monthly / yearly prices.
     for (const [m, y] of [
+      ['$15', '$150'],
       ['$29', '$290'],
       ['$79', '$790'],
       ['$199', '$1,990'],
@@ -89,10 +90,10 @@ test.describe('onboarding', () => {
       void y
     }
     await page.getByRole('button', { name: 'Yearly (2 months free)' }).click()
-    for (const y of ['$290', '$790', '$1,990']) await expect(page.getByText(new RegExp(`^\\${y} / year`))).toBeVisible()
+    for (const y of ['$150', '$290', '$790', '$1,990']) await expect(page.getByText(new RegExp(`^\\${y} / year`))).toBeVisible()
 
     // Pick Team, yearly.
-    await page.getByRole('button', { name: /Start 7-day free trial/ }).nth(1).click()
+    await page.getByRole('button', { name: /Start 7-day free trial/ }).nth(2).click()
     // The app opens on the strategy interview.
     await page.waitForURL(/\/app\/strategy\/interview\?welcome=1/)
     await expect(page.getByRole('heading', { name: 'Let’s plan your first results' })).toBeVisible()
@@ -119,7 +120,7 @@ test.describe('onboarding', () => {
     await expect(page.getByText('Agency', { exact: true })).toBeVisible()
     await expect(page.getByText(/Free trial until \d{2}\/\d{2}\/\d{4}/)).toBeVisible()
     await expect(page.locator('p.text-2xl', { hasText: /^50$/ })).toBeVisible()
-    await expect(page.getByText('5,000 credits per month on Agency')).toBeVisible()
+    await expect(page.getByText('3,300 credits per month on Agency')).toBeVisible()
     const row = page.locator('li', { hasText: 'Free trial' })
     await expect(row).toContainText('Bonus')
     await expect(row).toContainText('+50')

@@ -2,58 +2,22 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, Check, Clapperboard, Code2, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Sparkles, UserRound, Users } from "lucide-react";
-import { BUNDLES, type Bundle } from "@/lib/plans";
+import { Building2, Check, Clapperboard, Code2, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Sparkles, Sprout, UserRound, Users } from "lucide-react";
+import { BUNDLES, PLANS as PLAN_LIMITS, type PickerPrices } from "@/lib/plans";
 import { DEFAULT_PRICING } from "@/lib/pricing";
 import { COPY, type Lang } from "./i18n";
 import { SIGNUP } from "./site";
 
-const PLANS = [
-  {
-    name: "Starter",
-    id: "STARTER" as const,
-    icon: Rocket,
-    tint: "bg-emerald-400/15 text-emerald-300",
-    veo: DEFAULT_PRICING.veoSecondsPerMonth.STARTER,
-    monthly: 29,
-    users: 1,
-    companies: 2,
-    profiles: 5,
-    credits: "300",
-  },
-  {
-    name: "Team",
-    id: "TEAM" as const,
-    icon: Users,
-    tint: "bg-sky-400/15 text-sky-300",
-    veo: DEFAULT_PRICING.veoSecondsPerMonth.TEAM,
-    monthly: 79,
-    users: 5,
-    companies: 10,
-    profiles: 20,
-    credits: "1,500",
-    popular: true,
-  },
-  {
-    name: "Agency",
-    id: "AGENCY" as const,
-    icon: Building2,
-    tint: "bg-violet-400/15 text-violet-300",
-    veo: DEFAULT_PRICING.veoSecondsPerMonth.AGENCY,
-    monthly: 199,
-    users: 20,
-    companies: 50,
-    profiles: 100,
-    credits: "5,000",
-    api: true,
-  },
-];
+const LOOK = {
+  SOLO: { icon: Sprout, tint: "bg-amber-400/15 text-amber-300" },
+  STARTER: { icon: Rocket, tint: "bg-emerald-400/15 text-emerald-300" },
+  TEAM: { icon: Users, tint: "bg-sky-400/15 text-sky-300" },
+  AGENCY: { icon: Building2, tint: "bg-violet-400/15 text-violet-300" },
+};
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 
-type PlanPrice = { id: "STARTER" | "TEAM" | "AGENCY"; monthly: number; credits: number; bundle: Bundle };
-
-export function Pricing({ lang = "en", plans, gelPerUsd }: { lang?: Lang; plans: PlanPrice[]; gelPerUsd: number }) {
+export function Pricing({ lang = "en", plans }: { lang?: Lang; plans: PickerPrices["plans"] }) {
   const [yearly, setYearly] = useState(false);
   const t = COPY[lang].pricing;
 
@@ -77,12 +41,22 @@ export function Pricing({ lang = "en", plans, gelPerUsd }: { lang?: Lang; plans:
         ))}
       </div>
 
-      <div className="grid gap-5 md:grid-cols-3">
-        {PLANS.map((base) => {
-          // Price and credits as set in Admin → Pricing.
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+        {PLAN_LIMITS.map((base) => {
+          // Prices, credits and clip seconds as set in Admin → Pricing.
           const live = plans.find((x) => x.id === base.id);
-          const p = { ...base, monthly: live?.monthly ?? base.monthly, credits: fmt(live?.credits ?? Number(base.credits.replace(/,/g, ""))), bundle: live?.bundle ?? BUNDLES[base.id] };
+          const p = {
+            ...base,
+            ...LOOK[base.id],
+            monthly: live?.monthly ?? base.monthly,
+            monthlyGel: live?.monthlyGel ?? base.monthlyGel,
+            credits: fmt(live?.credits ?? base.credits),
+            bundle: live?.bundle ?? BUNDLES[base.id],
+            veo: live?.veo ?? DEFAULT_PRICING.veoSecondsPerMonth[base.id],
+            api: base.id === "AGENCY",
+          };
           const price = yearly ? Math.round((p.monthly * 10) / 12) : p.monthly;
+          const gel = yearly ? Math.round((p.monthlyGel * 10) / 12) : p.monthlyGel;
           return (
             <div
               key={p.name}
@@ -105,10 +79,10 @@ export function Pricing({ lang = "en", plans, gelPerUsd }: { lang?: Lang; plans:
               <div className="mt-6 flex items-baseline gap-1">
                 <span className="text-4xl font-semibold tracking-tight">${price}</span>
                 <span className="text-sm text-zinc-400">{t.perMonth}</span>
-                <span className="ml-auto text-sm text-zinc-500" title="National Bank of Georgia rate">≈ ₾{Math.round(price * gelPerUsd)}</span>
+                <span className="ml-auto text-sm text-zinc-400">₾{gel}</span>
               </div>
               <p className="mt-1 text-xs text-zinc-500">
-                {yearly ? t.billedYearly.replace("{total}", (p.monthly * 10).toLocaleString("en-US")) : t.billedMonthly}
+                {yearly ? t.billedYearly.replace("{total}", fmt(p.monthly * 10)).replace("{gel}", fmt(p.monthlyGel * 10)) : t.billedMonthly}
               </p>
               <Link
                 href={SIGNUP}
@@ -125,14 +99,14 @@ export function Pricing({ lang = "en", plans, gelPerUsd }: { lang?: Lang; plans:
                 <Row icon={UserRound} label={t.users} value={p.users} />
                 <Row icon={Building2} label={t.companies} value={p.companies} />
                 <Row icon={Sparkles} label={t.profiles} value={p.profiles} />
-                <Row icon={Code2} label={t.api} value={"api" in p && p.api ? "✓" : "—"} />
+                <Row icon={Code2} label={t.api} value={p.api ? "✓" : "—"} />
               </ul>
               <p className="mt-6 text-xs font-medium uppercase tracking-wider text-zinc-500">{t.monthHead}</p>
               <ul className="mt-3 space-y-3 text-sm">
                 <Row icon={PenLine} label={t.posts} value={fmt(p.bundle.posts)} />
                 <Row icon={ImageIcon} label={t.images} value={fmt(p.bundle.images)} />
                 <Row icon={Film} label={t.videos} value={fmt(p.bundle.videos)} />
-                <Row icon={Clapperboard} label={t.veo} value={`${p.veo}s`} />
+                <Row icon={Clapperboard} label={t.veo} value={p.veo ? `${p.veo}s` : "—"} />
                 <Row icon={FileText} label={t.articles} value={fmt(p.bundle.articles)} />
                 <Row icon={Compass} label={t.strategies} value={fmt(p.bundle.strategies)} />
               </ul>
@@ -235,12 +209,12 @@ function Rivals({ t }: { t: (typeof COPY)["en"]["pricing"]["rivals"] }) {
 
 function Row({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: string | number }) {
   return (
-    <li className="flex items-center justify-between border-b border-white/5 pb-3 last:border-0">
+    <li className="flex items-center justify-between gap-3 border-b border-white/5 pb-3 last:border-0">
       <span className="inline-flex min-w-0 items-center gap-2 text-zinc-400">
         <Icon size={15} />
         {label}
       </span>
-      <span className="font-medium">{value}</span>
+      <span className="shrink-0 font-medium">{value}</span>
     </li>
   );
 }

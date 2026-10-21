@@ -280,7 +280,7 @@ export const en = {
   agency: {
     eyebrow: "The real comparison",
     title: "The output of a marketing agency — for the price of a lunch a week.",
-    sub: "Agencies charge thousands a month for posts, videos and reports. Loudpilot does the same work every day, from $29.",
+    sub: "Agencies charge thousands a month for posts, videos and reports. Loudpilot does the same work every day, from $15.",
     cta: "See plans & pricing",
   },
   pricing: {
@@ -291,7 +291,7 @@ export const en = {
     yearly: "Yearly (2 months free)",
     popular: "Most popular",
     perMonth: "/ month",
-    billedYearly: "Billed yearly — ${total}",
+    billedYearly: "Billed yearly — ${total} · ₾{gel}",
     billedMonthly: "Billed monthly",
     startTrial: "Start free trial",
     included: "What's included",
@@ -312,7 +312,7 @@ export const en = {
     moreTitle: "Need more than Agency?",
     moreBody: "Custom limits, white-label and revenue share for platforms that resell Loudpilot to their own customers.",
     talk: "Let's talk",
-    vat: "All prices in USD and include 18% VAT.",
+    vat: "Prices in US dollars and Georgian lari, 18% VAT included.",
     rivals: {
       title: "Same team, compared",
       sub: "5 people and 20 social profiles, per month.",
@@ -322,7 +322,7 @@ export const en = {
       incl: "incl. VAT",
       ours: "In Loudpilot Team, at this price",
       oursItems: [
-        "1,500 AI credits: posts, images, videos, strategy plans",
+        "1,200 AI credits: posts, images, videos, strategy plans",
         "Meta ads results and boosting posts",
         "Google Analytics and Search Console next to your ads",
         "SEO and AI search checks",
@@ -336,6 +336,7 @@ export const en = {
       },
     },
     blurbs: {
+      Solo: "For a small shop or a freelancer posting for one brand.",
       Starter: "For founders and small brands running their own marketing.",
       Team: "For marketing teams handling a few brands and ad accounts.",
       Agency: "For agencies and partners serving many clients at once.",

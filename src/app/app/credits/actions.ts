@@ -11,7 +11,7 @@ import { prisma } from '@/lib/prisma'
 
 const Input = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('PACK'), credits: z.number().int().positive() }),
-  z.object({ kind: z.literal('PLAN'), plan: z.enum(['STARTER', 'TEAM', 'AGENCY']), cycle: z.enum(['MONTHLY', 'YEARLY']), autoRenew: z.boolean().optional() }),
+  z.object({ kind: z.literal('PLAN'), plan: z.enum(['SOLO', 'STARTER', 'TEAM', 'AGENCY']), cycle: z.enum(['MONTHLY', 'YEARLY']), autoRenew: z.boolean().optional() }),
 ])
 
 // Opens Monrem's payment page for a credit pack or a plan period. Monrem needs

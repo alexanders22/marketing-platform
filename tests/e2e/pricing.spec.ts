@@ -38,13 +38,16 @@ test('the balance is in the header, amber when low, red at zero', async () => {
 test('admin pricing: margins per plan, validation, saved prices reach the app', async () => {
   await page.goto('/admin/pricing')
   await expect(page.getByRole('heading', { name: 'Pricing & unit economics' })).toBeVisible()
-  // Starter: $29 incl. VAT → $24.58 net / 300 credits.
-  await expect(page.getByText(/\$29 − 18% VAT = \$24\.58 ÷ 300 = \$0\.082/)).toBeVisible()
+  // Starter: $29 incl. VAT → $24.58 net / 400 credits.
+  await expect(page.getByText(/\$29 − 18% VAT = \$24\.58 ÷ 400 = \$0\.061/)).toBeVisible()
   const cinema = page.getByLabel('Credits for AI clip · Cinema (Veo 3.1)')
-  await expect(cinema).toHaveValue('5')
-  // 5 credits × $0.034 net (Agency) − $0.40 cost → a loss, shown red.
+  await expect(cinema).toHaveValue('20')
+  // 5 credits × $0.051 net (Agency) − $0.40 cost → a loss, shown red.
   const row = page.locator('tr', { hasText: 'AI clip · Cinema' })
-  await expect(row.locator('td').nth(6).locator('span').first()).toHaveClass(/text-red-600/)
+  const agency = row.locator('td').nth(7).locator('span').first()
+  await expect(agency).not.toHaveClass(/text-red-600/)
+  await cinema.fill('5')
+  await expect(agency).toHaveClass(/text-red-600/)
 
   // Negative numbers can't be entered.
   await page.getByLabel('Cost of AI post text').fill('-1')
@@ -52,7 +55,7 @@ test('admin pricing: margins per plan, validation, saved prices reach the app', 
   await page.getByLabel('Cost of AI post text').fill('0.002')
 
   await cinema.fill('12')
-  await expect(row.locator('td').nth(6).locator('span').first()).not.toHaveClass(/text-red-600/)
+  await expect(agency).not.toHaveClass(/text-red-600/)
   await page.getByRole('button', { name: 'Save prices' }).click()
   await expect(page.getByText('Saved — new prices apply to the next charge')).toBeVisible()
   expect(sql(`select value->'actions'->'clipCinema'->>'credits' from "Setting" where key='pricing'`)).toBe('12')
