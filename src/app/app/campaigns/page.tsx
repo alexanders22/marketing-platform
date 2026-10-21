@@ -5,6 +5,7 @@ import { EmptyState, PageHeader } from '@/components/EmptyState'
 import { LocalTime } from '@/components/LocalTime'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
+import { ShowMore } from '@/components/ShowMore'
 
 export const metadata: Metadata = { title: 'Campaigns — Loudpilot' }
 
@@ -43,32 +44,34 @@ export default async function CampaignsPage() {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {campaigns.map((c) => {
-            const live = c.startsOn <= now && c.endsOn >= now
-            const done = c.endsOn < now
-            return (
-              <Link key={c.id} href={`/app/campaigns/${c.id}`} className="rounded-xl border border-zinc-200 p-5 transition hover:border-zinc-300 hover:shadow-sm">
-                <div className="flex items-center gap-2.5">
-                  <span className={`grid h-9 w-9 place-items-center rounded-lg ${c.kind === 'BLOG' ? 'bg-orange-50 text-orange-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                    {c.kind === 'BLOG' ? <FileText size={17} /> : <Target size={17} />}
-                  </span>
-                  <span className="text-xs font-medium text-zinc-500">{c.kind === 'BLOG' ? 'Blog series' : 'Social campaign'}</span>
-                  <span
-                    className={`ml-auto rounded-full px-2 py-0.5 text-xs font-medium ${
-                      live ? 'bg-emerald-50 text-emerald-700' : done ? 'bg-zinc-100 text-zinc-500' : 'bg-sky-50 text-sky-700'
-                    }`}
-                  >
-                    {live ? 'Running' : done ? 'Finished' : 'Upcoming'}
-                  </span>
-                </div>
-                <h2 className="mt-4 font-semibold">{c.name}</h2>
-                <p className="mt-1 line-clamp-2 text-sm text-zinc-500">{c.brief}</p>
-                <p className="mt-4 inline-flex items-center gap-1.5 text-sm text-zinc-600">
-                  <CalendarRange size={15} /> {fmt(c.startsOn)} – {fmt(c.endsOn)} · {c._count.posts} {c.kind === 'BLOG' ? 'articles' : 'posts'}
-                </p>
-              </Link>
-            )
-          })}
+          <ShowMore>
+            {campaigns.map((c) => {
+              const live = c.startsOn <= now && c.endsOn >= now
+              const done = c.endsOn < now
+              return (
+                <Link key={c.id} href={`/app/campaigns/${c.id}`} className="rounded-xl border border-zinc-200 p-5 transition hover:border-zinc-300 hover:shadow-sm">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`grid h-9 w-9 place-items-center rounded-lg ${c.kind === 'BLOG' ? 'bg-orange-50 text-orange-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                      {c.kind === 'BLOG' ? <FileText size={17} /> : <Target size={17} />}
+                    </span>
+                    <span className="text-xs font-medium text-zinc-500">{c.kind === 'BLOG' ? 'Blog series' : 'Social campaign'}</span>
+                    <span
+                      className={`ml-auto rounded-full px-2 py-0.5 text-xs font-medium ${
+                        live ? 'bg-emerald-50 text-emerald-700' : done ? 'bg-zinc-100 text-zinc-500' : 'bg-sky-50 text-sky-700'
+                      }`}
+                    >
+                      {live ? 'Running' : done ? 'Finished' : 'Upcoming'}
+                    </span>
+                  </div>
+                  <h2 className="mt-4 font-semibold">{c.name}</h2>
+                  <p className="mt-1 line-clamp-2 text-sm text-zinc-500">{c.brief}</p>
+                  <p className="mt-4 inline-flex items-center gap-1.5 text-sm text-zinc-600">
+                    <CalendarRange size={15} /> {fmt(c.startsOn)} – {fmt(c.endsOn)} · {c._count.posts} {c.kind === 'BLOG' ? 'articles' : 'posts'}
+                  </p>
+                </Link>
+              )
+            })}
+          </ShowMore>
         </div>
       )}
     </>

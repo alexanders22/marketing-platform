@@ -16,6 +16,7 @@ import { BillingAddressLine } from './AddressDialog'
 import { BuyButton } from './BuyButton'
 import { EscapeFrame } from './PayFrame'
 import { CancelRenewal, PlanPay } from './PlanPay'
+import { ShowMore } from '@/components/ShowMore'
 
 export const metadata: Metadata = { title: 'Plan & credits — Loudpilot' }
 
@@ -44,7 +45,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
   const entries = await prisma.creditEntry.findMany({
     where: { accountId: account.id },
     orderBy: { createdAt: 'desc' },
-    take: 100,
+    take: 500,
   })
   const [plans, pricing, value] = await Promise.all([getPlans(), getPricing(), creditValue()])
   const plan = plans.find((p) => p.id === account.plan)
@@ -178,21 +179,23 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
           <p className="px-5 py-10 text-center text-sm text-zinc-500">No credit activity yet.</p>
         ) : (
           <ul className="divide-y divide-zinc-100">
-            {entries.map((e) => (
-              <li key={e.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
-                <div>
-                  <p className="font-medium">{REASON[e.reason] ?? e.reason}</p>
-                  {e.note && <p className="text-xs text-zinc-500">{e.note}</p>}
-                </div>
-                <div className="text-right">
-                  <p className={e.amount >= 0 ? 'font-medium text-emerald-600' : 'text-zinc-800'}>
-                    {e.amount >= 0 ? '+' : ''}
-                    {e.amount.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-zinc-500">{e.createdAt.toLocaleDateString('en-GB')}</p>
-                </div>
-              </li>
-            ))}
+            <ShowMore as="li">
+              {entries.map((e) => (
+                <li key={e.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
+                  <div>
+                    <p className="font-medium">{REASON[e.reason] ?? e.reason}</p>
+                    {e.note && <p className="text-xs text-zinc-500">{e.note}</p>}
+                  </div>
+                  <div className="text-right">
+                    <p className={e.amount >= 0 ? 'font-medium text-emerald-600' : 'text-zinc-800'}>
+                      {e.amount >= 0 ? '+' : ''}
+                      {e.amount.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-zinc-500">{e.createdAt.toLocaleDateString('en-GB')}</p>
+                  </div>
+                </li>
+              ))}
+            </ShowMore>
           </ul>
         )}
       </section>

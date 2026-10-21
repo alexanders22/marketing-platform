@@ -10,6 +10,7 @@ import { ensureSite } from '@/lib/tag'
 import { liveEvents, tagReport } from '@/lib/tag-report'
 import type { TrackingReport } from '@/lib/tracking'
 import { CheckInstall, LiveRefresh, SecretBox, TagSettingsForm } from './TagControls'
+import { ShowMore } from '@/components/ShowMore'
 
 export const metadata: Metadata = { title: 'Loudpilot Tag — Loudpilot' }
 
@@ -27,7 +28,7 @@ export default async function TagPage({ searchParams }: PageProps<'/app/website/
   const site = await ensureSite(workspace.id)
   const [report, live, audit] = await Promise.all([
     tagReport(site.id, workspace.id, days),
-    liveEvents(site.id),
+    liveEvents(site.id, 100),
     prisma.websiteAudit.findFirst({ where: { workspaceId: workspace.id, kind: 'TRACKING' }, orderBy: { createdAt: 'desc' } }),
   ])
   const tr = audit?.result as TrackingReport | undefined
@@ -157,27 +158,29 @@ export default async function TagPage({ searchParams }: PageProps<'/app/website/
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {report.sources.map((r) => {
-                  const results = r.leads + r.purchases
-                  return (
-                    <tr key={r.key}>
-                      <td className="p-2.5">
-                        <span className="font-medium">
-                          {r.source} / {r.medium}
-                        </span>
-                        {r.paid && <span className="ml-1.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700">ad</span>}
-                        {(r.adCampaign || r.campaign) && <span className="block text-xs text-zinc-500">{r.adCampaign ?? r.campaign}</span>}
-                      </td>
-                      <td className="p-2.5 text-right tabular-nums">{n(r.visits)}</td>
-                      <td className="p-2.5 text-right tabular-nums">{n(r.leads)}</td>
-                      <td className="p-2.5 text-right tabular-nums">{n(r.purchases)}</td>
-                      <td className="p-2.5 text-right tabular-nums">{r.revenue ? money(r.revenue, cur) : '—'}</td>
-                      <td className="p-2.5 text-right tabular-nums">{r.spend != null ? money(r.spend, r.currency) : '—'}</td>
-                      <td className="p-2.5 text-right tabular-nums">{r.spend != null && results ? money(r.spend / results, r.currency) : '—'}</td>
-                      <td className="p-2.5 text-right tabular-nums">{r.spend && r.revenue ? `${(r.revenue / r.spend).toFixed(1)}×` : '—'}</td>
-                    </tr>
-                  )
-                })}
+                <ShowMore as="tr" colSpan={8}>
+                  {report.sources.map((r) => {
+                    const results = r.leads + r.purchases
+                    return (
+                      <tr key={r.key}>
+                        <td className="p-2.5">
+                          <span className="font-medium">
+                            {r.source} / {r.medium}
+                          </span>
+                          {r.paid && <span className="ml-1.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700">ad</span>}
+                          {(r.adCampaign || r.campaign) && <span className="block text-xs text-zinc-500">{r.adCampaign ?? r.campaign}</span>}
+                        </td>
+                        <td className="p-2.5 text-right tabular-nums">{n(r.visits)}</td>
+                        <td className="p-2.5 text-right tabular-nums">{n(r.leads)}</td>
+                        <td className="p-2.5 text-right tabular-nums">{n(r.purchases)}</td>
+                        <td className="p-2.5 text-right tabular-nums">{r.revenue ? money(r.revenue, cur) : '—'}</td>
+                        <td className="p-2.5 text-right tabular-nums">{r.spend != null ? money(r.spend, r.currency) : '—'}</td>
+                        <td className="p-2.5 text-right tabular-nums">{r.spend != null && results ? money(r.spend / results, r.currency) : '—'}</td>
+                        <td className="p-2.5 text-right tabular-nums">{r.spend && r.revenue ? `${(r.revenue / r.spend).toFixed(1)}×` : '—'}</td>
+                      </tr>
+                    )
+                  })}
+                </ShowMore>
               </tbody>
             </table>
           </div>
@@ -196,32 +199,34 @@ export default async function TagPage({ searchParams }: PageProps<'/app/website/
           <p className="mt-2 text-sm text-zinc-500">When someone becomes a lead or buys, their path shows up here: which ad they came from, the pages they read and what they did.</p>
         ) : (
           <ul className="mt-3 divide-y divide-zinc-100" aria-label="Journeys">
-            {report.journeys.map((j) => (
-              <li key={j.visitorId} className="py-2">
-                <details>
-                  <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
-                    <span className="font-medium">{j.who}</span>
-                    {j.converted.map((c) => (
-                      <span key={c} className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
-                        {c}
-                      </span>
-                    ))}
-                    {j.revenue > 0 && <span className="text-xs text-zinc-500">{money(j.revenue, cur)}</span>}
-                  </summary>
-                  <ol className="mt-2 ml-1 space-y-1.5 border-l border-zinc-200 pl-4 text-sm">
-                    {j.steps.map((s, i) => (
-                      <li key={i} className={s.kind === 'visit' ? 'pt-1 font-medium' : s.kind === 'event' ? 'text-emerald-700' : 'text-zinc-600'}>
-                        <span className="mr-2 text-xs text-zinc-400 tabular-nums">
-                          <LocalTime iso={s.at} options={SHORT} />
+            <ShowMore as="li">
+              {report.journeys.map((j) => (
+                <li key={j.visitorId} className="py-2">
+                  <details>
+                    <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
+                      <span className="font-medium">{j.who}</span>
+                      {j.converted.map((c) => (
+                        <span key={c} className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                          {c}
                         </span>
-                        {s.kind === 'visit' ? `Came from ${s.text}` : s.text}
-                        {s.detail && <span className="ml-1.5 text-xs text-zinc-400">{s.detail}</span>}
-                      </li>
-                    ))}
-                  </ol>
-                </details>
-              </li>
-            ))}
+                      ))}
+                      {j.revenue > 0 && <span className="text-xs text-zinc-500">{money(j.revenue, cur)}</span>}
+                    </summary>
+                    <ol className="mt-2 ml-1 space-y-1.5 border-l border-zinc-200 pl-4 text-sm">
+                      {j.steps.map((s, i) => (
+                        <li key={i} className={s.kind === 'visit' ? 'pt-1 font-medium' : s.kind === 'event' ? 'text-emerald-700' : 'text-zinc-600'}>
+                          <span className="mr-2 text-xs text-zinc-400 tabular-nums">
+                            <LocalTime iso={s.at} options={SHORT} />
+                          </span>
+                          {s.kind === 'visit' ? `Came from ${s.text}` : s.text}
+                          {s.detail && <span className="ml-1.5 text-xs text-zinc-400">{s.detail}</span>}
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                </li>
+              ))}
+            </ShowMore>
           </ul>
         )}
       </section>
@@ -239,21 +244,23 @@ export default async function TagPage({ searchParams }: PageProps<'/app/website/
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm" aria-label="Latest events">
               <tbody className="divide-y divide-zinc-100">
-                {live.map((e) => (
-                  <tr key={e.id}>
-                    <td className="py-2 pr-3 text-xs whitespace-nowrap text-zinc-400">
-                      <LocalTime iso={e.at} options={SHORT} />
-                    </td>
-                    <td className="py-2 pr-3 font-medium">
-                      {e.name}
-                      {e.test && <span className="ml-1.5 rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] font-normal text-zinc-500">test</span>}
-                    </td>
-                    <td className="max-w-[240px] truncate py-2 pr-3 text-zinc-600">{e.page || '—'}</td>
-                    <td className="py-2 pr-3 text-zinc-600">{e.from}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{e.value ?? ''}</td>
-                    <td className="py-2 text-right text-xs text-zinc-500">{e.capi === 'sent' ? 'sent to Meta' : e.capi === 'pending' ? 'to Meta…' : e.capi === 'failed' ? 'Meta refused' : ''}</td>
-                  </tr>
-                ))}
+                <ShowMore as="tr" colSpan={6}>
+                  {live.map((e) => (
+                    <tr key={e.id}>
+                      <td className="py-2 pr-3 text-xs whitespace-nowrap text-zinc-400">
+                        <LocalTime iso={e.at} options={SHORT} />
+                      </td>
+                      <td className="py-2 pr-3 font-medium">
+                        {e.name}
+                        {e.test && <span className="ml-1.5 rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] font-normal text-zinc-500">test</span>}
+                      </td>
+                      <td className="max-w-[240px] truncate py-2 pr-3 text-zinc-600">{e.page || '—'}</td>
+                      <td className="py-2 pr-3 text-zinc-600">{e.from}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{e.value ?? ''}</td>
+                      <td className="py-2 text-right text-xs text-zinc-500">{e.capi === 'sent' ? 'sent to Meta' : e.capi === 'pending' ? 'to Meta…' : e.capi === 'failed' ? 'Meta refused' : ''}</td>
+                    </tr>
+                  ))}
+                </ShowMore>
               </tbody>
             </table>
           </div>

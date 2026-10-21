@@ -7,6 +7,7 @@ import { requireContext } from '@/lib/context'
 import { canMessage } from '@/lib/inbox'
 import { prisma } from '@/lib/prisma'
 import { NetIcon, RefreshButton, Thread, When } from './Thread'
+import { ShowMore } from '@/components/ShowMore'
 
 export const metadata: Metadata = { title: 'Inbox — Loudpilot' }
 
@@ -138,31 +139,33 @@ export default async function InboxPage({ searchParams }: PageProps<'/app/inbox'
           </p>
         ) : (
           <ul aria-label="Conversations" className="max-h-[calc(100vh-6rem)] divide-y divide-zinc-100 overflow-y-auto">
-            {conversations.map((c) => (
-              <li key={c.id}>
-                <Link href={link({ c: c.id })} className={`flex gap-3 px-3 py-3 ${c.id === selectedId ? 'bg-zinc-100' : 'hover:bg-zinc-50'}`}>
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-zinc-200 text-sm font-semibold text-zinc-700">
-                    {c.participantName.replace(/^@/, '').slice(0, 1).toUpperCase()}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className={`min-w-0 flex-1 truncate text-sm ${c.unread ? 'font-semibold' : 'font-medium'}`}>{c.participantName}</span>
-                      <span className="shrink-0 text-[11px] text-zinc-500">
-                        <When iso={c.lastMessageAt.toISOString()} />
+            <ShowMore as="li">
+              {conversations.map((c) => (
+                <li key={c.id}>
+                  <Link href={link({ c: c.id })} className={`flex gap-3 px-3 py-3 ${c.id === selectedId ? 'bg-zinc-100' : 'hover:bg-zinc-50'}`}>
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-zinc-200 text-sm font-semibold text-zinc-700">
+                      {c.participantName.replace(/^@/, '').slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className={`min-w-0 flex-1 truncate text-sm ${c.unread ? 'font-semibold' : 'font-medium'}`}>{c.participantName}</span>
+                        <span className="shrink-0 text-[11px] text-zinc-500">
+                          <When iso={c.lastMessageAt.toISOString()} />
+                        </span>
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-1.5">
+                        <NetIcon network={c.network} size={11} />
+                        <span className={`min-w-0 flex-1 truncate text-xs ${c.unread ? 'text-zinc-900' : 'text-zinc-500'}`}>
+                          {c.lastFromMe && 'You: '}
+                          {c.lastText}
+                        </span>
+                        {c.unread > 0 && <Count n={c.unread} />}
                       </span>
                     </span>
-                    <span className="mt-0.5 flex items-center gap-1.5">
-                      <NetIcon network={c.network} size={11} />
-                      <span className={`min-w-0 flex-1 truncate text-xs ${c.unread ? 'text-zinc-900' : 'text-zinc-500'}`}>
-                        {c.lastFromMe && 'You: '}
-                        {c.lastText}
-                      </span>
-                      {c.unread > 0 && <Count n={c.unread} />}
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
+                  </Link>
+                </li>
+              ))}
+            </ShowMore>
           </ul>
         )}
       </section>
