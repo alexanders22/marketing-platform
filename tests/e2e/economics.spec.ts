@@ -21,8 +21,19 @@ test.afterAll(async () => {
 
 test('hovering a credit amount shows its value in lari and dollars', async () => {
   await page.goto('/app/credits')
-  await page.getByRole('link', { name: /50 credits left/ }).last().hover()
+  const badge = page.getByRole('link', { name: /50 credits left/ }).last()
+  await badge.hover()
   await expect(page.getByRole('tooltip')).toHaveText(/^50 credits ≈ ₾[\d.]+ · \$4\.00$/)
+  // Right by the pointer, not in the middle of the header.
+  const b = (await badge.boundingBox())!
+  const t = (await page.getByRole('tooltip').boundingBox())!
+  expect(t.x + t.width / 2).toBeGreaterThan(b.x - 4)
+  expect(t.x + t.width / 2).toBeLessThan(b.x + b.width + 4)
+  expect(Math.abs(t.y + t.height - b.y) < 20 || Math.abs(t.y - (b.y + b.height)) < 20).toBe(true)
+  // The empty header next to the badge is not a credit label: no hint in
+  // the middle of the screen.
+  await page.mouse.move(b.x - 120, b.y + b.height / 2)
+  await expect(page.getByRole('tooltip')).toHaveCount(0)
   // A button label deep in the app too.
   await page.goto('/app/strategy/new')
   await page.getByRole('button', { name: /Build my plan · 5 credits/ }).hover()
