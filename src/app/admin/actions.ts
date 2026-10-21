@@ -119,7 +119,7 @@ export async function recordPayment(accountId: string, _: AdminState, f: FormDat
     return tx.adminLog.findFirst({ where: { action: 'payment.record', details: { path: ['key'], equals: key } }, select: { id: true } })
   })
   if (booked) return { ok: 'Already booked' }
-  // The list price, VAT included (18%): what the customer paid and what goes to the state.
+  // The list price plus 18% VAT: what the customer paid and what goes to the state.
   const monthly = (await getPlans()).find((p) => p.id === account.plan)?.monthly ?? 0
   const money = vatParts((cycle === 'YEARLY' ? yearlyTotal(monthly) : monthly) * periods)
   const { paidUntil, granted } = await bookPayment(accountId, periods, cycle)

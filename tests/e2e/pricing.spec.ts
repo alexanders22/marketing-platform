@@ -38,11 +38,11 @@ test('the balance is in the header, amber when low, red at zero', async () => {
 test('admin pricing: margins per plan, validation, saved prices reach the app', async () => {
   await page.goto('/admin/pricing')
   await expect(page.getByRole('heading', { name: 'Pricing & unit economics' })).toBeVisible()
-  // Start: $29 incl. VAT → $24.58 net / 200 credits.
-  await expect(page.getByText(/\$29 − 18% VAT = \$24\.58 ÷ 200 = \$0\.123/)).toBeVisible()
+  // Start: $29 without VAT / 200 credits.
+  await expect(page.getByText(/\$29 ÷ 200 = \$0\.145/)).toBeVisible()
   const cinema = page.getByLabel('Credits for AI clip · Cinema (Veo 3.1)')
   await expect(cinema).toHaveValue('20')
-  // 5 credits × $0.067 net (Agency) − $0.40 cost → a loss, shown red.
+  // 5 credits × $0.0796 net (Agency) − $0.40 cost → a loss, shown red.
   const row = page.locator('tr', { hasText: 'AI clip · Cinema' })
   const agency = row.locator('td').nth(6).locator('span').first()
   await expect(agency).not.toHaveClass(/text-red-600/)

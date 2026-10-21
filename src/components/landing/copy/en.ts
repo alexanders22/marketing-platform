@@ -280,7 +280,7 @@ export const en = {
   agency: {
     eyebrow: "The real comparison",
     title: "The output of a marketing agency — for the price of a lunch a week.",
-    sub: "Agencies charge thousands a month for posts, videos and reports. Loudpilot does the same work every day, from $29.",
+    sub: "Agencies charge thousands a month for posts, videos and reports. Loudpilot does the same work every day, from ₾79 a month.",
     cta: "See plans & pricing",
   },
   pricing: {
@@ -291,8 +291,8 @@ export const en = {
     yearly: "Yearly (2 months free)",
     popular: "Most popular",
     perMonth: "/ month",
-    billedYearly: "Billed yearly — ${total} · ₾{gel}",
-    billedMonthly: "Billed monthly",
+    billedYearly: "Billed yearly — ₾{gel} · ${total} + VAT",
+    billedMonthly: "Billed monthly + VAT",
     startTrial: "Start free trial",
     included: "What's included",
     companies: "Companies",
@@ -311,14 +311,14 @@ export const en = {
     moreTitle: "Need more than Agency?",
     moreBody: "Custom limits, white-label and revenue share for platforms that resell Loudpilot to their own customers.",
     talk: "Let's talk",
-    vat: "Prices in US dollars and Georgian lari, 18% VAT included.",
+    vat: "Prices in Georgian lari and US dollars, 18% VAT not included.",
     rivals: {
       title: "Same team, compared",
       sub: "5 people and 15 social profiles, per month.",
       tool: "Tool",
       plan: "Plan",
       price: "Price / month",
-      incl: "incl. VAT",
+      incl: "+ VAT",
       ours: "In Loudpilot Business, at this price",
       oursItems: [
         "700 AI credits: posts, images, videos, strategy plans",

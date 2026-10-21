@@ -16,7 +16,7 @@ type Sub = { id: string; ref_id: string; status: string; first: Order; renewals:
 
 // Recurring billing plans as made in the Merchant Portal (amount in major units).
 export const FAKE_PLANS = [
-  { id: 1, name: 'Starter monthly', ref_id: 'ref-starter-m', amount: '29.00', currency: { code: 'USD' }, billing_frequency: 1, is_active: true },
+  { id: 1, name: 'Starter monthly', ref_id: 'ref-starter-m', amount: '34.22', currency: { code: 'USD' }, billing_frequency: 1, is_active: true },
   { id: 2, name: 'Starter yearly (old price)', ref_id: 'ref-starter-y-old', amount: '199.00', currency: { code: 'USD' }, billing_frequency: 12, is_active: true },
 ]
 

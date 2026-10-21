@@ -21,6 +21,7 @@ import {
 } from './monrem'
 import { yearlyTotal, type PlanId } from './plans'
 import { prisma } from './prisma'
+import { grossOf } from './tax'
 
 // Card payments: what is for sale (priced on the server, never from the
 // browser), the hosted checkout, and fulfilment — exactly once per payment,
@@ -34,7 +35,7 @@ import { prisma } from './prisma'
 
 export type Purchase = { kind: 'PACK'; credits: number } | { kind: 'PLAN'; plan: PlanId; cycle: BillingCycle; autoRenew?: boolean }
 
-// The price (VAT included) in dollars and in lari, and what it buys.
+// The list price (without VAT) in dollars and in lari, and what it buys.
 async function quote(p: Purchase) {
   if (p.kind === 'PACK') {
     const pack = (await getPricing()).packs.find((x) => x.credits === p.credits)
@@ -51,10 +52,10 @@ async function quote(p: Purchase) {
   }
 }
 
-// What the terminal charges: the dollar price, or the fixed lari price.
+// What the terminal charges: the dollar price, or the fixed lari price, plus VAT.
 function inCurrency(q: { usd: number; gel: number }) {
   const currency = monremCurrency()
-  return { currency, amount: Math.round((currency === 'GEL' ? q.gel : q.usd) * 100) }
+  return { currency, amount: Math.round(grossOf(currency === 'GEL' ? q.gel : q.usd) * 100) }
 }
 
 const isUnique = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002'

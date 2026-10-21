@@ -131,11 +131,11 @@ export function PlanPicker({
                 </div>
                 <p className="mt-3 min-h-10 text-sm text-zinc-500">{p.blurb}</p>
                 <p className="mt-4 text-3xl font-semibold text-zinc-900">
-                  ${shown.toLocaleString()}
+                  ₾{shownGel.toLocaleString('en-US')}
                   <span className="text-base font-normal text-zinc-500"> / {yearly ? 'year' : 'month'}</span>
-                  <span className="ml-2 text-sm font-normal text-zinc-400">₾{shownGel.toLocaleString('en-US')}</span>
+                  <span className="ml-2 text-sm font-normal text-zinc-400">${shown.toLocaleString('en-US')}</span>
                 </p>
-                <p className="text-xs text-zinc-500">{yearly ? 'Billed yearly' : 'Billed monthly'} · incl. {Math.round(VAT.rate * 100)}% VAT</p>
+                <p className="text-xs text-zinc-500">{yearly ? 'Billed yearly' : 'Billed monthly'} · {Math.round(VAT.rate * 100)}% VAT not included</p>
                 <button
                   onClick={() => pick(p.id)}
                   disabled={pending}

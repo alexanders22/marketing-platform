@@ -49,8 +49,8 @@ export async function renewalRemindersDue(now = new Date()) {
     if (!plan) continue
     const price =
       a.billingCycle === 'YEARLY'
-        ? `${priceLabel({ usd: yearlyTotal(plan.monthly), gel: yearlyTotal(plan.monthlyGel) }, monremCurrency())} / year`
-        : `${priceLabel({ usd: plan.monthly, gel: plan.monthlyGel }, monremCurrency())} / month`
+        ? `${priceLabel({ usd: yearlyTotal(plan.monthly), gel: yearlyTotal(plan.monthlyGel) }, monremCurrency())} + VAT / year`
+        : `${priceLabel({ usd: plan.monthly, gel: plan.monthlyGel }, monremCurrency())} + VAT / month`
     const link = `${terminalUrl()}/app/credits?renew=1`
     const [subject, intro] =
       stage === 'due'

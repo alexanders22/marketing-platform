@@ -79,17 +79,16 @@ test.describe('onboarding', () => {
       ),
     ).toBe('https://qa-onb.example|https://instagram.com/qa')
 
-    // Monthly / yearly prices.
-    for (const [m, y] of [
-      ['$29', '$290'],
-      ['$75', '$750'],
-      ['$199', '$1,990'],
-    ]) {
-      await expect(page.getByText(new RegExp(`^\\${m} / month`))).toBeVisible()
-      void y
-    }
+    // Monthly / yearly prices, lari first, without VAT.
+    for (const [m, usd] of [
+      ['₾79', '$29'],
+      ['₾199', '$75'],
+      ['₾529', '$199'],
+    ])
+      await expect(page.getByText(`${m} / month${usd}`, { exact: true })).toBeVisible()
+    await expect(page.getByText('Billed monthly · 18% VAT not included')).toHaveCount(3)
     await page.getByRole('button', { name: 'Yearly (2 months free)' }).click()
-    for (const y of ['$290', '$750', '$1,990']) await expect(page.getByText(new RegExp(`^\\${y} / year`))).toBeVisible()
+    for (const y of ['₾790 / year$290', '₾1,990 / year$750', '₾5,290 / year$1,990']) await expect(page.getByText(y, { exact: true })).toBeVisible()
 
     // Pick Business, yearly.
     await page.getByRole('button', { name: /Start 7-day free trial/ }).nth(1).click()

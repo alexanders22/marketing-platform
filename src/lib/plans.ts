@@ -9,7 +9,7 @@ export const PLANS: {
   id: PlanId
   name: string
   blurb: string
-  // Price a month incl. VAT: in dollars, and a fixed price in lari (not a
+  // Price a month without VAT (18% is added at checkout): in dollars, and a fixed price in lari (not a
   // conversion — charged as is when the terminal takes lari).
   monthly: number
   monthlyGel: number

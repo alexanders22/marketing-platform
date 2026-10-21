@@ -44,7 +44,7 @@ test('three days before the end: one reminder, its button opens a one-click rene
   await page.goto(linkFrom(mail.Text, '/app/credits?renew=1'))
   const renew = page.getByRole('region', { name: 'Renew your plan' })
   await expect(renew.getByText(/^Paid until .*Renewing adds a month from that date\.$/)).toBeVisible()
-  await expect(renew.getByRole('button', { name: 'Renew 1 month · $75' })).toBeVisible()
+  await expect(renew.getByRole('button', { name: 'Renew 1 month · $75 + VAT' })).toBeVisible()
 })
 
 test('the day it ends: one more reminder and a renew banner in the app', async () => {

@@ -76,9 +76,9 @@ export function Pricing({ lang = "en", plans }: { lang?: Lang; plans: PickerPric
               </div>
               <p className="mt-4 min-h-10 text-sm text-zinc-400">{t.blurbs[p.name]}</p>
               <div className="mt-6 flex items-baseline gap-1">
-                <span className="text-4xl font-semibold tracking-tight">${price}</span>
+                <span className="text-4xl font-semibold tracking-tight">₾{gel}</span>
                 <span className="text-sm text-zinc-400">{t.perMonth}</span>
-                <span className="ml-auto text-sm text-zinc-400">₾{gel}</span>
+                <span className="ml-auto text-sm text-zinc-400">${price}</span>
               </div>
               <p className="mt-1 text-xs text-zinc-500">
                 {yearly ? t.billedYearly.replace("{total}", fmt(p.monthly * 10)).replace("{gel}", fmt(p.monthlyGel * 10)) : t.billedMonthly}

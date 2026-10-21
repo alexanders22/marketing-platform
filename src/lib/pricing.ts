@@ -5,7 +5,7 @@
 //
 // The rule behind the defaults: one credit stands for at most $0.02 of
 // provider cost, so credits = ⌈cost ÷ $0.02⌉. The cheapest credit we sell
-// (Agency paid yearly, ~$0.05 incl. VAT, ~$0.041 after VAT, card fee and
+// (Agency paid yearly, ~$0.066 without VAT, ~$0.064 after card fee and
 // tax) then still earns at least twice its cost on any action.
 
 import { PLAN_IDS, PLANS, type PlanId } from './plans'
@@ -46,7 +46,7 @@ export const ACTION_KEYS = Object.keys(ACTIONS) as Action[]
 export const VEO_PLANS = PLAN_IDS
 export type VeoPlan = PlanId
 
-// A top-up: credits bought on top of the plan (prices incl. VAT, in dollars
+// A top-up: credits bought on top of the plan (prices without VAT, in dollars
 // and a fixed price in lari).
 export type CreditPack = { credits: number; priceUsd: number; priceGel: number }
 
@@ -57,7 +57,7 @@ export type Pricing = {
   actions: Record<Action, { credits: number; costUsd: number }>
   // Seconds of AI clips (Veo) each paid plan may generate per calendar month.
   veoSecondsPerMonth: Record<VeoPlan, number>
-  // Plan price a month incl. VAT (USD, and fixed lari) and monthly credits.
+  // Plan price a month without VAT (USD, and fixed lari) and monthly credits.
   plans: Record<PlanId, { monthly: number; monthlyGel: number; credits: number }>
   // Credit packs for sale on top of a plan, cheaper per credit when bigger.
   packs: CreditPack[]
@@ -90,6 +90,7 @@ export const creditsLabel = (n: number) => `${n} credit${n === 1 ? '' : 's'}`
 
 // What a customer pays in: Monrem's terminal currency.
 export type Currency = 'USD' | 'GEL'
-// "$29" or "₾79" — the dollar or the fixed lari price of the same thing.
-export const priceLabel = (o: { usd: number; gel: number }, c: Currency) =>
-  c === 'GEL' ? `₾${o.gel.toLocaleString('en-US')}` : `$${o.usd.toLocaleString('en-US')}`
+// "$29" or "₾79" — the dollar or the fixed lari price of the same thing
+// (cents shown only when there are any: "₾93.22").
+const money = (n: number) => n.toLocaleString('en-US', Number.isInteger(n) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+export const priceLabel = (o: { usd: number; gel: number }, c: Currency) => (c === 'GEL' ? `₾${money(o.gel)}` : `$${money(o.usd)}`)

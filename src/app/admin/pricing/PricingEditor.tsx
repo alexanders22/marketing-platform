@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { ACTIONS, ACTION_KEYS, type Action, type Pricing } from '@/lib/pricing'
-import { netOf, VAT } from '@/lib/tax'
 import { savePricing } from '../actions'
 
 type Plan = { id: string; name: string; monthly: number; monthlyGel: number; credits: number }
@@ -24,10 +23,10 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>()
   const [pending, start] = useTransition()
 
-  // What one credit is really worth on each plan: the price without VAT
-  // (prices include 18%, which goes to the state) ÷ credits.
+  // What one credit is really worth on each plan: the price (without VAT,
+  // which is added on top and goes to the state) ÷ credits.
   const values = useMemo(
-    () => [{ id: 'topup', name: 'Top-up', perCredit: netOf(p.creditPriceUsd) }, ...plans.map((pl) => ({ id: pl.id, name: pl.name, perCredit: netOf(pl.monthly) / pl.credits }))],
+    () => [{ id: 'topup', name: 'Top-up', perCredit: p.creditPriceUsd }, ...plans.map((pl) => ({ id: pl.id, name: pl.name, perCredit: pl.monthly / pl.credits }))],
     [p.creditPriceUsd, plans],
   )
   // Average provider cost of one credit at last month's mix of actions.
@@ -74,7 +73,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <h2 className="font-semibold">Plans</h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Price a month (incl. VAT) and the credits each plan refills every month. The lari price is fixed, not converted: cards are charged it when the Monrem terminal takes lari. The landing page, the plan picker and new payments use them.
+          Price a month (without VAT — 18% is added at checkout) and the credits each plan refills every month. The lari price is fixed, not converted: cards are charged it when the Monrem terminal takes lari. The landing page, the plan picker and new payments use them.
         </p>
         <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {plans.map((pl) => (
@@ -100,7 +99,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
               </label>
               {mixCost !== null && (
                 <p className="mt-2 text-xs text-zinc-500">
-                  All credits used at last month&apos;s mix: {usd(pl.credits * mixCost)} AI cost of {usd(netOf(pl.monthly))} net
+                  All credits used at last month&apos;s mix: {usd(pl.credits * mixCost)} AI cost of {usd(pl.monthly)} net
                 </p>
               )}
             </li>
@@ -110,7 +109,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <h2 className="font-semibold">Credit packs</h2>
-        <p className="mt-1 text-sm text-zinc-500">Top-ups on top of a plan (price incl. VAT). Bigger packs should cost less per credit than the single-credit price.</p>
+        <p className="mt-1 text-sm text-zinc-500">Top-ups on top of a plan (price without VAT). Bigger packs should cost less per credit than the single-credit price.</p>
         <table className="mt-3 w-full text-sm">
           <thead className="text-left text-xs text-zinc-500">
             <tr>
@@ -125,7 +124,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {p.packs.map((pk, i) => {
-              const net = netOf(pk.priceUsd)
+              const net = pk.priceUsd
               const cost = pk.credits * (mixCost ?? costPerCredit)
               const m = net > 0 ? (net - cost) / net : 0
               return (
@@ -187,7 +186,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
             <div key={pl.id} className="text-sm">
               <p className="font-medium text-zinc-700">{pl.name}</p>
               <p className="mt-1 text-zinc-500">
-                ${pl.monthly} − {Math.round(VAT.rate * 100)}% VAT = {usd(netOf(pl.monthly))} ÷ {pl.credits.toLocaleString()} = <b className="text-zinc-900">{usd(netOf(pl.monthly) / pl.credits)}</b>/credit
+                ${pl.monthly} ÷ {pl.credits.toLocaleString()} = <b className="text-zinc-900">{usd(pl.monthly / pl.credits)}</b>/credit
               </p>
             </div>
           ))}
@@ -294,7 +293,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
                 </label>
                 <p className="mt-2 text-xs text-zinc-600">
                   Quick {usd(secs * p.actions.clipQuick.costUsd)} · Pro {usd(secs * p.actions.clipPro.costUsd)} · Cinema {usd(secs * p.actions.clipCinema.costUsd)}
-                  <span className="text-zinc-400"> of {usd(netOf(pl.monthly))} net</span>
+                  <span className="text-zinc-400"> of {usd(pl.monthly)} net</span>
                 </p>
               </li>
             )
@@ -311,13 +310,13 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
           {plans.map((pl) => {
             const w = worstFor(pl)
             const cost = w.cost
-            const net = netOf(pl.monthly)
+            const net = pl.monthly
             const m = (net - cost) / net
             return (
               <li key={pl.id} className="rounded-xl bg-zinc-50 p-3 text-sm ring-1 ring-zinc-200">
                 <p className="font-medium">{pl.name}</p>
                 <p className="mt-1 text-zinc-600">
-                  {usd(net)} in (after VAT) · {usd(cost)} out
+                  {usd(net)} in (without VAT) · {usd(cost)} out
                 </p>
                 <p className={`mt-0.5 ${marginTone(m)}`}>
                   margin {pct(m)}

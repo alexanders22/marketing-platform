@@ -57,8 +57,8 @@ test('credits page: what the balance is worth, and packs to buy', async () => {
 
 test('plan prices show their fixed lari price (picker and landing)', async () => {
   await page.goto('/app/plan')
-  await expect(page.getByText(/^\$29 \/ month₾79$/)).toBeVisible()
-  await expect(page.getByText(/^\$75 \/ month₾199$/)).toBeVisible()
+  await expect(page.getByText('₾79 / month$29', { exact: true })).toBeVisible()
+  await expect(page.getByText('₾199 / month$75', { exact: true })).toBeVisible()
   await page.goto('/')
   await expect(page.locator('#pricing').getByText(/^₾\d+$/)).toHaveText(['₾79', '₾199', '₾529'])
 })
@@ -82,12 +82,12 @@ test('admin: plans and packs are editable; economics shows margins and break-eve
   await page.getByLabel(/^Free trials a month/).fill('0')
   await page.getByLabel('Customers paying yearly').fill('0')
   await page.getByLabel('AI cost of one credit').fill('0.01')
-  // Business: 75 → 63.56 without VAT − 1.88 card fee − 0.64 tax − 3.50 AI (700 × 50%) = 57.55.
+  // Business: 75 without VAT − 2.21 card fee (on 88.50 paid) − 0.75 tax − 3.50 AI (700 × 50%) = 68.54.
   const team = page.getByRole('row').filter({ hasText: /^Business/ })
-  await expect(team).toContainText('$57.55')
+  await expect(team).toContainText('$68.54')
   await expect(team).toContainText('91%')
-  // 1,000 ÷ 57.55 → 18 Business customers alone.
-  await expect(page.getByLabel('Break-even')).toContainText('Only Business: 18')
+  // 1,000 ÷ 68.54 → 15 Business customers alone.
+  await expect(page.getByLabel('Break-even')).toContainText('Only Business: 15')
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByRole('status')).toHaveText('Saved')
   expect(sql(`select value->'fixed'->0->>'amount' from "Setting" where key='economics'`)).toBe('1000')

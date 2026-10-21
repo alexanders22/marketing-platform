@@ -5,7 +5,7 @@
 
 import type { PlanId } from './plans'
 import type { CreditPack } from './pricing'
-import { netOf } from './tax'
+import { grossOf } from './tax'
 
 export type FixedCost = { name: string; amount: number; currency: 'GEL' | 'USD' }
 
@@ -67,9 +67,10 @@ export type Line = {
   margin: number
 }
 
-// One sale (per month): gross price incl. VAT, credits it hands out, share used.
-function line(key: string, name: string, gross: number, creditsUsed: number, e: Economics, costPerCredit: number): Line {
-  const net = netOf(gross)
+// One sale (per month): list price (VAT is added on top), credits it hands
+// out, share used. The card fee is on what the customer pays.
+function line(key: string, name: string, net: number, creditsUsed: number, e: Economics, costPerCredit: number): Line {
+  const gross = grossOf(net)
   const fee = gross > 0 ? (gross * e.paymentFeePct) / 100 + e.paymentFeeUsd : 0
   const tax = (net * e.turnoverTaxPct) / 100
   const partner = (net * e.partnerSharePct) / 100
