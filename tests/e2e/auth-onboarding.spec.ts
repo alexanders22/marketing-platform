@@ -110,7 +110,9 @@ test.describe('onboarding', () => {
     const trialBefore = acct(email, 'a."trialEndsAt"')
     await page.goto('/app/plan')
     await expect(page.getByRole('button', { name: 'Current plan' })).toBeVisible()
-    await page.getByRole('button', { name: /Start 7-day free trial/ }).last().click()
+    // The trial was used: no trial offer the second time.
+    await expect(page.getByRole('button', { name: /free trial/ })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Choose Agency' }).click()
     await page.waitForURL(/\/app\/credits/)
     expect(acct(email, 'a.plan, a."creditBalance"')).toBe('AGENCY|50')
     expect(acct(email, `(select count(*) from "CreditEntry" c where c."accountId"=a.id)`)).toBe('1')

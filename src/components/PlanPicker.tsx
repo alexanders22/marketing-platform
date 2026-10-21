@@ -16,8 +16,20 @@ const TINT = {
   AGENCY: 'bg-indigo-50 text-indigo-600',
 }
 
-// Ocoya-style "Choose your plan" panel. Closing it skips the plan for now.
-export function PlanPicker({ current, after = '/app', prices }: { current?: PlanId | null; after?: string; prices?: PickerPrices }) {
+// "Choose your plan": what the trial promises on top, the plans below in
+// full width. Closing it skips the plan for now. `trialUsed` (the account
+// had its trial already) turns trial wording into plain plan choice.
+export function PlanPicker({
+  current,
+  after = '/app',
+  prices,
+  trialUsed = false,
+}: {
+  current?: PlanId | null
+  after?: string
+  prices?: PickerPrices
+  trialUsed?: boolean
+}) {
   const router = useRouter()
   const [yearly, setYearly] = useState(false)
   const [pending, start] = useTransition()
@@ -38,8 +50,12 @@ export function PlanPicker({ current, after = '/app', prices }: { current?: Plan
     })
   }
 
+  const points = trialUsed
+    ? ['Pay by card, monthly or yearly', 'Your posts, channels and credits are kept', 'Cancel or change your plan anytime']
+    : [`Try every feature free for ${TRIAL_DAYS} days`, 'No charge today', 'Cancel or change your plan anytime']
+
   return (
-    <div className="relative grid overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 lg:grid-cols-[300px_1fr]">
+    <div className="relative overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
       <button
         onClick={() => router.push(after)}
         className="absolute top-4 right-4 z-10 rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100"
@@ -48,23 +64,25 @@ export function PlanPicker({ current, after = '/app', prices }: { current?: Plan
         <X size={18} />
       </button>
 
-      <aside className="border-b border-zinc-100 p-7 lg:border-r lg:border-b-0">
-        <span className="grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-sky-500 text-white">
-          <Rocket size={20} />
-        </span>
-        <h2 className="mt-5 text-2xl font-semibold text-zinc-900">Choose your plan</h2>
-        <p className="mt-2 text-zinc-500">Your brand is ready. Choose a plan to continue with Loudpilot.</p>
-        <ul className="mt-6 space-y-4 border-t border-zinc-100 pt-6 text-[15px] text-zinc-700">
-          {[`Try every feature free for ${TRIAL_DAYS} days`, 'No charge today', 'Cancel or change your plan anytime'].map(
-            (t) => (
-              <li key={t} className="flex gap-3">
-                <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-500" />
-                {t}
-              </li>
-            ),
-          )}
+      <header className="flex flex-col gap-6 border-b border-zinc-100 p-6 pr-14 sm:p-8 sm:pr-16 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-4">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-sky-500 text-white">
+            <Rocket size={20} />
+          </span>
+          <div>
+            <h2 className="text-2xl font-semibold text-zinc-900">Choose your plan</h2>
+            <p className="mt-1 text-zinc-500">{trialUsed ? 'Choose a plan to continue with Loudpilot.' : 'Your brand is ready. Choose a plan to continue with Loudpilot.'}</p>
+          </div>
+        </div>
+        <ul className="flex flex-col gap-2 text-[15px] text-zinc-700 sm:flex-row sm:flex-wrap sm:gap-x-6">
+          {points.map((t) => (
+            <li key={t} className="flex items-center gap-2">
+              <CheckCircle2 size={18} className="shrink-0 text-emerald-500" />
+              {t}
+            </li>
+          ))}
         </ul>
-      </aside>
+      </header>
 
       <div className="p-6 sm:p-8">
         <div className="mx-auto mb-7 flex w-fit rounded-lg bg-zinc-100 p-1 text-sm">
@@ -128,7 +146,7 @@ export function PlanPicker({ current, after = '/app', prices }: { current?: Plan
                       : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
                   }`}
                 >
-                  {busy === p.id ? 'Starting…' : isCurrent ? 'Current plan' : `Start ${TRIAL_DAYS}-day free trial`}
+                  {busy === p.id ? 'Starting…' : isCurrent ? 'Current plan' : trialUsed ? `Choose ${p.name}` : `Start ${TRIAL_DAYS}-day free trial`}
                 </button>
                 <p className="mt-5 text-xs font-semibold tracking-wide text-zinc-500">WHAT&apos;S INCLUDED</p>
                 <ul className="mt-2 space-y-2.5 text-sm text-zinc-700">
@@ -160,12 +178,12 @@ export function PlanPicker({ current, after = '/app', prices }: { current?: Plan
 
 function Row({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: string | number }) {
   return (
-    <li className="flex items-center justify-between">
-      <span className="inline-flex items-center gap-2 text-zinc-600">
-        <Icon size={15} />
+    <li className="flex items-center justify-between gap-3">
+      <span className="inline-flex min-w-0 items-center gap-2 text-zinc-600">
+        <Icon size={15} className="shrink-0" />
         {label}
       </span>
-      <span>{value}</span>
+      <span className="shrink-0 font-medium text-zinc-900">{value}</span>
     </li>
   )
 }
