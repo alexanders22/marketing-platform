@@ -62,7 +62,7 @@ test('the interview stands out: sidebar card, dashboard hero, Create new menu', 
   await page.goto('/app/dashboard')
   await expect(page.getByRole('link', { name: /Not sure where to start\? Let Pilot interview you/ })).toHaveAttribute('href', '/app/strategy/interview')
   const card = page.getByRole('link', { name: /Plan with Pilot/ })
-  await expect(card).toContainText('NEW')
+  await expect(card).toContainText('3-min strategy chat')
   await expect(card).toHaveAttribute('href', '/app/strategy/interview')
 })
 

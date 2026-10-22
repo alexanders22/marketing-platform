@@ -90,7 +90,8 @@ export function AppSidebar(props: SidebarProps) {
           </aside>
         </div>
       )}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col overflow-y-auto p-3 lg:flex">{body}</aside>
+      {/* Above the page: the Create menu opens over it (sticky makes its own layer). */}
+      <aside className="sticky top-0 z-30 hidden h-screen w-64 shrink-0 flex-col overflow-y-auto p-3 lg:flex">{body}</aside>
     </>
   )
 }
@@ -172,7 +173,6 @@ function PilotCard({ pilot, active }: { pilot: PilotState; active: boolean }) {
             <span className="block truncate text-xs text-zinc-500">{text.sub}</span>
           )}
         </span>
-        {pilot.state === 'start' && <span className="rounded bg-gradient-to-r from-[#7b3ff2] to-[#ff2e6e] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white">NEW</span>}
       </span>
       {pilot.state === 'continue' && <span className="sr-only">{text.sub}</span>}
     </Link>
@@ -187,27 +187,47 @@ function Count({ n, label, tone }: { n: number; label: string; tone: string }) {
   )
 }
 
-const CREATE = [
-  { href: '/app/strategy/interview', label: 'Plan my marketing with AI', icon: Compass, tint: 'bg-gradient-to-br from-[#7b3ff2] via-[#ff2e6e] to-[#ff5b14] text-white' },
-  { href: '/app/posts/new', label: 'New post or thread', icon: StickyNote, tint: 'bg-emerald-100 text-emerald-700' },
-  { href: '/app/create', label: 'New AI social post', icon: Sparkles, tint: 'bg-sky-100 text-sky-700' },
-  { href: '/app/campaigns/new?kind=social', label: 'New AI social campaign', icon: Target, tint: 'bg-violet-100 text-violet-700' },
-  { href: '/app/studio?tab=video', label: 'New video', icon: Clapperboard, tint: 'bg-fuchsia-100 text-fuchsia-700', badge: 'bg-fuchsia-100 text-fuchsia-700' },
-  { href: '/app/blog/new', label: 'New blog', icon: FileText, tint: 'bg-amber-100 text-amber-700', badge: 'bg-amber-100 text-amber-700' },
-  { href: '/app/blog/ai', label: 'New AI blog', icon: FilePen, tint: 'bg-orange-100 text-orange-700', badge: 'bg-orange-100 text-orange-700' },
-  { href: '/app/campaigns/new?kind=blog', label: 'New AI blog campaign', icon: Newspaper, tint: 'bg-rose-100 text-rose-700', badge: 'bg-rose-100 text-rose-700' },
+// What can be made, by kind, each with a line on how it is made.
+const CREATE: { group: string; items: { href: string; label: string; sub: string; icon: typeof Plus; tint: string }[] }[] = [
+  {
+    group: 'Plan',
+    items: [{ href: '/app/strategy/interview', label: 'Plan my marketing with AI', sub: 'A 3-minute chat → goals and a plan', icon: Compass, tint: 'bg-gradient-to-br from-[#7b3ff2] via-[#ff2e6e] to-[#ff5b14] text-white' }],
+  },
+  {
+    group: 'Post',
+    items: [
+      { href: '/app/create', label: 'Post with AI', sub: 'AI writes the text and makes the picture', icon: Sparkles, tint: 'bg-sky-100 text-sky-700' },
+      { href: '/app/posts/new', label: 'Write a post', sub: 'Your own text, photos or video', icon: StickyNote, tint: 'bg-emerald-100 text-emerald-700' },
+    ],
+  },
+  {
+    group: 'Video & blog',
+    items: [
+      { href: '/app/studio?tab=video', label: 'Video', sub: 'Reels and Stories, with AI or from your clips', icon: Clapperboard, tint: 'bg-fuchsia-100 text-fuchsia-700' },
+      { href: '/app/blog/ai', label: 'Blog article with AI', sub: 'From a topic to a full article', icon: FilePen, tint: 'bg-orange-100 text-orange-700' },
+      { href: '/app/blog/new', label: 'Blank blog article', sub: 'Write it yourself', icon: FileText, tint: 'bg-amber-100 text-amber-700' },
+    ],
+  },
+  {
+    group: 'Series',
+    items: [
+      { href: '/app/campaigns/new?kind=social', label: 'Content series', sub: 'Posts over several weeks for one goal', icon: Target, tint: 'bg-violet-100 text-violet-700' },
+      { href: '/app/campaigns/new?kind=blog', label: 'Blog series', sub: 'Several articles around one topic', icon: Newspaper, tint: 'bg-rose-100 text-rose-700' },
+    ],
+  },
 ]
 
 // The menu is wider than the sidebar, and the sidebar scrolls — so it is
 // positioned fixed under the button instead of inside the scroll box.
 function CreateMenu() {
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const [pos, setPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null)
   const open = pos !== null
   const ref = useRef<HTMLDivElement>(null)
   const btn = useRef<HTMLButtonElement>(null)
   const setOpen = (v: boolean) => {
     const r = btn.current?.getBoundingClientRect()
-    setPos(v && r ? { top: r.bottom + 8, left: r.left } : null)
+    // Never below the window: the menu scrolls inside what is left.
+    setPos(v && r ? { top: r.bottom + 8, left: r.left, maxHeight: window.innerHeight - r.bottom - 16 } : null)
   }
   useEffect(() => {
     if (!open) return
@@ -237,21 +257,28 @@ function CreateMenu() {
       {open && (
         <div
           style={pos}
-          className="fixed z-[60] w-72 max-w-[calc(100vw-1.5rem)] rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"
+          className="fixed z-[60] w-80 max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl"
         >
-          {CREATE.map((c) => (
-            <Link
-              key={c.href}
-              href={c.href}
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm text-zinc-800 hover:bg-zinc-100"
-            >
-              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${c.tint}`}>
-                <c.icon size={16} />
-              </span>
-              <span className="flex-1">{c.label}</span>
-              {c.badge && <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${c.badge}`}>NEW</span>}
-            </Link>
+          {CREATE.map((g) => (
+            <div key={g.group} role="group" aria-label={g.group}>
+              <p className="px-2 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-zinc-400 uppercase">{g.group}</p>
+              {g.items.map((c) => (
+                <Link
+                  key={c.href}
+                  href={c.href}
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-zinc-800 hover:bg-zinc-100"
+                >
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${c.tint}`}>
+                    <c.icon size={16} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block">{c.label}</span>
+                    <span className="block text-xs text-zinc-500">{c.sub}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -339,7 +366,7 @@ function WorkspaceMenu({
             </MenuLink>
           )}
           <MenuLink href="/app/brand" icon={Palette} onClick={() => setOpen(false)}>
-            Brand settings
+            Brand kit
           </MenuLink>
           <MenuLink href="/app/credits" icon={Coins} onClick={() => setOpen(false)}>
             Plan & credits

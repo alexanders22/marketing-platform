@@ -180,7 +180,7 @@ for (const vp of VIEWPORTS) {
     expect(box!.x).toBeGreaterThanOrEqual(0)
     expect(box!.x + box!.width).toBeLessThanOrEqual(vw)
     expect(box!.y + box!.height, 'Create menu clipped at the bottom').toBeLessThanOrEqual(vh)
-    for (const label of ['New post or thread', 'New AI social post', 'New AI social campaign', 'New blog', 'New AI blog', 'New AI blog campaign']) {
+    for (const label of ['Plan my marketing with AI', 'Post with AI', 'Write a post', 'Blog article with AI', 'Content series', 'Blog series']) {
       const l = menu.getByRole('link', { name: new RegExp(label) }).first()
       await expect(l).toBeInViewport({ ratio: 1 })
       // the item is on top (not covered)
@@ -210,12 +210,12 @@ for (const vp of VIEWPORTS) {
       // Create menu item navigates and closes the drawer
       await page.getByRole('button', { name: 'Open menu' }).click()
       await page.locator('div.fixed.inset-0 aside').getByRole('button', { name: 'Create new' }).click()
-      await page.getByRole('link', { name: /New AI social post/ }).click()
+      await page.getByRole('link', { name: /^Post with AI/ }).click()
       await expect(page).toHaveURL(/\/app\/create$/)
       await expect(page.locator('div.fixed.inset-0 aside')).toHaveCount(0)
     } else {
       await scope.getByRole('button', { name: 'Create new' }).click()
-      await menu.getByRole('link', { name: /New AI social post/ }).click()
+      await menu.getByRole('link', { name: /^Post with AI/ }).click()
       await expect(page).toHaveURL(/\/app\/create$/)
       await expect(menu).toHaveCount(0)
     }

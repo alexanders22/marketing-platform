@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { CalendarPlus, CheckCircle2, Eye, Flag, Megaphone, PauseCircle, PenLine, Repeat2, Sparkles, Target, TriangleAlert, Wallet, Wand2 } from 'lucide-react'
+import { CalendarPlus, CheckCircle2, Eye, Flag, Globe, Megaphone, PauseCircle, PenLine, Repeat2, Sparkles, Target, TriangleAlert, Wallet, Wand2 } from 'lucide-react'
 import { CompareBars, DeltaPill, Ring, StatTile } from '@/components/viz'
 import { SiFacebook, SiInstagram } from 'react-icons/si'
 import type { ReviewRec } from '@/lib/ai'
@@ -9,6 +9,7 @@ import { requireContext } from '@/lib/context'
 import { formatMoney, formatNumber } from '@/lib/format'
 import { WINDOWS, formatMetric, metricDef } from '@/lib/goal-metrics'
 import { prisma } from '@/lib/prisma'
+import { tagReport } from '@/lib/tag-report'
 import type { ReviewData, WeekFacts } from '@/lib/weekly'
 import { RecActions, ReviewNowButton } from './RecActions'
 
@@ -93,6 +94,9 @@ export default async function WeeklyPage() {
   })
   const latest = reviews[0]
   const canEdit = role !== 'EDITOR'
+  // The website's side (Loudpilot Tag): visits, leads and sales of the week.
+  const site = await prisma.site.findUnique({ where: { workspaceId: workspace.id }, select: { id: true, lastEventAt: true } })
+  const web = site?.lastEventAt ? (await tagReport(site.id, workspace.id, 7)).totals : null
   const data = latest?.data as ReviewData | undefined
   const facts = latest?.stats as WeekFacts | undefined
   const open = latest?.recommendations.filter((r) => r.status === 'OPEN') ?? []
@@ -125,6 +129,8 @@ export default async function WeeklyPage() {
         </div>
         {canEdit && <ReviewNowButton first={!latest} />}
       </div>
+
+      <WebsiteWeek web={web} />
 
       {!latest || !data || !facts ? (
         <section className="rounded-3xl border border-dashed border-violet-200 bg-violet-50/40 p-10 text-center">
@@ -366,5 +372,47 @@ export default async function WeeklyPage() {
         </>
       )}
     </div>
+  )
+}
+
+// Visitors, leads and sales from the website in the last 7 days (Loudpilot
+// Tag), or how to start seeing them.
+function WebsiteWeek({ web }: { web: Awaited<ReturnType<typeof tagReport>>['totals'] | null }) {
+  if (!web) {
+    return (
+      <section aria-label="Website results" className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-sky-200 bg-sky-50/50 p-4 text-sm">
+        <Globe size={18} className="text-sky-600" />
+        <p className="min-w-0 flex-1 text-zinc-700">See which ads and posts bring visitors, leads and sales from your website — install the Loudpilot Tag once.</p>
+        <Link href="/app/website/tag" className="rounded-lg bg-zinc-900 px-3 py-1.5 font-medium text-white hover:bg-zinc-800">
+          Install the tag
+        </Link>
+      </section>
+    )
+  }
+  const n = (x: number) => x.toLocaleString('en-US')
+  return (
+    <section aria-labelledby="website-week" className="rounded-2xl border border-zinc-200 bg-white p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <h2 id="website-week" className="mr-auto flex items-center gap-2 font-semibold">
+          <Globe size={16} className="text-sky-600" /> Website · last 7 days
+        </h2>
+        <Link href="/app/website/tag?d=7" className="text-sm font-medium text-indigo-600 hover:underline">
+          Where they came from →
+        </Link>
+      </div>
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          ['Visits', n(web.visits)],
+          ['From ads', n(web.fromAds)],
+          ['Leads', n(web.leads)],
+          ['Sales', web.purchases ? `${n(web.purchases)} · ${web.revenue.toLocaleString('en-US', { maximumFractionDigits: 2 })}${web.currency ? ` ${web.currency}` : ''}` : '0'],
+        ].map(([k, v]) => (
+          <div key={k} className="rounded-xl bg-zinc-50 p-3">
+            <dt className="text-xs text-zinc-500">{k}</dt>
+            <dd className="mt-1 text-lg font-semibold tabular-nums">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }

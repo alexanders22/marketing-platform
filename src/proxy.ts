@@ -14,6 +14,12 @@ export function proxy(req: NextRequest) {
     if (lang === 'ka' || lang === 'ru') return NextResponse.redirect(new URL(`/${lang}`, req.url))
     return NextResponse.next()
   }
+  // Back from a card payment started before /pay/done existed: the browser
+  // left the cookie out of the payment site's request, it is not a logout.
+  // (`back` marks the second try: then it really is the login page.)
+  if (path === '/app/credits' && req.nextUrl.searchParams.has('payment') && !req.nextUrl.searchParams.has('back') && !req.cookies.has('khma_session')) {
+    return NextResponse.redirect(new URL(`/pay/done?payment=${encodeURIComponent(req.nextUrl.searchParams.get('payment')!)}`, req.url), 303)
+  }
   // Optimistic check only: no cookie → straight to login. The real session
   // validation happens server-side in requireUser().
   if ((path === '/app' || path.startsWith('/app/') || path === '/demo-shop') && !req.cookies.has('khma_session')) {

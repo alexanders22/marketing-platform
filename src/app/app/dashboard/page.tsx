@@ -180,6 +180,9 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
         </div>
         <DateFilter period={period} range={range} />
         {d.connected.ads > 0 && <SyncButton />}
+        <Link href={`/app/results?days=${period}`} className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50">
+          From view to sale <ArrowRight size={14} />
+        </Link>
       </div>
 
       {/* Hero: plan + momentum */}
@@ -521,7 +524,7 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
           )}
 
           {d.campaigns.length > 0 && (
-            <Section id="campaigns-heading" icon={<BarChart3 size={16} />} tint="bg-zinc-100 text-zinc-700" title="Campaigns">
+            <Section id="campaigns-heading" icon={<BarChart3 size={16} />} tint="bg-zinc-100 text-zinc-700" title="Ad campaigns">
               <div className={`${card} overflow-x-auto`}>
                 <table className="w-full min-w-[860px] text-sm">
                   <thead className="text-left text-xs text-zinc-500">

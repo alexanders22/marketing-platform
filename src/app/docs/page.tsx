@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowRight, BookOpen, KeyRound, Webhook, Zap } from 'lucide-react'
 import { CONTACT } from '@/components/landing/site'
 import { prices } from '@/lib/credits'
+import { creditsLabel } from '@/lib/pricing'
 import { METRICS, RISK_BAND, WINDOWS } from '@/lib/goal-metrics'
 import { TOOLS } from '@/lib/mcp/tools'
 import { CodeBlock } from './CodeBlock'
@@ -718,12 +719,12 @@ return hmac.compare_digest(expected, signature)`,
         <Params
           title="Action"
           rows={[
-            ['Post caption', `${COST.postText} credit`, 'AI-written post with hashtags.'],
-            ['Image', `${COST.image} credit`, 'Per generated image.'],
-            ['Campaign post', `${COST.campaignPost} credit`, 'Per post in an AI campaign.'],
-            ['Blog outline', `${COST.blogOutline} credit`, 'Per article in a series plan.'],
-            ['Blog article', `${COST.blogArticle} credits`, 'Full article.'],
-            ['Performance summary', `${COST.summary} credit`, 'AI summary of the dashboard.'],
+            ['Post caption', creditsLabel(COST.postText), 'AI-written post with hashtags.'],
+            ['Image', creditsLabel(COST.image), 'Per generated image.'],
+            ['Campaign post', creditsLabel(COST.campaignPost), 'Per post in an AI campaign.'],
+            ['Blog outline', creditsLabel(COST.blogOutline), 'Per article in a series plan.'],
+            ['Blog article', creditsLabel(COST.blogArticle), 'Full article.'],
+            ['Performance summary', creditsLabel(COST.summary), 'AI summary of the dashboard.'],
           ]}
         />
         <p>Publishing, analytics, goals, alerts and webhooks do not use credits.</p>

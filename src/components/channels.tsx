@@ -1,6 +1,6 @@
 'use client'
 
-import type { ComponentType } from 'react'
+import { useState, type ComponentType } from 'react'
 import { FaLinkedinIn } from 'react-icons/fa6'
 import { SiFacebook, SiInstagram, SiPinterest, SiTelegram, SiThreads, SiTiktok, SiX, SiYoutube } from 'react-icons/si'
 
@@ -18,11 +18,18 @@ export const NETWORKS: { id: Network; name: string; icon: ComponentType<{ size?:
   { id: 'YOUTUBE', name: 'YouTube', icon: SiYoutube, color: '#FF0000', limit: 5000 },
 ]
 
-export function ChannelPicker({ value, onChange }: { value: Network[]; onChange: (v: Network[]) => void }) {
+// With `connected` (once anything is connected): the connected networks and
+// any already picked show; the rest wait behind "+ N more", for posts planned
+// before connecting.
+export function ChannelPicker({ value, onChange, connected }: { value: Network[]; onChange: (v: Network[]) => void; connected?: Network[] }) {
+  const [more, setMore] = useState(false)
+  const shown = !connected?.length || more ? NETWORKS : NETWORKS.filter((n) => connected.includes(n.id) || value.includes(n.id))
+  const hidden = NETWORKS.length - shown.length
   return (
     <div className="flex flex-wrap gap-2">
-      {NETWORKS.map((n) => {
+      {shown.map((n) => {
         const on = value.includes(n.id)
+        const off = Boolean(connected?.length) && !connected!.includes(n.id)
         return (
           <button
             key={n.id}
@@ -32,12 +39,17 @@ export function ChannelPicker({ value, onChange }: { value: Network[]; onChange:
             onClick={() => onChange(on ? value.filter((v) => v !== n.id) : [...value, n.id])}
             className={`grid h-10 w-10 place-items-center rounded-xl border transition ${
               on ? 'border-zinc-900 bg-white shadow-sm' : 'border-zinc-200 bg-white opacity-50 grayscale hover:opacity-80'
-            }`}
+            }${off ? ' border-dashed' : ''}`}
           >
             <n.icon size={18} color={n.color} />
           </button>
         )
       })}
+      {hidden > 0 && (
+        <button type="button" onClick={() => setMore(true)} className="h-10 rounded-xl border border-dashed border-zinc-300 px-3 text-xs font-medium text-zinc-600 hover:bg-zinc-50">
+          + {hidden} more
+        </button>
+      )}
     </div>
   )
 }

@@ -53,14 +53,15 @@ const path = (url: string | null) => {
   }
 }
 
+// The `days` before `now` (an earlier `now` gives the period before).
 export async function tagReport(siteId: string, workspaceId: string, days: number, now = new Date()) {
   const from = new Date(now.getTime() - days * 86_400_000)
   const [visits, conversions] = await Promise.all([
     prisma.visit.findMany({
-      where: { siteId, test: false, startedAt: { gte: from } },
+      where: { siteId, test: false, startedAt: { gte: from, lt: now } },
       select: { id: true, visitorId: true, source: true, medium: true, campaign: true, clickKind: true, startedAt: true },
     }),
-    prisma.tagEvent.findMany({ where: { siteId, test: false, createdAt: { gte: from }, name: { in: CONVERSIONS } }, orderBy: { createdAt: 'asc' } }),
+    prisma.tagEvent.findMany({ where: { siteId, test: false, createdAt: { gte: from, lt: now }, name: { in: CONVERSIONS } }, orderBy: { createdAt: 'asc' } }),
   ])
 
   // Every visit of the people who converted, to credit direct conversions.
@@ -111,7 +112,7 @@ export async function tagReport(siteId: string, workspaceId: string, days: numbe
   if (named.length) {
     const ads = await prisma.adCampaign.findMany({
       where: { workspaceId, OR: [{ externalId: { in: named } }, { name: { in: named } }] },
-      include: { days: { where: { date: { gte: from.toISOString().slice(0, 10) } }, select: { spend: true } } },
+      include: { days: { where: { date: { gte: from.toISOString().slice(0, 10), lte: now.toISOString().slice(0, 10) } }, select: { spend: true } } },
     })
     for (const r of rows.values()) {
       const ad = ads.find((a) => a.externalId === r.campaign) ?? ads.find((a) => a.name === r.campaign)

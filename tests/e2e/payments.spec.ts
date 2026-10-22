@@ -67,7 +67,7 @@ test('a credit pack: Monrem checkout, callback, credits added once', async () =>
   const order = monrem.orders.get(id)!
   expect(order.body).toMatchObject({ amount: 944, currency: 'USD', callback_url: webhook, billing_street: '1 Rustaveli Ave', billing_city: 'Tbilisi', billing_post_code: '0108', billing_country: 'GE', customer_phone: '555123456', customer_phone_code: '995', customer_first_name: 'Nino', customer_last_name: 'Beridze', billing_first_name: 'Nino', billing_last_name: 'Beridze' })
   expect(order.body).toMatchObject({ billing_state: 'Tbilisi' })
-  expect(String(order.body.return_url)).toContain(`/app/credits?payment=${id}`)
+  expect(String(order.body.return_url)).toContain(`/pay/done?payment=${id}`)
 
   await page.getByRole('link', { name: 'Pay now' }).click()
   await page.waitForURL(/\/app\/credits\?payment=/)

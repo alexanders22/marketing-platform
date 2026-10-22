@@ -46,5 +46,5 @@ export default async function PlannerPage({ searchParams }: PageProps<'/app/plan
     status: p.status,
   }))
 
-  return <Planner view={view} month={month} posts={posts} now={now.getTime()} />
+  return <Planner view={view} month={month} posts={posts} now={now.getTime()} chosen={typeof sp.view === 'string'} />
 }

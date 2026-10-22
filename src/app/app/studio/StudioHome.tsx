@@ -99,7 +99,9 @@ export function StudioHome({
         </div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-        {TEMPLATES.filter((t) => cat === 'all' || t.category === cat).map((t) => {
+        {TEMPLATES.filter((t) => cat === 'all' || t.category === cat)
+          .sort((a, b) => TEMPLATE_CATEGORIES.findIndex((c) => c.id === a.category) - TEMPLATE_CATEGORIES.findIndex((c) => c.id === b.category))
+          .map((t) => {
           const doc = resizeDoc(t.build(pal, brandName), { w: 1080, h: 1080 }, sz)
           return (
             <button key={t.id} onClick={() => create(t.id)} disabled={busy !== null} className="group text-left">
