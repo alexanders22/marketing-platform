@@ -87,26 +87,26 @@ test('landing: pricing monthly / yearly toggle', async ({ page }) => {
   const pricing = page.locator('section#pricing')
   const prices = pricing.locator('span.text-4xl')
   await expect(pricing.getByRole('button', { name: 'Monthly' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(prices).toHaveText(['$15', '$29', '$79', '$199'])
-  await expect(pricing.getByText('Billed monthly')).toHaveCount(4)
+  await expect(prices).toHaveText(['₾79', '₾199', '₾529'])
+  await expect(pricing.getByText('Billed monthly + VAT')).toHaveCount(3)
   await pricing.getByRole('button', { name: /Yearly/ }).click()
   await expect(pricing.getByRole('button', { name: /Yearly/ })).toHaveAttribute('aria-pressed', 'true')
-  await expect(prices).toHaveText(['$13', '$24', '$66', '$166'])
-  await expect(pricing.getByText(/Billed yearly/)).toHaveText(['Billed yearly — $150 · ₾390', 'Billed yearly — $290 · ₾790', 'Billed yearly — $790 · ₾2,190', 'Billed yearly — $1,990 · ₾5,490'])
+  await expect(prices).toHaveText(['₾66', '₾166', '₾441'])
+  await expect(pricing.getByText(/Billed yearly/)).toHaveText(['Billed yearly — ₾790 · $290 + VAT', 'Billed yearly — ₾1,990 · $750 + VAT', 'Billed yearly — ₾5,290 · $1,990 + VAT'])
   await pricing.getByRole('button', { name: 'Monthly' }).click()
-  await expect(prices).toHaveText(['$15', '$29', '$79', '$199'])
+  await expect(prices).toHaveText(['₾79', '₾199', '₾529'])
 })
 
-test('landing: prices include VAT and compare with other tools', async ({ page }) => {
+test('landing: prices without VAT, compared with other tools', async ({ page }) => {
   await page.goto('/#pricing')
   const pricing = page.locator('section#pricing')
-  await expect(pricing.getByText('Prices in US dollars and Georgian lari, 18% VAT included.')).toBeVisible()
+  await expect(pricing.getByText('Prices in Georgian lari and US dollars, 18% VAT not included.')).toBeVisible()
   const table = pricing.getByRole('table', { name: 'Same team, compared' })
   await expect(table.getByRole('row')).toHaveCount(6)
-  await expect(table.getByRole('row').filter({ hasText: 'Loudpilot' })).toContainText('$79incl. VAT')
+  await expect(table.getByRole('row').filter({ hasText: 'Loudpilot' })).toContainText('$75+ VAT')
   await expect(table.getByRole('row').filter({ hasText: 'Hootsuite' })).toContainText('$995$199 × 5 users, billed yearly')
   await page.goto('/ka#pricing')
-  await expect(page.getByText('ფასები აშშ დოლარსა და ქართულ ლარშია, 18% დღგ-ს ჩათვლით.')).toBeVisible()
+  await expect(page.getByText('ფასები ქართულ ლარსა და აშშ დოლარშია, 18% დღგ-ს გარეშე.')).toBeVisible()
   await page.goto('/ru#pricing')
   await expect(page.getByRole('table', { name: 'Та же команда — сравнение' })).toBeVisible()
 })
@@ -116,7 +116,7 @@ test('landing: CTAs go to /signup and /login', async ({ page }) => {
   await expect(page.locator('header').getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login')
   await expect(page.locator('header').getByRole('link', { name: 'Try free' })).toHaveAttribute('href', '/signup')
   const trial = page.locator('section#pricing').getByRole('link', { name: 'Start free trial' })
-  await expect(trial).toHaveCount(4)
+  await expect(trial).toHaveCount(3)
   for (const h of await trial.evaluateAll((as) => as.map((a) => a.getAttribute('href')))) expect(h).toBe('/signup')
   const external = await page.$$eval('a[href]', (as) =>
     // mailto: is the intended contact channel for demo / partnership / support.
@@ -155,7 +155,7 @@ test.describe('landing mobile', () => {
     await expect(page.locator('section#pricing h2')).toBeInViewport()
     // pricing toggle fits
     await page.locator('section#pricing').getByRole('button', { name: /Yearly/ }).click()
-    await expect(page.locator('section#pricing span.text-4xl').first()).toHaveText('$13')
+    await expect(page.locator('section#pricing span.text-4xl').first()).toHaveText('₾66')
     // close via the X button
     await page.getByRole('button', { name: 'Open menu' }).click()
     await page.getByRole('button', { name: 'Close menu' }).click()

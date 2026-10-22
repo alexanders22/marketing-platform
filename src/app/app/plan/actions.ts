@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { TRIAL_CREDITS, TRIAL_DAYS } from '@/lib/plans'
 
 const Choice = z.object({
-  plan: z.enum(['SOLO', 'STARTER', 'TEAM', 'AGENCY']),
+  plan: z.enum(['STARTER', 'TEAM', 'AGENCY']),
   cycle: z.enum(['MONTHLY', 'YEARLY']),
 })
 

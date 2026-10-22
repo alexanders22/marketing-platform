@@ -2,15 +2,14 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, CheckCircle2, Clapperboard, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Share2, Sprout, UserRound, Users, X, Code2 } from 'lucide-react'
+import { Building2, CheckCircle2, Clapperboard, Coins, Compass, FileText, Film, ImageIcon, PenLine, Rocket, Share2, Users, X, Code2 } from 'lucide-react'
 import { DEFAULT_PRICING } from '@/lib/pricing'
 import { BUNDLES, PLANS, TRIAL_DAYS, yearlyTotal, type PickerPrices, type PlanId } from '@/lib/plans'
 import { VAT } from '@/lib/tax'
 import { choosePlan } from '@/app/app/plan/actions'
 
-const ICON = { SOLO: Sprout, STARTER: Rocket, TEAM: Users, AGENCY: Building2 }
+const ICON = { STARTER: Rocket, TEAM: Users, AGENCY: Building2 }
 const TINT = {
-  SOLO: 'bg-amber-50 text-amber-600',
   STARTER: 'bg-emerald-50 text-emerald-600',
   TEAM: 'bg-sky-50 text-sky-600',
   AGENCY: 'bg-indigo-50 text-indigo-600',
@@ -104,7 +103,7 @@ export function PlanPicker({
 
         {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-3">
           {PLANS.map((base) => {
             const live = prices?.plans.find((x) => x.id === base.id)
             const p = { ...base, monthly: live?.monthly ?? base.monthly, monthlyGel: live?.monthlyGel ?? base.monthlyGel, credits: live?.credits ?? base.credits, bundle: live?.bundle ?? BUNDLES[base.id], veo: live?.veo ?? DEFAULT_PRICING.veoSecondsPerMonth[base.id] }
@@ -132,11 +131,11 @@ export function PlanPicker({
                 </div>
                 <p className="mt-3 min-h-10 text-sm text-zinc-500">{p.blurb}</p>
                 <p className="mt-4 text-3xl font-semibold text-zinc-900">
-                  ${shown.toLocaleString()}
+                  ₾{shownGel.toLocaleString('en-US')}
                   <span className="text-base font-normal text-zinc-500"> / {yearly ? 'year' : 'month'}</span>
-                  <span className="ml-2 text-sm font-normal text-zinc-400">₾{shownGel.toLocaleString('en-US')}</span>
+                  <span className="ml-2 text-sm font-normal text-zinc-400">${shown.toLocaleString('en-US')}</span>
                 </p>
-                <p className="text-xs text-zinc-500">{yearly ? 'Billed yearly' : 'Billed monthly'} · incl. {Math.round(VAT.rate * 100)}% VAT</p>
+                <p className="text-xs text-zinc-500">{yearly ? 'Billed yearly' : 'Billed monthly'} · {Math.round(VAT.rate * 100)}% VAT not included</p>
                 <button
                   onClick={() => pick(p.id)}
                   disabled={pending}
@@ -150,7 +149,6 @@ export function PlanPicker({
                 </button>
                 <p className="mt-5 text-xs font-semibold tracking-wide text-zinc-500">WHAT&apos;S INCLUDED</p>
                 <ul className="mt-2 space-y-2.5 text-sm text-zinc-700">
-                  <Row icon={UserRound} label="Users" value={p.users} />
                   <Row icon={Building2} label="Companies" value={p.companies} />
                   <Row icon={Share2} label="Social profiles" value={p.profiles} />
                   <Row icon={Code2} label="API & webhooks" value={p.id === 'AGENCY' ? 'Included' : '—'} />

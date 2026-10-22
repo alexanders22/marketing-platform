@@ -29,31 +29,31 @@ test.beforeAll(async ({ browser }) => {
   page = await browser.newPage()
   ;({ email } = await newAccount(page, 'renew'))
   accountId = sql(`select m."accountId" from "AccountMember" m join "User" u on u.id=m."userId" where u.email='${email}'`)
-  // A Team month paid until the day after tomorrow, trial long over.
+  // A Business month paid until the day after tomorrow, trial long over.
   sql(`update "Account" set plan='TEAM', "billingCycle"='MONTHLY', "trialEndsAt"=now() - interval '40 days', "paidUntil"=now() + interval '2 days' where id='${accountId}'`)
 })
 test.afterAll(() => page.close())
 
 test('three days before the end: one reminder, its button opens a one-click renewal', async () => {
   expect((await tick()).reminders).toBeGreaterThanOrEqual(1)
-  const mail = await latestMail(email, 'Your Loudpilot Team plan ends on')
-  expect(mail.Text).toContain('Your Team plan is paid until')
+  const mail = await latestMail(email, 'Your Loudpilot Business plan ends on')
+  expect(mail.Text).toContain('Your Business plan is paid until')
   await tick()
-  expect(await mails('Your Loudpilot Team plan ends on')).toBe(1)
+  expect(await mails('Your Loudpilot Business plan ends on')).toBe(1)
 
   await page.goto(linkFrom(mail.Text, '/app/credits?renew=1'))
   const renew = page.getByRole('region', { name: 'Renew your plan' })
   await expect(renew.getByText(/^Paid until .*Renewing adds a month from that date\.$/)).toBeVisible()
-  await expect(renew.getByRole('button', { name: 'Renew 1 month · $79' })).toBeVisible()
+  await expect(renew.getByRole('button', { name: 'Renew 1 month · $75 + VAT' })).toBeVisible()
 })
 
 test('the day it ends: one more reminder and a renew banner in the app', async () => {
   sql(`update "Account" set "paidUntil"=now() - interval '1 hour' where id='${accountId}'`)
   await tick()
-  const mail = await latestMail(email, 'Your Loudpilot Team plan has ended')
+  const mail = await latestMail(email, 'Your Loudpilot Business plan has ended')
   expect(mail.Text).toContain('Paid features are paused until you renew')
   await tick()
-  expect(await mails('Your Loudpilot Team plan has ended')).toBe(1)
+  expect(await mails('Your Loudpilot Business plan has ended')).toBe(1)
 
   await page.goto('/app/dashboard')
   await expect(page.getByText(/^Your plan ended on /)).toBeVisible()

@@ -50,10 +50,10 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
   const [plans, pricing, value] = await Promise.all([getPlans(), getPricing(), creditValue()])
   const plan = plans.find((p) => p.id === account.plan)
   const worth = creditMoney(account.creditBalance, value)
-  // Plan prices in what the card is charged in.
+  // Plan prices in what the card is charged in; VAT is added at checkout.
   const cur = monremCurrency()
-  const monthly = plan && priceLabel({ usd: plan.monthly, gel: plan.monthlyGel }, cur)
-  const yearly = plan && priceLabel({ usd: yearlyTotal(plan.monthly), gel: yearlyTotal(plan.monthlyGel) }, cur)
+  const monthly = plan && `${priceLabel({ usd: plan.monthly, gel: plan.monthlyGel }, cur)} + VAT`
+  const yearly = plan && `${priceLabel({ usd: yearlyTotal(plan.monthly), gel: yearlyTotal(plan.monthlyGel) }, cur)} + VAT`
   const trial = account.trialEndsAt && account.trialEndsAt > new Date()
   const active = billingState(account) === 'active'
   const renewing = await prisma.subscription.findFirst({ where: { accountId: account.id, status: 'ACTIVE' } })
@@ -142,7 +142,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
         <h2 id="buy-heading" className="font-semibold">
           Buy more credits
         </h2>
-        <p className="mt-0.5 text-sm text-zinc-500">On top of your plan, they never expire. Prices include {Math.round(VAT.rate * 100)}% VAT.</p>
+        <p className="mt-0.5 text-sm text-zinc-500">On top of your plan, they never expire. Prices without VAT: {Math.round(VAT.rate * 100)}% is added at checkout.</p>
         <ul className="mt-4 grid gap-3 sm:grid-cols-3" aria-label="Credit packs">
           {pricing.packs.map((pk) => {
             const save = 1 - pk.priceUsd / (pk.credits * pricing.creditPriceUsd)

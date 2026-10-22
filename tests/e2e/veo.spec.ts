@@ -85,13 +85,13 @@ test('render with the clip and its own sound', async () => {
 })
 
 test('monthly Veo limit: the meter, refunds give seconds back, over the limit is refused', async () => {
-  // Starter: 16 s a month. One 4 s clip made, the failed Pro clip given back.
+  // Start: 10 s a month. One 4 s clip made, the failed Pro clip given back.
   await page.getByRole('button', { name: 'Generate clip with AI' }).click()
   await expect(page.getByText('AI clips this month')).toBeVisible()
-  await expect(page.getByText('4 / 16s')).toBeVisible()
-  // Pretend 10 more seconds were used this month: 2 s left.
-  sql(`insert into "CreditEntry"(id,"accountId",amount,reason,note,action,units) values ('ce${Date.now()}','${accountId}',-30,'AI_VIDEO','test usage','clipQuick',10)`)
-  sql(`update "Account" set "creditBalance"="creditBalance"+30 where id='${accountId}'`)
+  await expect(page.getByText('4 / 10s')).toBeVisible()
+  // Pretend 4 more seconds were used this month: 2 s left.
+  sql(`insert into "CreditEntry"(id,"accountId",amount,reason,note,action,units) values ('ce${Date.now()}','${accountId}',-12,'AI_VIDEO','test usage','clipQuick',4)`)
+  sql(`update "Account" set "creditBalance"="creditBalance"+12 where id='${accountId}'`)
   await page.reload()
   await page.getByRole('button', { name: 'Generate clip with AI' }).click()
   await page.getByLabel('Clip description').fill('[test] over the limit')
@@ -100,7 +100,7 @@ test('monthly Veo limit: the meter, refunds give seconds back, over the limit is
   sql(`delete from "CreditEntry" where "accountId"='${accountId}' and note='test usage'`)
   await page.reload()
   await page.getByRole('button', { name: 'Generate clip with AI' }).click()
-  await expect(page.getByText('4 / 16s')).toBeVisible()
+  await expect(page.getByText('4 / 10s')).toBeVisible()
 })
 
 test('trial accounts see Veo locked and cannot start a clip', async ({ browser }) => {

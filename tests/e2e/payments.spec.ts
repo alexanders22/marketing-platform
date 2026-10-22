@@ -62,10 +62,10 @@ test('a credit pack: Monrem checkout, callback, credits added once', async () =>
   await form.getByLabel('Phone', { exact: true }).fill('555 12-34-56')
   await form.getByRole('button', { name: 'Continue to payment' }).click()
   await page.waitForURL(new RegExp(`127.0.0.1:${FAKE_MONREM_PORT}/pay/`))
-  await expect(page.getByRole('heading', { name: 'Pay 8.00 USD' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Pay 9.44 USD' })).toBeVisible()
   const [id] = lastPayment()
   const order = monrem.orders.get(id)!
-  expect(order.body).toMatchObject({ amount: 800, currency: 'USD', callback_url: webhook, billing_street: '1 Rustaveli Ave', billing_city: 'Tbilisi', billing_post_code: '0108', billing_country: 'GE', customer_phone: '555123456', customer_phone_code: '995', customer_first_name: 'Nino', customer_last_name: 'Beridze', billing_first_name: 'Nino', billing_last_name: 'Beridze' })
+  expect(order.body).toMatchObject({ amount: 944, currency: 'USD', callback_url: webhook, billing_street: '1 Rustaveli Ave', billing_city: 'Tbilisi', billing_post_code: '0108', billing_country: 'GE', customer_phone: '555123456', customer_phone_code: '995', customer_first_name: 'Nino', customer_last_name: 'Beridze', billing_first_name: 'Nino', billing_last_name: 'Beridze' })
   expect(order.body).toMatchObject({ billing_state: 'Tbilisi' })
   expect(String(order.body.return_url)).toContain(`/app/credits?payment=${id}`)
 
@@ -74,7 +74,7 @@ test('a credit pack: Monrem checkout, callback, credits added once', async () =>
   await expect(page.getByText('Payment received — 100 credits added.')).toBeVisible()
   expect(balance()).toBe(before + 100)
   await expect(page.getByText('Billing: Nino Beridze, 1 Rustaveli Ave, Tbilisi, Tbilisi, 0108, Georgia · +995 555 12 34 56')).toBeVisible()
-  expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PACK', '800', 'USD', 'true'])
+  expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PACK', '944', 'USD', 'true'])
   expect(sql(`select count(*) from "CreditEntry" where "idempotencyKey"='payment:${id}' and reason='PURCHASE' and amount=100`)).toBe('1')
 
   // Replayed callbacks and a reload never add credits twice.
@@ -156,7 +156,7 @@ test('when Monrem allows framing, the payment page opens in a window on our page
     await expect(pay).toBeVisible()
     expect(page.url()).toMatch(/\/app\/credits$/)
     const frame = page.frameLocator('iframe[title="Monrem payment"]')
-    await expect(frame.getByRole('heading', { name: 'Pay 8.00 USD' })).toBeVisible()
+    await expect(frame.getByRole('heading', { name: 'Pay 9.44 USD' })).toBeVisible()
     // Paid inside the frame: the return page takes over the tab.
     await frame.getByRole('link', { name: 'Pay now' }).click()
     await page.waitForURL(/\/app\/credits\?payment=/)
@@ -170,7 +170,7 @@ test('when Monrem allows framing, the payment page opens in a window on our page
 
 test.describe('auto-renewal', () => {
   test.beforeAll(() => {
-    // Starter monthly renews at the same $29; the yearly Monrem plan has an old price, so it can't.
+    // Start monthly renews at the same $34.22 ($29 + VAT); the yearly Monrem plan has an old price, so it can't.
     sql(`update "Account" set plan='STARTER' where id='${accountId}'`)
     sql(`insert into "Setting"(key, value, "updatedAt") values ('monremPlans', '{"STARTER_MONTHLY":"ref-starter-m","STARTER_YEARLY":"ref-starter-y-old"}', now()) on conflict (key) do update set value=excluded.value`)
   })
@@ -182,9 +182,9 @@ test.describe('auto-renewal', () => {
     // The yearly price differs from Monrem's plan: that one is paid once only.
     await expect(page.getByRole('button', { name: /^1 year · \$/ })).toBeVisible()
     const start = paidUntil()
-    await page.getByRole('button', { name: '$29 / month' }).click()
+    await page.getByRole('button', { name: '$29 + VAT / month' }).click()
     await page.waitForURL(/\/pay\//)
-    await expect(page.getByRole('heading', { name: 'Pay 29.00 USD' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Pay 34.22 USD' })).toBeVisible()
     await page.getByRole('link', { name: 'Pay now' }).click()
     await expect(page.getByText(/your plan is paid until .* and renews automatically/)).toBeVisible()
     await expect(page.getByText(/^Renews automatically every month/)).toBeVisible()

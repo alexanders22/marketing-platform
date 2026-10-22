@@ -8,7 +8,7 @@ import { yearlyTotal } from '@/lib/plans'
 import { priceLabel } from '@/lib/pricing'
 import { saveRecurringPlans } from '../actions'
 import { ActionForm } from '../ui'
-import { VAT } from '@/lib/tax'
+import { VAT, grossOf } from '@/lib/tax'
 import { card, daysAgo, fmtDateTime, REASON, Stat } from '../shared'
 
 const KINDS: { id: string; label: string; reasons: CreditReason[] }[] = [
@@ -19,6 +19,8 @@ const KINDS: { id: string; label: string; reasons: CreditReason[] }[] = [
 
 // Card payments are not connected yet: purchases are booked by hand (bank
 // transfer, invoice) from a company's page and land here with trial grants.
+const withVat = (o: { usd: number; gel: number }) => ({ usd: grossOf(o.usd), gel: grossOf(o.gel) })
+
 export default async function AdminPayments({ searchParams }: PageProps<'/admin/payments'>) {
   const sp = await searchParams
   const kind = KINDS.find((k) => k.id === sp.kind) ?? KINDS[0]
@@ -47,14 +49,14 @@ export default async function AdminPayments({ searchParams }: PageProps<'/admin/
         prisma.subscription.findMany({ orderBy: { createdAt: 'desc' }, take: 30, include: { account: { select: { id: true, name: true } } } }),
       ])
     : [{}, { list: [] as MonremPlan[], error: null }, []]
-  // Each slot with the price its Monrem plan must have (Admin → Pricing).
+  // Each slot with the price its Monrem plan must have: Admin → Pricing plus VAT.
   const cur = monremCurrency()
   const slots = (await getPlans()).flatMap((p) =>
     (['MONTHLY', 'YEARLY'] as const).map((cycle) => ({
       plan: p,
       cycle,
       key: `${p.id}_${cycle}` as const,
-      price: priceLabel(cycle === 'YEARLY' ? { usd: yearlyTotal(p.monthly), gel: yearlyTotal(p.monthlyGel) } : { usd: p.monthly, gel: p.monthlyGel }, cur),
+      price: priceLabel(withVat(cycle === 'YEARLY' ? { usd: yearlyTotal(p.monthly), gel: yearlyTotal(p.monthlyGel) } : { usd: p.monthly, gel: p.monthlyGel }), cur),
     })),
   )
   const ready = enabled ? await Promise.all(slots.map((x) => recurringOption(x.plan.id, x.cycle))) : []
@@ -62,7 +64,7 @@ export default async function AdminPayments({ searchParams }: PageProps<'/admin/
   const cardTotals = cards
     .filter((c) => c.status === 'APPROVED' && c.createdAt >= since)
     .reduce<Record<string, number>>((t, c) => ({ ...t, [c.currency]: (t[c.currency] ?? 0) + c.amount / 100 }), {})
-  // Money booked in the last 30 days (list prices include 18% VAT).
+  // Money booked in the last 30 days (list prices plus 18% VAT).
   const money = bookings.reduce(
     (s, b) => {
       const d = (b.details ?? {}) as { gross?: number; vat?: number; net?: number }

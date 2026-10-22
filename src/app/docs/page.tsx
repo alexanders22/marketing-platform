@@ -313,7 +313,7 @@ export default async function DocsPage() {
               currency: 'GEL',
               entries: [
                 { amount: -1, reason: 'AI_TEXT', note: 'Post caption', createdAt: '2026-10-03T09:30:00.000Z' },
-                { amount: 400, reason: 'PURCHASE', note: 'Starter plan', createdAt: '2026-10-01T08:00:00.000Z' },
+                { amount: 200, reason: 'PURCHASE', note: 'Start plan', createdAt: '2026-10-01T08:00:00.000Z' },
               ],
             }}
           />
