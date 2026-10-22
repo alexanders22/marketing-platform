@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { PROFILE_NETWORKS } from '@/lib/profiles'
 import { unseal } from '@/lib/signed'
 import { terminalUrl } from '@/lib/hosts'
-import { planLimits } from '@/lib/plans'
+import { limitsFor, serviceOn } from '@/lib/plans'
 
 // Meta sends the person back here. Every Page they picked becomes a FACEBOOK
 // account, its linked Instagram professional account an INSTAGRAM account,
@@ -23,6 +23,7 @@ const PARTNER_REASON: Record<string, string> = {
   'meta-api': 'meta_error',
   'meta-empty': 'nothing_shared',
   profiles: 'profile_limit',
+  plan: 'plan_ended',
 }
 
 export async function GET(req: NextRequest) {
@@ -117,38 +118,47 @@ export async function GET(req: NextRequest) {
   // Social profiles (Pages and Instagram accounts) count against the plan,
   // across all companies of the account; ad accounts don't. Profiles already
   // connected are refreshed, new ones are added while there is room.
-  const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { account: { select: { id: true, plan: true } } } })
-  let skipped = 0
-  let allowed = rows
-  if (ws?.account) {
-    const limit = planLimits(ws.account.plan).profiles
-    const existing = await prisma.socialAccount.findMany({
-      where: { workspace: { accountId: ws.account.id }, network: { in: PROFILE_NETWORKS } },
-      select: { workspaceId: true, network: true, externalId: true },
-    })
-    const known = new Set(existing.filter((e) => e.workspaceId === workspaceId).map((e) => `${e.network}:${e.externalId}`))
-    let room = limit - existing.length
-    allowed = rows.filter((r) => {
-      if (r.network === 'META_ADS' || known.has(`${r.network}:${r.externalId}`)) return true
-      if (room > 0) {
-        room--
-        return true
-      }
-      skipped++
-      return false
-    })
-    if (allowed.length === 0) return back(`error=profiles`)
-  }
-
-  const saved = await prisma.$transaction(
-    allowed.map(({ token, ...r }) =>
-      prisma.socialAccount.upsert({
-        where: { workspaceId_network_externalId: { workspaceId, network: r.network, externalId: r.externalId } },
-        create: { workspaceId, ...r, ...base, accessTokenEnc: encrypt(token) },
-        update: { ...r, ...base, accessTokenEnc: encrypt(token) },
-      }),
-    ),
-  )
+  const ws = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { account: { select: { id: true, plan: true, partnerId: true, trialEndsAt: true, paidUntil: true } } },
+  })
+  if (!serviceOn(ws?.account)) return back('error=plan')
+  // One connect at a time per account, so two can't both use the last place.
+  const { saved, allowed, skipped } = await prisma.$transaction(async (tx) => {
+    let skipped = 0
+    let allowed = rows
+    if (ws?.account) {
+      await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'profiles:' + ws.account.id}))`
+      const limit = limitsFor(ws.account).profiles
+      const existing = await tx.socialAccount.findMany({
+        where: { workspace: { accountId: ws.account.id }, network: { in: PROFILE_NETWORKS } },
+        select: { workspaceId: true, network: true, externalId: true },
+      })
+      const known = new Set(existing.filter((e) => e.workspaceId === workspaceId).map((e) => `${e.network}:${e.externalId}`))
+      let room = limit - existing.length
+      allowed = rows.filter((r) => {
+        if (r.network === 'META_ADS' || known.has(`${r.network}:${r.externalId}`)) return true
+        if (room > 0) {
+          room--
+          return true
+        }
+        skipped++
+        return false
+      })
+    }
+    const saved = []
+    for (const { token, ...r } of allowed) {
+      saved.push(
+        await tx.socialAccount.upsert({
+          where: { workspaceId_network_externalId: { workspaceId, network: r.network, externalId: r.externalId } },
+          create: { workspaceId, ...r, ...base, accessTokenEnc: encrypt(token) },
+          update: { ...r, ...base, accessTokenEnc: encrypt(token) },
+        }),
+      )
+    }
+    return { saved, allowed, skipped }
+  })
+  if (allowed.length === 0) return back(`error=profiles`)
   // Read ad campaigns, then post and ad history and the audit, right away
   // instead of waiting for the ticker.
   after(async () => {

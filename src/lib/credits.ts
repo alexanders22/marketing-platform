@@ -122,15 +122,16 @@ const CLIP_ACTIONS = ['clipQuick', 'clipPro', 'clipCinema']
 
 // Seconds of AI clips an account used this calendar month (UTC): charges
 // count, refunds (negative units) give them back.
-export async function veoSecondsUsed(accountId: string, now = new Date()) {
+export async function veoSecondsUsed(accountId: string, now = new Date(), db: Prisma.TransactionClient = prisma) {
   const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-  const r = await prisma.creditEntry.aggregate({ where: { accountId, action: { in: CLIP_ACTIONS }, createdAt: { gte: from } }, _sum: { units: true } })
+  const r = await db.creditEntry.aggregate({ where: { accountId, action: { in: CLIP_ACTIONS }, createdAt: { gte: from } }, _sum: { units: true } })
   return Math.max(0, Math.round(r._sum.units ?? 0))
 }
 
 // This month's Veo allowance: used and limit (0 without a paid plan).
-export async function veoAllowance(account: { id: string; plan: string }) {
-  const [pricing, used] = await Promise.all([getPricing(), veoSecondsUsed(account.id)])
+// `db`: a transaction holding the account's "veo:" lock, to check and spend at once.
+export async function veoAllowance(account: { id: string; plan: string }, db: Prisma.TransactionClient = prisma) {
+  const [pricing, used] = await Promise.all([getPricing(), veoSecondsUsed(account.id, new Date(), db)])
   const limit = (VEO_PLANS as readonly string[]).includes(account.plan) ? pricing.veoSecondsPerMonth[account.plan as (typeof VEO_PLANS)[number]] : 0
   return { used, limit, left: Math.max(0, limit - used) }
 }

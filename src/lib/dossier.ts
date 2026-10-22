@@ -5,7 +5,7 @@ import { importAds, importPostHistory } from './meta-history'
 import { prisma } from './prisma'
 import { safeFetchText } from './safe-fetch'
 import { isValidTimeZone } from './time'
-import { ACTIVE_WORKSPACE } from './pause'
+import { servedWorkspace } from './pause'
 import { businessBrief } from './business'
 
 // The dossier: what Loudpilot knows about a company — its website, its post and
@@ -269,7 +269,7 @@ export async function refreshDossiersDue(limit = 5) {
     where: {
       status: 'ACTIVE',
       network: { in: ['FACEBOOK', 'INSTAGRAM'] },
-      workspace: ACTIVE_WORKSPACE,
+      workspace: servedWorkspace(),
       OR: [{ historyAt: null }, { historyAt: { lt: new Date(Date.now() - 7 * 86_400_000) } }],
     },
     distinct: ['workspaceId'],

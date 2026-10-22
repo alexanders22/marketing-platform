@@ -7,7 +7,7 @@ import { aiEnabled } from '@/lib/ai'
 import { BrandInput, type BrandDraft } from '@/lib/brand-schema'
 import { listCompanies, requireContext, WORKSPACE_COOKIE } from '@/lib/context'
 import { refreshProfile } from '@/lib/dossier'
-import { companyLimit } from '@/lib/plans'
+import { limitsFor } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/session'
 
@@ -42,7 +42,7 @@ export async function addCompany(draft: BrandDraft): Promise<{ error?: string }>
   const b = parsed.data
   // The plan's limit applies to everyone's own account; only a super admin
   // working in someone else's account (support) is not stopped by it.
-  const limit = asAdmin ? Infinity : companyLimit(account.plan)
+  const limit = asAdmin ? Infinity : limitsFor(account).companies
 
   const created = await prisma.$transaction(async (tx) => {
     // Per-account lock: two quick submits can't both slip under the limit.

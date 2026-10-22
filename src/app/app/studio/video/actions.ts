@@ -144,10 +144,12 @@ export async function generateVoices(id: string): Promise<{ doc?: VideoDoc; erro
   const todo = doc.scenes.filter((s) => s.voice.trim() && !s.voiceMediaId)
   if (todo.length === 0) return { doc }
   if (account.creditBalance < COST.voice) return { error: notEnough(COST.voice, account.creditBalance) }
+  const made: string[] = []
   try {
     for (const s of todo) {
       const { wav, ms } = await speak(s.voice.trim(), doc.voiceName)
       const m = await saveMedia(workspace.id, wav, 'audio/wav', `Voice: ${s.voice.slice(0, 100)}`, { durationMs: ms })
+      made.push(m.id)
       s.voiceMediaId = m.id
       s.voiceMs = ms
     }
@@ -156,7 +158,10 @@ export async function generateVoices(id: string): Promise<{ doc?: VideoDoc; erro
     return { error: aiError(e, 'The voice-over could not be generated. Try again.') }
   }
   const ok = await charge(account.id, workspace.id, [{ amount: COST.voice, reason: 'AI_VIDEO', note: 'Video voice-over', action: 'voice', units: 1 }])
-  if (!ok) return { error: notEnough(COST.voice, 0) }
+  if (!ok) {
+    await prisma.media.deleteMany({ where: { id: { in: made } } })
+    return { error: notEnough(COST.voice, 0) }
+  }
   await prisma.video.update({ where: { id }, data: { data: doc as unknown as Prisma.InputJsonValue } })
   revalidatePath('/app', 'layout')
   return { doc }
@@ -419,7 +424,7 @@ function voiceLike(v: VideoLook['voice']) {
 // Script → scenes with text and voice lines → visuals (your photos and clips
 // in order, AI images, or brand colours) → voice-over. Opens in the editor.
 export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{ id?: string; error?: string }> {
-  const { account, workspace, brand, user } = await requireContext()
+  const { account, workspace, brand, user, asAdmin } = await requireContext()
   const COST = await prices()
   const parsed = AiInput.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
@@ -457,7 +462,7 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     (withMusic ? COST.music : 0)
   if (input.visuals === 'veo' && !veoEnabled() && !input.brief.startsWith('[test]')) return { error: 'AI video is not connected yet.' }
   if (input.visuals === 'veo' && !isPaid(account) && user.role !== 'SUPER_ADMIN') return { error: PAID_ONLY }
-  if (input.visuals === 'veo' && user.role !== 'SUPER_ADMIN') {
+  if (input.visuals === 'veo' && !asAdmin) {
     const allowance = await veoAllowance(account)
     if (allowance.left < input.scenes * clipSeconds) return { error: veoLimitMessage(allowance, input.scenes * clipSeconds) }
   }
@@ -567,7 +572,11 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     { amount: voiced ? COST.voice : 0, reason: 'AI_VIDEO', note: 'Video voice-over', action: 'voice', units: 1 },
     { amount: drawn * COST.image, reason: 'AI_IMAGE', note: `${drawn} video scene image${drawn === 1 ? '' : 's'}`, action: 'image', units: drawn },
   ])
-  if (!ok) return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
+  if (!ok) {
+    const made = [...images.map((m) => m?.id), ...doc.scenes.map((s) => s.voiceMediaId), doc.music?.mediaId].filter((x): x is string => Boolean(x))
+    await prisma.media.deleteMany({ where: { id: { in: made } } })
+    return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
+  }
 
   const v = await prisma.video.create({
     data: { workspaceId: workspace.id, name: script.title, format, data: doc as unknown as Prisma.InputJsonValue },
@@ -588,7 +597,7 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
             : ref
               ? `${visual}. Look: ${ref.prompt} No text on screen.`
               : `${visual}. Vertical social video, no text on screen.`
-      const res = await beginClip(account.id, balance, workspace.id, {
+      const res = await beginClip(account.id, balance, workspace.id, asAdmin ? null : account.plan, {
         prompt: input.brief.startsWith('[test]') ? `[test] ${prompt}` : prompt,
         quality: clipQuality,
         seconds: clipSeconds,
@@ -625,13 +634,13 @@ const ClipInput = z.object({
 
 // Starts a Veo clip. Credits are taken now and given back if it fails.
 export async function startClip(raw: z.input<typeof ClipInput>): Promise<{ jobId?: string; error?: string }> {
-  const { account, workspace, user } = await requireContext()
+  const { account, workspace, user, asAdmin } = await requireContext()
   const parsed = ClipInput.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const c = parsed.data
   if (!veoEnabled() && !c.prompt.startsWith('[test]')) return { error: 'AI video is not connected yet.' }
   if (!isPaid(account) && user.role !== 'SUPER_ADMIN') return { error: PAID_ONLY }
-  if (user.role !== 'SUPER_ADMIN') {
+  if (!asAdmin) {
     const allowance = await veoAllowance(account)
     if (allowance.left < c.seconds) return { error: veoLimitMessage(allowance, c.seconds) }
   }
@@ -645,12 +654,14 @@ export async function startClip(raw: z.input<typeof ClipInput>): Promise<{ jobId
     if (c.seconds !== 8) return { error: 'Clips with a character are 8 seconds' }
     if (c.imageId) return { error: 'Use either a character or the scene photo' }
   }
-  const res = await beginClip(account.id, account.creditBalance, workspace.id, c)
+  const res = await beginClip(account.id, account.creditBalance, workspace.id, asAdmin ? null : account.plan, c)
   if (res.jobId) revalidatePath('/app', 'layout')
   return res
 }
 
-async function beginClip(accountId: string, balance: number, workspaceId: string, c: z.output<typeof ClipInput>): Promise<{ jobId?: string; error?: string }> {
+// `plan` sets the monthly Veo seconds; null (a super admin in someone else's
+// account) has no limit.
+async function beginClip(accountId: string, balance: number, workspaceId: string, plan: string | null, c: z.output<typeof ClipInput>): Promise<{ jobId?: string; error?: string }> {
   const account = { id: accountId, creditBalance: balance }
   const workspace = { id: workspaceId }
   const credits = (await prices())[clipAction(c.quality)] * c.seconds
@@ -671,10 +682,21 @@ async function beginClip(accountId: string, balance: number, workspaceId: string
       credits,
     },
   })
-  const ok = await charge(account.id, workspace.id, [{ amount: credits, reason: 'AI_VIDEO', note: `AI clip · ${CLIP_QUALITIES[c.quality].label} · ${c.seconds}s`, action: clipAction(c.quality), units: c.seconds }])
+  // The allowance is checked again under a per-account lock, in the
+  // transaction that writes the charge (whose units count as used seconds),
+  // so parallel starts cannot pass the monthly limit together.
+  let over = null as { used: number; limit: number } | null
+  const ok = await charge(account.id, workspace.id, [{ amount: credits, reason: 'AI_VIDEO', note: `AI clip · ${CLIP_QUALITIES[c.quality].label} · ${c.seconds}s`, action: clipAction(c.quality), units: c.seconds }], async (tx) => {
+    if (plan === null) return true
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'veo:' + account.id}))`
+    const allowance = await veoAllowance({ id: account.id, plan }, tx)
+    if (allowance.left >= c.seconds) return true
+    over = allowance
+    return false
+  })
   if (!ok) {
     await prisma.clipJob.delete({ where: { id: job.id } })
-    return { error: notEnough(credits, 0) }
+    return { error: over ? veoLimitMessage(over, c.seconds) : notEnough(credits, 0) }
   }
   try {
     const operation = await startVeo(job)

@@ -89,7 +89,9 @@ export async function suggestCompetitors(): Promise<{ found?: FoundCompetitor[];
   const host = (u: string | null) => (u ? u.replace(/^https?:\/\/(www\.)?/i, '').split('/')[0].toLowerCase() : '')
   const known = new Set(existing.map((e) => host(e.website)).filter(Boolean))
   found = found.filter((f) => !known.has(host(f.website)) && host(f.website) !== host(brand?.website ?? null))
-  await charge(account.id, workspace.id, [{ amount: COST.competitorSearch, reason: 'AI_TEXT', note: 'Find competitors', action: 'competitorSearch', units: 1 }])
+  if (!(await charge(account.id, workspace.id, [{ amount: COST.competitorSearch, reason: 'AI_TEXT', note: 'Find competitors', action: 'competitorSearch', units: 1 }]))) {
+    return { error: notEnough(COST.competitorSearch, await balanceOf(account.id)) }
+  }
   revalidatePath('/app', 'layout')
   return { found }
 }
@@ -109,21 +111,30 @@ export async function compareNow(input: { language: string; refresh?: boolean })
   const have = await balanceOf(account.id)
   if (have < need) return { error: notEnough(need, have) }
 
-  let read = 0
+  const fresh: { r: (typeof rivals)[number]; profile: CompanyProfile }[] = []
   await Promise.all(
     toRead.map(async (r) => {
       try {
         const pages = await crawlSite(r.website!, 5)
-        const profile = await buildCompanyProfile(r.name, pages)
-        await prisma.competitor.update({ where: { id: r.id }, data: { profile, analyzedAt: new Date(), error: null } })
-        r.profile = profile as unknown as Prisma.JsonValue
-        read++
+        fresh.push({ r, profile: await buildCompanyProfile(r.name, pages) })
       } catch (e) {
         await prisma.competitor.update({ where: { id: r.id }, data: { error: (e instanceof Error ? e.message : String(e)).slice(0, 200) } })
       }
     }),
   )
-  if (read) await charge(account.id, workspace.id, [{ amount: read * COST.competitor, reason: 'AI_TEXT', note: `Competitor websites (${read})`, action: 'competitor', units: read }])
+  const read = fresh.length
+  // The profiles are saved in the charge's transaction: no credits, no profiles.
+  if (read) {
+    const ok = await charge(account.id, workspace.id, [{ amount: read * COST.competitor, reason: 'AI_TEXT', note: `Competitor websites (${read})`, action: 'competitor', units: read }], async (tx) => {
+      for (const { r, profile } of fresh) await tx.competitor.update({ where: { id: r.id }, data: { profile, analyzedAt: new Date(), error: null } })
+      return true
+    })
+    if (!ok) {
+      revalidatePath('/app/competitors')
+      return { error: notEnough(read * COST.competitor, await balanceOf(account.id)) }
+    }
+    for (const { r, profile } of fresh) r.profile = profile as unknown as Prisma.JsonValue
+  }
 
   const own = await prisma.brandProfile.findUnique({ where: { workspaceId: workspace.id } })
   let data

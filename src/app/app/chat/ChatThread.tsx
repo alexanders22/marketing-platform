@@ -47,7 +47,8 @@ export function ChatThread({ conversation: c, messages, operators }: { conversat
   const [switching, startSwitch] = useTransition()
   const end = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (c.unread > 0) markChatRead(c.id)
+    // Best effort: a dropped request must not break the page.
+    if (c.unread > 0) markChatRead(c.id).catch(() => {})
   }, [c.id, c.unread])
   useEffect(() => end.current?.scrollIntoView({ block: 'end' }), [messages.length])
 

@@ -94,7 +94,10 @@ export async function createPost(raw: z.input<typeof Input>): Promise<{ post?: C
     { amount: TEXT_COST, reason: 'AI_TEXT', note: 'Social post', action: 'postText', units: 1 },
     { amount: media.length * IMAGE_COST, reason: 'AI_IMAGE', note: `${media.length} post image${media.length > 1 ? 's' : ''}`, action: 'image', units: media.length },
   ])
-  if (!charged) return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
+  if (!charged) {
+    await prisma.media.deleteMany({ where: { id: { in: media.map((m) => m.id) } } })
+    return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
+  }
 
   revalidatePath('/app', 'layout')
   return {

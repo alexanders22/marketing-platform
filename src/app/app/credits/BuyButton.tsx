@@ -9,7 +9,7 @@ import { checkout } from './actions'
 import { AddressDialog } from './AddressDialog'
 import { PayFrame } from './PayFrame'
 
-type Purchase = { kind: 'PACK'; credits: number } | { kind: 'PLAN'; plan: PlanId; cycle: 'MONTHLY' | 'YEARLY'; autoRenew?: boolean }
+type Purchase = { kind: 'PACK'; credits: number; test?: boolean } | { kind: 'PLAN'; plan: PlanId; cycle: 'MONTHLY' | 'YEARLY'; autoRenew?: boolean; test?: boolean }
 
 // Opens Monrem's payment page: in a window over this page when Monrem allows
 // it, else in the tab; the customer comes back to /app/credits. The first

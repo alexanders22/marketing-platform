@@ -168,6 +168,67 @@ test('when Monrem allows framing, the payment page opens in a window on our page
   }
 })
 
+test('during a paid period a dearer plan is bought, not picked; the unused time is converted', async () => {
+  // Paid Start with about 30 days left.
+  sql(`update "Account" set plan='STARTER', "billingCycle"='MONTHLY', "paidUntil"=now() + interval '30 days' where id='${accountId}'`)
+  await page.goto('/app/plan')
+  await page.getByRole('button', { name: 'Upgrade to Agency' }).click()
+  await page.waitForURL(/\/app\/credits\?upgrade=AGENCY/)
+  // Nothing changed yet.
+  expect(sql(`select plan from "Account" where id='${accountId}'`)).toBe('STARTER')
+  const box = page.getByRole('region', { name: 'Upgrade your plan' })
+  // 30 days of $29 Start are worth about 4 days of $199 Agency.
+  await expect(box.getByText(/The (29|30) days left of Start become 4 days of Agency/)).toBeVisible()
+  await box.getByRole('button', { name: 'Pay for Agency · $199 + VAT / month' }).click()
+  await page.waitForURL(/\/pay\//)
+  await expect(page.getByRole('heading', { name: 'Pay 234.82 USD' })).toBeVisible()
+  await page.getByRole('link', { name: 'Pay now' }).click()
+  await expect(page.getByText(/Payment received — your plan is paid until/)).toBeVisible()
+  expect(sql(`select plan from "Account" where id='${accountId}'`)).toBe('AGENCY')
+  // A month from today plus the converted days.
+  const days = Number(sql(`select extract(epoch from "paidUntil" - now()) / 86400 from "Account" where id='${accountId}'`))
+  expect(days).toBeGreaterThan(31)
+  expect(days).toBeLessThan(37)
+
+  // A cheaper plan applies at once, without payment.
+  await page.goto('/app/plan')
+  await page.getByRole('button', { name: 'Switch to Start' }).click()
+  await page.waitForURL(/\/app\/credits$/)
+  expect(sql(`select plan from "Account" where id='${accountId}'`)).toBe('STARTER')
+})
+
+test('super admins get ₾1 test payments for a pack and a plan month; others never see them', async () => {
+  const testPayments = page.getByRole('region', { name: 'Test payments' })
+  await page.goto('/app/credits')
+  await expect(page.getByRole('heading', { name: 'Buy more credits' })).toBeVisible()
+  await expect(testPayments).toHaveCount(0)
+
+  sql(`update "User" set role='SUPER_ADMIN' where id in (select "userId" from "AccountMember" where "accountId"='${accountId}')`)
+  try {
+    const before = balance()
+    await page.reload()
+    await testPayments.getByRole('button', { name: /^Test pack · 10 credits for 1\.00/ }).click()
+    await page.waitForURL(/\/pay\//)
+    await expect(page.getByRole('heading', { name: 'Pay 1.00 USD' })).toBeVisible()
+    await page.getByRole('link', { name: 'Pay now' }).click()
+    await expect(page.getByText('Payment received — 10 credits added.')).toBeVisible()
+    expect(balance()).toBe(before + 10)
+    expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PACK', '100', 'USD', 'true'])
+
+    // A month of the current plan, booked like a real one.
+    const until = paidUntil()
+    await testPayments.getByRole('button', { name: /^Test plan · .* 1 month for 1\.00/ }).click()
+    await page.waitForURL(/\/pay\//)
+    await expect(page.getByRole('heading', { name: 'Pay 1.00 USD' })).toBeVisible()
+    await page.getByRole('link', { name: 'Pay now' }).click()
+    await expect(page.getByText(/Payment received — your plan is paid until/)).toBeVisible()
+    expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PLAN', '100', 'USD', 'true'])
+    expect(paidUntil() - until).toBeGreaterThan(27 * DAY)
+  } finally {
+    sql(`update "User" set role='USER' where id in (select "userId" from "AccountMember" where "accountId"='${accountId}')`)
+  }
+})
+
 test.describe('auto-renewal', () => {
   test.beforeAll(() => {
     // Start monthly renews at the same $34.22 ($29 + VAT); the yearly Monrem plan has an old price, so it can't.

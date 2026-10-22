@@ -12,7 +12,7 @@ import { VideoSection } from './video/VideoSection'
 export const metadata: Metadata = { title: 'Studio — Loudpilot' }
 
 export default async function StudioPage({ searchParams }: PageProps<'/app/studio'>) {
-  const { workspace, brand, account, user } = await requireContext()
+  const { workspace, brand, account, user, asAdmin } = await requireContext()
   const designs = await prisma.design.findMany({
     where: { workspaceId: workspace.id },
     orderBy: { updatedAt: 'desc' },
@@ -54,7 +54,7 @@ export default async function StudioPage({ searchParams }: PageProps<'/app/studi
       {tab === 'video' && (
         <VideoSection
           paid={isPaid(account) || user.role === 'SUPER_ADMIN'}
-          veo={user.role === 'SUPER_ADMIN' ? null : await veoAllowance(account)}
+          veo={asAdmin ? null : await veoAllowance(account)}
           initialAiBrief={typeof sp.ai === 'string' ? sp.ai.slice(0, 1500) : undefined}
           characters={await prisma.character.findMany({ where: { workspaceId: workspace.id }, orderBy: { createdAt: 'desc' }, select: { id: true, name: true } })}
           videos={videos.map((v) => ({

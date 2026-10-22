@@ -34,6 +34,7 @@ export async function generateCampaignImages(campaignId: string, plan: CampaignI
       const ok = await charge(accountId, ws.id, [{ amount: COST.image, reason: 'AI_IMAGE', note: `Campaign image: ${campaign.name}`.slice(0, 200), action: 'image', units: 1 }])
       if (!ok) {
         stop = true
+        await prisma.media.delete({ where: { id: media.id } })
         return
       }
       // Only if the post still has no picture (someone may have added one).

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { PlanPicker } from '@/components/PlanPicker'
 import { requireContext } from '@/lib/context'
 import { pickerPrices } from '@/lib/credits'
-import type { PlanId } from '@/lib/plans'
+import { billingState, type PlanId } from '@/lib/plans'
 
 export const metadata: Metadata = { title: 'Choose your plan — Loudpilot' }
 
@@ -15,6 +15,7 @@ export default async function PlanPage() {
         after="/app/credits"
         prices={await pickerPrices()}
         trialUsed={account.trialEndsAt !== null}
+        paid={billingState(account) === 'active'}
       />
     </div>
   )

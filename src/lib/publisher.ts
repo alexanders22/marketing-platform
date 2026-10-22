@@ -12,7 +12,8 @@ import {
 } from './meta'
 import { accountExpiredAlert, raiseAlert } from './alerts'
 import { prisma } from './prisma'
-import { ACTIVE_WORKSPACE } from './pause'
+import { ACTIVE_WORKSPACE, servedWorkspace } from './pause'
+import { serviceOff, serviceOn } from './plans'
 import { ctaLine, readCta, withUtm } from './cta'
 import { connectorFor, NetworkError, tokenFor, type OutMedia, type Outgoing } from './networks'
 import { titleOf } from './networks/types'
@@ -160,7 +161,8 @@ export async function publishDue(now = new Date()) {
       status: 'SCHEDULED',
       scheduledAt: { lte: now, gte: new Date(now.getTime() - MAX_LATE_MS) },
       channels: { hasSome: [...PUBLISHABLE] },
-      workspace: ACTIVE_WORKSPACE,
+      // A plan that ended (past its grace days) holds scheduled posts back.
+      workspace: servedWorkspace(now),
     },
     orderBy: { scheduledAt: 'asc' },
     take: 50,
@@ -239,8 +241,10 @@ export async function refreshInsights(now = new Date(), limit = 100) {
 
 // "Publish now" for one post of a workspace — used by the editor and MCP.
 export async function publishPostNow(workspaceId: string, postId: string): Promise<{ error?: string; published?: number; failed?: number }> {
-  const post = await prisma.post.findFirst({ where: { id: postId, workspaceId } })
+  const post = await prisma.post.findFirst({ where: { id: postId, workspaceId }, include: { workspace: { select: { account: true } } } })
   if (!post || post.kind !== 'SOCIAL') return { error: 'Post not found' }
+  const account = post.workspace.account
+  if (account && !serviceOn(account)) return { error: serviceOff(account) }
   const targets = await targetsFor(post)
   if (targets.length === 0) return { error: 'Connect an account for the networks picked on this post in Channels first' }
   const claimed = await prisma.post.updateMany({

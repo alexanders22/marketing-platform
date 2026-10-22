@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
-import { billingState, companyLimit } from '@/lib/plans'
+import { billingState, limitsFor } from '@/lib/plans'
 import {
   addMember,
   adjustCredits,
@@ -86,7 +86,7 @@ export default async function AdminCompany({ params }: PageProps<'/admin/compani
           {/* Companies */}
           <section className={card}>
             <h2 className="font-semibold">
-              Companies <span className="font-normal text-zinc-500">· {a.workspaces.length} of {companyLimit(a.plan)} on this plan</span>
+              Companies <span className="font-normal text-zinc-500">· {a.workspaces.length} of {limitsFor(a).companies} on this plan</span>
             </h2>
             <ul className="mt-3 space-y-3">
               {a.workspaces.map((w) => (

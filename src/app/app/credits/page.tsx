@@ -9,7 +9,8 @@ import { creditValue, getPlans, getPricing } from '@/lib/credits'
 import { VAT } from '@/lib/tax'
 import { prisma } from '@/lib/prisma'
 import { monremCurrency, monremEnabled } from '@/lib/monrem'
-import { recurringOption, syncPayment } from '@/lib/payments'
+import { recurringOption, syncPayment, TEST_PAYMENT } from '@/lib/payments'
+import { convertRemaining } from '@/lib/billing'
 import { billingState, yearlyTotal } from '@/lib/plans'
 import { priceLabel } from '@/lib/pricing'
 import { BillingAddressLine } from './AddressDialog'
@@ -32,7 +33,7 @@ const REASON: Record<string, string> = {
 }
 
 export default async function CreditsPage({ searchParams }: PageProps<'/app/credits'>) {
-  const { account: acct, role } = await requireContext()
+  const { account: acct, role, user, asAdmin } = await requireContext()
   const q = await searchParams
   // Back from Monrem's payment page: ask Monrem if the callback hasn't arrived yet.
   let paid = typeof q.payment === 'string' ? await prisma.payment.findFirst({ where: { id: q.payment, accountId: acct.id } }) : null
@@ -56,6 +57,16 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
   const yearly = plan && `${priceLabel({ usd: yearlyTotal(plan.monthly), gel: yearlyTotal(plan.monthlyGel) }, cur)} + VAT`
   const trial = account.trialEndsAt && account.trialEndsAt > new Date()
   const active = billingState(account) === 'active'
+  const upgradeTo = plans.find((p) => p.id === q.upgrade && p.id !== account.plan)
+  const upgrade =
+    upgradeTo && plan && active && account.paidUntil
+      ? (() => {
+          const now = new Date()
+          const converted = convertRemaining(account.paidUntil, cur === 'GEL' ? plan.monthlyGel : plan.monthly, cur === 'GEL' ? upgradeTo.monthlyGel : upgradeTo.monthly, now)!
+          const days = (d: Date) => Math.max(0, Math.round((d.getTime() - now.getTime()) / 86_400_000))
+          return { plan: upgradeTo, cycle: q.cycle === 'YEARLY' ? ('YEARLY' as const) : ('MONTHLY' as const), daysLeft: days(account.paidUntil), daysConverted: days(converted) }
+        })()
+      : null
   const renewing = await prisma.subscription.findFirst({ where: { accountId: account.id, status: 'ACTIVE' } })
   const renew = plan && !renewing ? { MONTHLY: Boolean(await recurringOption(plan.id, 'MONTHLY')), YEARLY: Boolean(await recurringOption(plan.id, 'YEARLY')) } : { MONTHLY: false, YEARLY: false }
 
@@ -65,6 +76,27 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
 
       {paid && <EscapeFrame />}
       {paid && <PaymentResult p={paid} paidUntil={account.paidUntil} />}
+      {/* A dearer plan picked during a paid period: bought, with the rest of the old plan converted. */}
+      {upgrade && plan && (
+        <section aria-label="Upgrade your plan" className="mb-4 rounded-xl bg-indigo-50 p-4 ring-1 ring-indigo-200">
+          <p className="font-semibold text-indigo-950">Upgrade to {upgrade.plan.name}</p>
+          <p className="mt-0.5 text-sm text-indigo-900">
+            The {upgrade.daysLeft} days left of {plan.name} become {upgrade.daysConverted} days of {upgrade.plan.name}, and a {upgrade.cycle === 'YEARLY' ? 'year' : 'month'} is added on top.
+          </p>
+          <div className="mt-3">
+            <BuyButton
+              purchase={{ kind: 'PLAN', plan: upgrade.plan.id, cycle: upgrade.cycle }}
+              disabled={cantPay}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
+            >
+              Pay for {upgrade.plan.name} ·{' '}
+              {upgrade.cycle === 'YEARLY'
+                ? `${priceLabel({ usd: yearlyTotal(upgrade.plan.monthly), gel: yearlyTotal(upgrade.plan.monthlyGel) }, cur)} + VAT / year`
+                : `${priceLabel({ usd: upgrade.plan.monthly, gel: upgrade.plan.monthlyGel }, cur)} + VAT / month`}
+            </BuyButton>
+          </div>
+        </section>
+      )}
       {/* From the renewal reminder email: one button for the plan and cycle they have. */}
       {q.renew === '1' && plan && !renewing && !paid && (
         <section aria-label="Renew your plan" className="mb-4 rounded-xl bg-violet-50 p-4 ring-1 ring-violet-200">
@@ -172,6 +204,31 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
         </p>
         {canPay && billing && <BillingAddressLine address={billing} />}
       </section>
+
+      {/* Real ₾1 charges to try the whole flow; only super admins, in their own account. */}
+      {canPay && user.role === 'SUPER_ADMIN' && !asAdmin && (
+        <section aria-label="Test payments" className="mt-6 rounded-xl border border-dashed border-amber-300 bg-amber-50/60 p-5">
+          <h2 className="font-semibold text-amber-950">Test payments</h2>
+          <p className="mt-0.5 text-sm text-amber-900">
+            Only super admins see this. A real card charge of 1.00 in the terminal&apos;s currency, booked like any payment.
+            {plan && ` The plan test adds a month of ${plan.name} and its ${plan.credits.toLocaleString('en-US')} credits.`}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <div>
+              <BuyButton purchase={{ kind: 'PACK', credits: TEST_PAYMENT.credits, test: true }} className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600">
+                Test pack · {TEST_PAYMENT.credits} credits for 1.00
+              </BuyButton>
+            </div>
+            {plan && (
+              <div>
+                <BuyButton purchase={{ kind: 'PLAN', plan: plan.id, cycle: 'MONTHLY', test: true }} className="rounded-lg border border-amber-400 bg-white px-3 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                  Test plan · {plan.name} 1 month for 1.00
+                </BuyButton>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="mt-6 rounded-xl border border-zinc-200">
         <h2 className="border-b border-zinc-100 px-5 py-3.5 font-semibold">History</h2>

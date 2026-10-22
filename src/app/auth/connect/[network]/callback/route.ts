@@ -4,7 +4,7 @@ import { encrypt } from '@/lib/crypto'
 import { terminalUrl } from '@/lib/hosts'
 import { appUrl } from '@/lib/mail'
 import { connectorBySlug } from '@/lib/networks'
-import { planLimits } from '@/lib/plans'
+import { limitsFor, serviceOn } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { PROFILE_NETWORKS } from '@/lib/profiles'
 import { refreshDossier } from '@/lib/dossier'
@@ -24,6 +24,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/auth/connect/[ne
   const c = connectorBySlug(network)
   if (!c?.oauth || !c.enabled()) return back('error=network-off')
   if (role === 'EDITOR') return back('error=role')
+  if (!serviceOn(account)) return back('error=plan')
   const q = req.nextUrl.searchParams
   if (q.get('error')) return back(`error=network-denied&network=${network}`)
   const cookie = unseal<{ s: string; ws: string; n: string; v?: string }>(req.cookies.get(CONNECT_COOKIE)?.value)
@@ -39,46 +40,50 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/auth/connect/[ne
   }
   if (found.length === 0) return back(`error=network-empty&network=${network}`)
 
-  // Profiles already here are refreshed; new ones take free plan room.
-  const existing = await prisma.socialAccount.findMany({
-    where: { workspace: { accountId: account.id }, network: { in: PROFILE_NETWORKS } },
-    select: { workspaceId: true, network: true, externalId: true },
-  })
-  const known = new Set(existing.filter((e) => e.workspaceId === workspace.id && e.network === c.network).map((e) => e.externalId))
-  let room = planLimits(account.plan).profiles - existing.length
-  let skipped = 0
-  const allowed = found.filter((f) => {
-    if (known.has(f.externalId)) return true
-    if (room > 0) {
-      room--
-      return true
+  // Profiles already here are refreshed; new ones take free plan room. One
+  // connect at a time per account, so two can't both use the last place.
+  const { allowed, skipped } = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'profiles:' + account.id}))`
+    const existing = await tx.socialAccount.findMany({
+      where: { workspace: { accountId: account.id }, network: { in: PROFILE_NETWORKS } },
+      select: { workspaceId: true, network: true, externalId: true },
+    })
+    const known = new Set(existing.filter((e) => e.workspaceId === workspace.id && e.network === c.network).map((e) => e.externalId))
+    let room = limitsFor(account).profiles - existing.length
+    let skipped = 0
+    const allowed = found.filter((f) => {
+      if (known.has(f.externalId)) return true
+      if (room > 0) {
+        room--
+        return true
+      }
+      skipped++
+      return false
+    })
+    for (const f of allowed) {
+      const data = {
+        name: f.name.slice(0, 200),
+        handle: f.handle ?? null,
+        avatarUrl: f.avatarUrl ?? null,
+        parentId: f.parentId ?? null,
+        meta: (f.meta ?? {}) as object,
+        accessTokenEnc: encrypt(f.token),
+        refreshTokenEnc: f.refresh ? encrypt(f.refresh) : null,
+        expiresAt: f.expiresAt ?? null,
+        refreshExpiresAt: f.refreshExpiresAt ?? null,
+        scopes: f.scopes,
+        status: 'ACTIVE' as const,
+        lastError: null,
+      }
+      await tx.socialAccount.upsert({
+        where: { workspaceId_network_externalId: { workspaceId: workspace.id, network: c.network, externalId: f.externalId } },
+        create: { workspaceId: workspace.id, network: c.network, externalId: f.externalId, ...data },
+        update: data,
+      })
     }
-    skipped++
-    return false
+    return { allowed, skipped }
   })
   if (allowed.length === 0) return back('error=profiles')
-
-  for (const f of allowed) {
-    const data = {
-      name: f.name.slice(0, 200),
-      handle: f.handle ?? null,
-      avatarUrl: f.avatarUrl ?? null,
-      parentId: f.parentId ?? null,
-      meta: (f.meta ?? {}) as object,
-      accessTokenEnc: encrypt(f.token),
-      refreshTokenEnc: f.refresh ? encrypt(f.refresh) : null,
-      expiresAt: f.expiresAt ?? null,
-      refreshExpiresAt: f.refreshExpiresAt ?? null,
-      scopes: f.scopes,
-      status: 'ACTIVE' as const,
-      lastError: null,
-    }
-    await prisma.socialAccount.upsert({
-      where: { workspaceId_network_externalId: { workspaceId: workspace.id, network: c.network, externalId: f.externalId } },
-      create: { workspaceId: workspace.id, network: c.network, externalId: f.externalId, ...data },
-      update: data,
-    })
-  }
   after(() => refreshDossier(workspace.id).catch(() => {}))
   return back(`connected=${allowed.length}${skipped ? `&skipped=${skipped}` : ''}`)
 }

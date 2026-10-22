@@ -51,7 +51,7 @@ test('the day it ends: one more reminder and a renew banner in the app', async (
   sql(`update "Account" set "paidUntil"=now() - interval '1 hour' where id='${accountId}'`)
   await tick()
   const mail = await latestMail(email, 'Your Loudpilot Business plan has ended')
-  expect(mail.Text).toContain('Paid features are paused until you renew')
+  expect(mail.Text).toContain('Publishing and connecting channels stop 3 days later unless you renew')
   await tick()
   expect(await mails('Your Loudpilot Business plan has ended')).toBe(1)
 

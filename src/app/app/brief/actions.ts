@@ -1,7 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { adviseBrief, aiEnabled, LANGUAGES, translateAdvice as translate, type BriefAdvice } from '@/lib/ai'
+import { z } from 'zod'
+import { adviseBrief, aiEnabled, BRIEF_QUESTIONS, LANGUAGES, translateAdvice as translate, type BriefAdvice } from '@/lib/ai'
 import { dashboard, summaryFacts } from '@/lib/analytics'
 import { requireContext } from '@/lib/context'
 import { charge, notEnough, prices } from '@/lib/credits'
@@ -9,6 +10,7 @@ import { withDossier } from '@/lib/dossier'
 import { prisma } from '@/lib/prisma'
 import { aiError } from '@/lib/ai-health'
 import { holidaysBetween } from '@/lib/holidays'
+import { overLimit } from '@/lib/rate-limit'
 
 // "Suggest what to do": audiences, open questions and ideas for a post or
 // campaign, from the dossier, the owner's answers and the last 30 days.
@@ -74,14 +76,28 @@ export async function deleteFact(id: string) {
   revalidatePath('/app/dossier')
 }
 
+// The shape and sizes getAdvice returns (with room for a translation being
+// longer), so the free translation only takes real suggestions.
+const text = z.string().max(1000)
+const AdviceInput = z.object({
+  known: z.array(text).max(6),
+  audiences: z.array(z.object({ name: text, where: text, who: text, wants: text, how: text })).max(3),
+  questions: z.array(z.object({ question: text, why: text, options: z.array(text).max(4) })).max(BRIEF_QUESTIONS),
+  ideas: z.array(z.object({ title: text, why: text, network: z.enum(['FACEBOOK', 'INSTAGRAM', 'BOTH']), format: text, audience: text, prompt: text, caption: text })).max(3),
+})
+const MAX_ADVICE_CHARS = 25_000
+
 // Suggestions already made, in another language — free, no new analysis.
 export async function translateAdvice(advice: BriefAdvice, language: string): Promise<{ advice?: BriefAdvice; error?: string }> {
-  await requireContext()
+  const { account } = await requireContext()
   if (!aiEnabled()) return { error: 'AI is not connected yet.' }
   const lang = LANGUAGES.find((l) => l === language)
   if (!lang) return { error: 'Unknown language' }
+  const parsed = AdviceInput.safeParse(advice)
+  if (!parsed.success || JSON.stringify(parsed.data).length > MAX_ADVICE_CHARS) return { error: 'These suggestions cannot be translated.' }
+  if (overLimit(`advice-translate:${account.id}`, 30, 3_600_000)) return { error: 'Too many translations. Try again in an hour.' }
   try {
-    return { advice: await translate(advice, lang) }
+    return { advice: await translate(parsed.data, lang) }
   } catch (e) {
     console.error('translateAdvice failed', e)
     return { error: aiError(e, 'Could not translate the suggestions. Try again.') }

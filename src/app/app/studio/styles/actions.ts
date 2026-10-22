@@ -90,7 +90,10 @@ export async function imagesInStyle(raw: z.input<typeof ImagesInput>): Promise<{
   const ok = await charge(account.id, workspace.id, [
     { amount: made.length * COST.image, reason: 'AI_IMAGE', note: `${made.length} image${made.length === 1 ? '' : 's'} · ${style.label}`, action: 'image', units: made.length },
   ])
-  if (!ok) return { error: notEnough(made.length * COST.image, 0) }
+  if (!ok) {
+    await prisma.media.deleteMany({ where: { id: { in: made.map((m) => m.id) } } })
+    return { error: notEnough(made.length * COST.image, 0) }
+  }
   revalidatePath('/app', 'layout')
   return { images: made.map((m) => ({ id: m.id, url: mediaUrl(m.id) })) }
 }

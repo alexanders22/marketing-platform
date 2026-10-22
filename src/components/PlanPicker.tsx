@@ -17,17 +17,20 @@ const TINT = {
 
 // "Choose your plan": what the trial promises on top, the plans below in
 // full width. Closing it skips the plan for now. `trialUsed` (the account
-// had its trial already) turns trial wording into plain plan choice.
+// had its trial already) turns trial wording into plain plan choice; `paid`
+// (the current plan is paid for) makes the others an upgrade (bought) or a switch.
 export function PlanPicker({
   current,
   after = '/app',
   prices,
   trialUsed = false,
+  paid = false,
 }: {
   current?: PlanId | null
   after?: string
   prices?: PickerPrices
   trialUsed?: boolean
+  paid?: boolean
 }) {
   const router = useRouter()
   const [yearly, setYearly] = useState(false)
@@ -44,6 +47,8 @@ export function PlanPicker({
         setBusy(null)
         return
       }
+      // A dearer plan during a paid period: pay for it first.
+      if (res.pay) return router.push(res.pay)
       router.push(after)
       router.refresh()
     })
@@ -111,6 +116,7 @@ export function PlanPicker({
             const shownGel = yearly ? yearlyTotal(p.monthlyGel) : p.monthlyGel
             const Icon = ICON[p.id]
             const isCurrent = current === p.id
+            const currentMonthly = prices?.plans.find((x) => x.id === current)?.monthly ?? PLANS.find((x) => x.id === current)?.monthly ?? 0
             return (
               <div
                 key={p.id}
@@ -145,7 +151,17 @@ export function PlanPicker({
                       : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
                   }`}
                 >
-                  {busy === p.id ? 'Starting…' : isCurrent ? 'Current plan' : trialUsed ? `Choose ${p.name}` : `Start ${TRIAL_DAYS}-day free trial`}
+                  {busy === p.id
+                    ? 'Starting…'
+                    : isCurrent
+                      ? 'Current plan'
+                      : paid
+                        ? p.monthly > currentMonthly
+                          ? `Upgrade to ${p.name}`
+                          : `Switch to ${p.name}`
+                        : trialUsed
+                          ? `Choose ${p.name}`
+                          : `Start ${TRIAL_DAYS}-day free trial`}
                 </button>
                 <p className="mt-5 text-xs font-semibold tracking-wide text-zinc-500">WHAT&apos;S INCLUDED</p>
                 <ul className="mt-2 space-y-2.5 text-sm text-zinc-700">

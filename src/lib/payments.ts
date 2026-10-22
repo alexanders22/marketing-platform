@@ -1,6 +1,6 @@
 import 'server-only'
 import { Prisma, type BillingCycle, type Payment } from '@prisma/client'
-import { extendPaidUntil, grantPlanCredits } from './billing'
+import { convertRemaining, extendPaidUntil, grantPlanCredits } from './billing'
 import { phoneParts, type BillingAddress } from './billing-address'
 import { getPlans, getPricing } from './credits'
 import { siteUrl, terminalUrl } from './hosts'
@@ -33,10 +33,19 @@ import { grossOf } from './tax'
 // its own. Each approved charge (callback, or found when the ticker reads the
 // subscription) becomes a Payment of its own and extends paidUntil once.
 
-export type Purchase = { kind: 'PACK'; credits: number } | { kind: 'PLAN'; plan: PlanId; cycle: BillingCycle; autoRenew?: boolean }
+// test: a super admin's real ₾1 (or $1) charge to try the whole payment flow.
+export type Purchase = { kind: 'PACK'; credits: number; test?: boolean } | { kind: 'PLAN'; plan: PlanId; cycle: BillingCycle; autoRenew?: boolean; test?: boolean }
+
+// Test payments: 1.00 in the terminal's currency for a few credits or a plan month.
+export const TEST_PAYMENT = { amount: 100, credits: 10 }
 
 // The list price (without VAT) in dollars and in lari, and what it buys.
 async function quote(p: Purchase) {
+  if (p.test && p.kind === 'PACK') return p.credits === TEST_PAYMENT.credits ? { usd: 1, gel: 1, label: `TEST: ${p.credits} Loudpilot credits` } : null
+  if (p.test && p.kind === 'PLAN') {
+    const plan = (await getPlans()).find((x) => x.id === p.plan)
+    return plan && p.cycle === 'MONTHLY' ? { usd: 1, gel: 1, label: `TEST: Loudpilot ${plan.name} plan, 1 month` } : null
+  }
   if (p.kind === 'PACK') {
     const pack = (await getPricing()).packs.find((x) => x.credits === p.credits)
     if (!pack) return null
@@ -111,9 +120,10 @@ export async function startCheckout(o: {
   const q = await quote(o.purchase)
   if (!q || q.usd <= 0 || q.gel <= 0) return { error: 'This is not for sale' }
   const p = o.purchase
-  const recurring = p.kind === 'PLAN' && p.autoRenew ? await recurringOption(p.plan, p.cycle) : null
+  const recurring = p.kind === 'PLAN' && p.autoRenew && !p.test ? await recurringOption(p.plan, p.cycle) : null
   if (p.kind === 'PLAN' && p.autoRenew && !recurring) return { error: 'Auto-renewal is not available for this plan right now — pay once instead.' }
-  const { currency, amount } = recurring ?? inCurrency(q)
+  // A test is exactly 1.00, no VAT on top.
+  const { currency, amount } = recurring ?? (p.test ? { currency: monremCurrency(), amount: TEST_PAYMENT.amount } : inCurrency(q))
   const payment = await prisma.payment.create({
     data: {
       accountId: o.accountId,
@@ -220,6 +230,7 @@ export async function applyStatus(tx: MonremTx, subscriptionId?: string): Promis
 
 // Credits or plan time, once: the fulfilledAt claim and the booking share a transaction.
 async function fulfil(id: string) {
+  const plans = await getPlans()
   const done = await prisma.$transaction(async (tx) => {
     const claimed = await tx.payment.updateMany({ where: { id, status: 'APPROVED', fulfilledAt: null }, data: { fulfilledAt: new Date() } })
     if (claimed.count === 0) return null
@@ -238,11 +249,17 @@ async function fulfil(id: string) {
       })
       await tx.account.update({ where: { id: p.accountId }, data: { creditBalance: { increment: p.credits } } })
     } else if (p.kind === 'PLAN' && p.plan && p.cycle) {
-      const a = await tx.account.findUniqueOrThrow({ where: { id: p.accountId }, select: { paidUntil: true } })
+      const a = await tx.account.findUniqueOrThrow({ where: { id: p.accountId }, select: { paidUntil: true, plan: true } })
       const now = new Date()
+      // Another plan: the rest of the old one's paid time is converted first.
+      const price = (id: string) => {
+        const x = plans.find((y) => y.id === id)
+        return (p.currency === 'GEL' ? x?.monthlyGel : x?.monthly) ?? 0
+      }
+      const from = a.plan !== p.plan ? convertRemaining(a.paidUntil, price(a.plan), price(p.plan), now) : a.paidUntil
       await tx.account.update({
         where: { id: p.accountId },
-        data: { plan: p.plan, billingCycle: p.cycle, paidUntil: extendPaidUntil(a.paidUntil, p.periods ?? 1, p.cycle, now), trialEndsAt: now },
+        data: { plan: p.plan, billingCycle: p.cycle, paidUntil: extendPaidUntil(from, p.periods ?? 1, p.cycle, now), trialEndsAt: now },
       })
     }
     return p
