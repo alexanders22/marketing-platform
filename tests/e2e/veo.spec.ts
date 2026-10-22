@@ -113,7 +113,7 @@ test('trial accounts see Veo locked and cannot start a clip', async ({ browser }
   await expect(trial.getByRole('button', { name: 'Generate clip with AI' })).toHaveCount(0)
   await trial.goto('/app/studio?tab=video')
   await trial.getByRole('button', { name: 'Create video with AI' }).click()
-  await expect(trial.getByRole('button', { name: 'AI clips (Veo)' })).toBeDisabled()
+  await expect(trial.getByRole('button', { name: 'AI video clips' })).toBeDisabled()
   await trial.close()
 })
 

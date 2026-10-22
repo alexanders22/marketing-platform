@@ -7,6 +7,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Captions,
   Clapperboard,
   Copy,
   Download,
@@ -19,32 +20,42 @@ import {
   Pause,
   Play,
   Plus,
+  Scissors,
   Send,
   Trash2,
   Wand2,
   X,
 } from 'lucide-react'
 import { useIsClient } from '@/components/LocalTime'
-import { drawEndCard, drawOverlay, toPngBase64, type OverlayBrand } from '@/lib/video-overlay'
+import { drawEndCard, drawOverlay, drawSubtitle, toPngBase64, type OverlayBrand } from '@/lib/video-overlay'
 import {
   CLIP_QUALITIES,
   CLIP_SECONDS,
+  clipLength,
+  cueAt,
+  cuesOf,
   FORMATS,
   MAX_SCENES,
   MOTIONS,
   newScene,
   POSITIONS,
   sceneSeconds,
+  splitScene,
+  SUB_STYLES,
   TEXT_STYLES,
   timeline,
+  trimScene,
   uid,
+  voiceCues,
   VOICES,
   type ClipQuality,
+  type Cue,
   type Format,
   type Scene,
+  type SubStyle,
   type VideoDoc,
 } from '@/lib/video'
-import { cancelRender, clipStatus, generateVoices, renderVideo, saveVideo, startClip, videoStatus, videoToPost } from '../actions'
+import { cancelRender, clipStatus, generateVoices, renderVideo, saveVideo, startClip, transcribeScene, videoStatus, videoToPost } from '../actions'
 import { VideoMediaPicker, type LibraryItem } from '../VideoMediaPicker'
 import { MusicPicker } from '../MusicPicker'
 import { clipAction, creditsLabel } from '@/lib/pricing'
@@ -64,6 +75,7 @@ const MOTION_LABEL: Record<(typeof MOTIONS)[number], string> = {
   none: 'Still',
 }
 const STYLE_LABEL: Record<(typeof TEXT_STYLES)[number], string> = { bold: 'Bold', box: 'Brand box', caption: 'Subtitle', minimal: 'Light pill' }
+const SUB_LABEL: Record<SubStyle, string> = { box: 'Dark box', outline: 'Outline', brand: 'Brand colour' }
 
 const field = 'w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400'
 
@@ -199,6 +211,13 @@ export function VideoEditor({
       const copy = { ...d.scenes[i], id: uid() }
       return { ...d, scenes: [...d.scenes.slice(0, i + 1), copy, ...d.scenes.slice(i + 1)] }
     })
+  const split = (id: string, at: number) =>
+    setDoc((d) => {
+      const i = d.scenes.findIndex((s) => s.id === id)
+      const parts = i >= 0 && d.scenes.length < MAX_SCENES ? splitScene(d.scenes[i], at) : null
+      if (!parts) return d
+      return { ...d, scenes: [...d.scenes.slice(0, i), ...parts, ...d.scenes.slice(i + 1)] }
+    })
   const remove = (id: string) =>
     setDoc((d) => {
       if (d.scenes.length <= 1) return d
@@ -235,6 +254,20 @@ export function VideoEditor({
     })
   }
 
+  const transcribeNow = (sceneId: string) => {
+    setBusyWhat('subs')
+    startBusy(async () => {
+      setError(undefined)
+      const ok = await saveVideo(video.id, { name, format, doc })
+      if (ok.error) return setError(ok.error)
+      const res = await transcribeScene(video.id, sceneId)
+      if (res.error || !res.subs) return setError(res.error)
+      // The speech is what the lines say: keep it audible.
+      patchScene(sceneId, { subs: res.subs, keepAudio: true })
+      router.refresh()
+    })
+  }
+
   const render = () => {
     setBusyWhat('render')
     startBusy(async () => {
@@ -244,11 +277,18 @@ export function VideoEditor({
       await document.fonts?.ready
       const parts = timeline(doc).parts
       const overlays: (string | null)[] = []
+      const subs: { at: number; until: number; y: number; png: string }[] = []
       for (const p of parts) {
         if (p.scene) overlays.push(p.scene.text.trim() ? toPngBase64(drawOverlay(p.scene, format, brand)) : null)
         else overlays.push(toPngBase64(await drawEndCard(format, brand)))
+        if (p.scene && doc.subtitles?.on) {
+          for (const c of cuesOf(p.scene)) {
+            const { canvas, y } = drawSubtitle(c.text, p.scene, doc.subtitles.style, format, brand)
+            subs.push({ at: p.start + c.start, until: p.start + c.end, y, png: toPngBase64(canvas) })
+          }
+        }
       }
-      const res = await renderVideo(video.id, overlays)
+      const res = await renderVideo(video.id, overlays, subs)
       if (res.error) return setError(res.error)
       setStatus({ status: 'RENDERING', error: null, output: status.output, render: null })
     })
@@ -321,7 +361,7 @@ export function VideoEditor({
       {status.status === 'FAILED' && <p className="bg-red-50 px-4 py-2 text-sm text-red-700">Render failed: {status.error?.split('\n')[0]}</p>}
       {status.status === 'RENDERING' && <RenderProgress info={status.render ?? null} onCancel={cancel} cancelling={busy && busyWhat === 'cancel'} />}
 
-      <div className="grid flex-1 lg:grid-cols-[230px_1fr_330px]">
+      <div className="grid flex-1 lg:grid-cols-[230px_1fr_380px]">
         {/* Scenes */}
         <aside className="border-b border-zinc-200 p-3 lg:border-r lg:border-b-0">
           <p className="mb-2 px-1 text-xs font-semibold tracking-wide text-zinc-500">SCENES</p>
@@ -455,22 +495,21 @@ export function VideoEditor({
                 </label>
               )}
 
-              <Field label={`Length · ${sceneSeconds(scene).toFixed(1)}s${scene.voiceMs && sceneSeconds(scene) > scene.duration ? ' (fits the voice-over)' : ''}`}>
-                <input type="range" min={1} max={15} step={0.5} value={scene.duration} onChange={(e) => patchScene(scene.id, { duration: Number(e.target.value) })} aria-label="Scene length" className="w-full" />
-              </Field>
-              {scene.media?.kind === 'video' && (scene.media.durationMs ?? 0) > 1000 && (
-                <Field label={`Start the clip at ${scene.clipStart.toFixed(1)}s`}>
-                  <input
-                    type="range"
-                    min={0}
-                    max={Math.max(0, (scene.media.durationMs ?? 0) / 1000 - 1)}
-                    step={0.1}
-                    value={scene.clipStart}
-                    onChange={(e) => patchScene(scene.id, { clipStart: Number(e.target.value) })}
-                    aria-label="Clip start"
-                    className="w-full"
-                  />
+              {(clipLength(scene) ?? 0) > 1 ? (
+                <TrimPanel
+                  key={`${scene.id}-${scene.media?.id}`}
+                  scene={scene}
+                  canSplit={doc.scenes.length < MAX_SCENES}
+                  onTrim={(start, end) => patchScene(scene.id, trimScene(scene, start, end))}
+                  onSplit={(at) => split(scene.id, at)}
+                />
+              ) : (
+                <Field label={`Length · ${sceneSeconds(scene).toFixed(1)}s${scene.voiceMs && sceneSeconds(scene) > scene.duration ? ' (fits the voice-over)' : ''}`}>
+                  <input type="range" min={1} max={15} step={0.5} value={scene.duration} onChange={(e) => patchScene(scene.id, { duration: Number(e.target.value) })} aria-label="Scene length" className="w-full" />
                 </Field>
+              )}
+              {scene.media?.kind === 'video' && scene.voiceMs && sceneSeconds(scene) > scene.duration + 0.05 && (
+                <p className="text-xs text-zinc-500">The voice-over is longer than the clip: its last frame holds until the line ends ({sceneSeconds(scene).toFixed(1)}s).</p>
               )}
               {scene.media?.kind === 'image' && (
                 <Field label="Camera">
@@ -498,6 +537,23 @@ export function VideoEditor({
                 />
                 {scene.voice.trim() && <p className="mt-1 text-xs text-zinc-500">{scene.voiceMediaId ? `Voice ready · ${((scene.voiceMs ?? 0) / 1000).toFixed(1)}s` : 'Not voiced yet — use “Generate voice-over” above.'}</p>}
               </Field>
+
+              {doc.subtitles?.on ? (
+                <SubtitlesPanel
+                  scene={scene}
+                  onChange={(subs) => patchScene(scene.id, { subs })}
+                  onTranscribe={() => transcribeNow(scene.id)}
+                  transcribing={busy && busyWhat === 'subs'}
+                  cost={P.subtitles}
+                />
+              ) : (
+                <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600 ring-1 ring-zinc-200">
+                  <Captions size={13} className="mr-1 inline" /> Subtitles are off.{' '}
+                  <button onClick={() => setDoc({ ...doc, subtitles: { on: true, style: doc.subtitles?.style ?? 'box' } })} className="font-medium text-indigo-600 underline">
+                    Turn them on
+                  </button>
+                </p>
+              )}
             </div>
           )}
 
@@ -509,6 +565,17 @@ export function VideoEditor({
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={doc.endCard} onChange={(e) => setDoc({ ...doc, endCard: e.target.checked })} /> End card with logo and name
               </label>
+              <Field label="Subtitles">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={Boolean(doc.subtitles?.on)} onChange={(e) => setDoc({ ...doc, subtitles: { on: e.target.checked, style: doc.subtitles?.style ?? 'box' } })} /> Show subtitles
+                </label>
+                {doc.subtitles?.on && (
+                  <div className="mt-2">
+                    <Segmented value={doc.subtitles.style} options={SUB_STYLES.map((v) => [v, SUB_LABEL[v]])} onChange={(v) => setDoc({ ...doc, subtitles: { on: true, style: v } })} label="Subtitle style" />
+                  </div>
+                )}
+                <p className="mt-1.5 text-xs text-zinc-500">Made from each scene&apos;s voice-over line, or from what is said in a clip (Scene → Subtitles). Edit any line there.</p>
+              </Field>
               <Field label="Voice">
                 <select
                   value={doc.voiceName}
@@ -601,6 +668,23 @@ function Player({ doc, format, brand, scene }: { doc: VideoDoc; format: Format; 
   // Canvas exists only in the browser: draw after hydration.
   const client = useIsClient()
   const overlay = useMemo(() => (client && shown.scene && shown.scene.text.trim() ? drawOverlay(shown.scene, format, brand).toDataURL() : null), [client, shown.scene, format, brand])
+  // Seconds into the playing scene, for its subtitles.
+  const [clock, setClock] = useState({ part: -1, t: 0 })
+  useEffect(() => {
+    if (playing === null) return
+    const t0 = performance.now()
+    const t = setInterval(() => setClock({ part: playing, t: (performance.now() - t0) / 1000 }), 100)
+    return () => clearInterval(t)
+  }, [playing])
+  const sceneT = clock.part === playing ? clock.t : 0
+  const cues = useMemo(() => (doc.subtitles?.on && shown.scene ? cuesOf(shown.scene) : []), [doc.subtitles?.on, shown.scene])
+  // Playing: the line being said; paused: the scene's first line, as a sample.
+  const cue = playing !== null ? cueAt(cues, sceneT) : (cues[0] ?? null)
+  const sub = useMemo(() => {
+    if (!client || !cue || !shown.scene || !doc.subtitles) return null
+    const { canvas, y } = drawSubtitle(cue.text, shown.scene, doc.subtitles.style, format, brand)
+    return { url: canvas.toDataURL(), y, h: canvas.height }
+  }, [client, cue, shown.scene, doc.subtitles, format, brand])
 
   useEffect(() => {
     if (!doc.endCard) return
@@ -670,6 +754,11 @@ function Player({ doc, format, brand, scene }: { doc: VideoDoc; format: Format; 
             autoPlay
             playsInline
             loop
+            // Only the trimmed part plays, over and over.
+            onTimeUpdate={(e) => {
+              const v = e.currentTarget
+              if (v.currentTime >= s.clipStart + s.duration - 0.05 || v.currentTime < s.clipStart - 0.3) v.currentTime = s.clipStart
+            }}
             className="absolute inset-0 h-full w-full object-cover"
           />
         )}
@@ -681,10 +770,196 @@ function Player({ doc, format, brand, scene }: { doc: VideoDoc; format: Format; 
           // eslint-disable-next-line @next/next/no-img-element
           <img key={`o-${s?.id}-${playing}`} src={overlay} alt="" className="pointer-events-none absolute inset-0 h-full w-full" style={{ animation: 'lp-text-in .35s .15s both' }} />
         )}
+        {sub && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={sub.url} alt={cue?.text ?? ''} aria-label="Subtitle" className="pointer-events-none absolute left-0 w-full" style={{ top: sub.y * scale, height: sub.h * scale }} />
+        )}
       </div>
       <button onClick={play} className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-semibold shadow-sm ring-1 ring-zinc-200 hover:bg-zinc-50">
         {playing !== null ? <Pause size={15} /> : <Play size={15} />} {playing !== null ? 'Stop' : `Play preview · ${total.toFixed(1)}s`}
       </button>
+    </div>
+  )
+}
+
+// Keep a part of the clip: start and end over the whole clip, a playhead to
+// set them from what you see, and a cut in two at the playhead.
+function TrimPanel({ scene, canSplit, onTrim, onSplit }: { scene: Scene; canSplit: boolean; onTrim: (start: number, end: number) => void; onSplit: (at: number) => void }) {
+  const len = clipLength(scene) ?? 0
+  const start = scene.clipStart
+  const end = Math.min(len, scene.clipStart + scene.duration)
+  const ref = useRef<HTMLVideoElement>(null)
+  const [t, setT] = useState(start)
+  const [playing, setPlaying] = useState(false)
+  const seek = (x: number) => {
+    const v = ref.current
+    const to = Math.max(0, Math.min(len, x))
+    if (v) v.currentTime = to
+    setT(to)
+  }
+  const toggle = () => {
+    const v = ref.current
+    if (!v) return
+    if (playing) return v.pause()
+    if (v.currentTime < start || v.currentTime >= end - 0.05) v.currentTime = start
+    void v.play()
+  }
+  const at = Math.round((t - start) * 10) / 10
+  const splittable = canSplit && at >= 1 && end - t >= 1
+  const pct = (x: number) => `${(x / len) * 100}%`
+  return (
+    <div className="space-y-2.5 rounded-xl border border-zinc-200 p-3" aria-label="Trim the clip">
+      <p className="flex items-center justify-between text-sm font-medium">
+        <span>Trim the clip</span>
+        <span className="text-xs font-normal text-zinc-500 tabular-nums">
+          {start.toFixed(1)}–{end.toFixed(1)}s of {len.toFixed(1)}s
+        </span>
+      </p>
+      <video
+        ref={ref}
+        src={scene.media!.url}
+        muted={!scene.keepAudio}
+        playsInline
+        preload="metadata"
+        onLoadedMetadata={() => seek(start)}
+        onTimeUpdate={(e) => {
+          const v = e.currentTarget
+          setT(v.currentTime)
+          if (!v.paused && v.currentTime >= end) {
+            v.pause()
+            v.currentTime = end
+          }
+        }}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        className="max-h-44 w-full rounded-lg bg-black object-contain"
+        aria-label="Clip"
+      />
+      <div
+        className="relative h-9 cursor-pointer overflow-hidden rounded-lg bg-zinc-200"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          seek(((e.clientX - r.left) / r.width) * len)
+        }}
+        aria-hidden
+      >
+        {scene.media!.posterUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={scene.media!.posterUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />
+        )}
+        <div className="absolute inset-y-0 rounded-md border-2 border-indigo-500 bg-indigo-500/25" style={{ left: pct(start), width: pct(end - start) }} />
+        <div className="absolute inset-y-0 w-0.5 bg-red-500" style={{ left: pct(t) }} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="text-xs text-zinc-600">
+          Start · {start.toFixed(1)}s
+          <input type="range" min={0} max={len} step={0.1} value={start} onChange={(e) => (onTrim(Number(e.target.value), end), seek(Number(e.target.value)))} aria-label="Clip start" className="w-full" />
+        </label>
+        <label className="text-xs text-zinc-600">
+          End · {end.toFixed(1)}s
+          <input type="range" min={0} max={len} step={0.1} value={end} onChange={(e) => (onTrim(start, Number(e.target.value)), seek(Number(e.target.value)))} aria-label="Clip end" className="w-full" />
+        </label>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <button onClick={toggle} className="inline-flex items-center gap-1 rounded-lg bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-white">
+          {playing ? <Pause size={13} /> : <Play size={13} />} {playing ? 'Pause' : 'Play the part'}
+        </button>
+        <button onClick={() => onTrim(t, Math.max(end, t + 1))} className="rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-zinc-200 hover:bg-zinc-50">
+          Start here
+        </button>
+        <button onClick={() => onTrim(Math.min(start, t - 1), t)} className="rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-zinc-200 hover:bg-zinc-50">
+          End here
+        </button>
+        <button
+          onClick={() => onSplit(at)}
+          disabled={!splittable}
+          title={splittable ? undefined : 'Move the playhead inside the kept part, at least 1 s from its ends'}
+          className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-zinc-200 hover:bg-zinc-50 disabled:opacity-40"
+        >
+          <Scissors size={13} /> Split here
+        </button>
+      </div>
+      <p className="text-xs text-zinc-500">Play or click the bar, then set the start and end there. “Split here” cuts the scene in two — delete a part to cut it out.</p>
+    </div>
+  )
+}
+
+// The scene's subtitle lines: from its voice-over, transcribed from the clip,
+// or typed. Editing a voice-over line keeps it as the scene's own.
+function SubtitlesPanel({
+  scene,
+  onChange,
+  onTranscribe,
+  transcribing,
+  cost,
+}: {
+  scene: Scene
+  onChange: (subs: Cue[] | null) => void
+  onTranscribe: () => void
+  transcribing: boolean
+  cost: number
+}) {
+  const rows = scene.subs ?? voiceCues(scene)
+  const own = Boolean(scene.subs)
+  const len = sceneSeconds(scene)
+  const edit = (i: number, patch: Partial<Cue>) => onChange(rows.map((c, j) => (j === i ? { ...c, ...patch } : c)))
+  const last = rows[rows.length - 1]
+  const num = 'w-14 rounded-md border border-zinc-200 px-1 py-1 text-right text-xs tabular-nums'
+  return (
+    <div className="space-y-2" aria-label="Subtitles">
+      <p className="flex items-center gap-1.5 text-sm font-medium">
+        <Captions size={15} /> Subtitles
+        <span className="ml-auto text-xs font-normal text-zinc-500">{own ? 'Own lines' : scene.voice.trim() ? 'From the voice-over' : ''}</span>
+      </p>
+      {rows.length === 0 && (
+        <p className="text-xs text-zinc-500">
+          {scene.media?.kind === 'video'
+            ? 'Turn what is said in the clip into subtitles, or write a voice-over line.'
+            : scene.voice.trim()
+              ? 'Lines appear when the voice-over is generated.'
+              : 'Write a voice-over line, or add a line yourself.'}
+        </p>
+      )}
+      {rows.length > 0 && (
+        <p className="flex gap-1 text-[11px] text-zinc-400" aria-hidden>
+          <span className="w-14 text-right">From, s</span>
+          <span className="w-14 text-right">To, s</span>
+          <span className="pl-1">Line</span>
+        </p>
+      )}
+      {rows.length > 0 && (
+        <ol className="space-y-1.5">
+          {rows.map((c, i) => (
+            <li key={i} className="flex items-center gap-1">
+              <input type="number" min={0} max={len} step={0.1} value={c.start} onChange={(e) => edit(i, { start: Number(e.target.value) })} aria-label={`Subtitle ${i + 1} start`} className={num} />
+              <input type="number" min={0} max={len} step={0.1} value={c.end} onChange={(e) => edit(i, { end: Number(e.target.value) })} aria-label={`Subtitle ${i + 1} end`} className={num} />
+              <input value={c.text} onChange={(e) => edit(i, { text: e.target.value })} aria-label={`Subtitle ${i + 1}`} className="min-w-0 flex-1 rounded-md border border-zinc-200 px-2 py-1 text-xs" />
+              <button onClick={() => onChange(rows.filter((_, j) => j !== i))} aria-label={`Delete subtitle ${i + 1}`} className="rounded p-1 text-zinc-400 hover:text-red-600">
+                <X size={13} />
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {scene.media?.kind === 'video' && (
+          <button onClick={onTranscribe} disabled={transcribing} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-60">
+            {transcribing ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />} Subtitles from speech · {creditsLabel(cost)}
+          </button>
+        )}
+        <button
+          onClick={() => onChange([...rows, { start: last ? last.end : 0, end: Math.min(len, (last ? last.end : 0) + 2), text: '' }])}
+          disabled={(last?.end ?? 0) >= len}
+          className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-zinc-200 hover:bg-zinc-50 disabled:opacity-40"
+        >
+          <Plus size={13} /> Add line
+        </button>
+        {own && scene.voice.trim() && (
+          <button onClick={() => onChange(null)} className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100">
+            Use the voice-over line
+          </button>
+        )}
+      </div>
     </div>
   )
 }

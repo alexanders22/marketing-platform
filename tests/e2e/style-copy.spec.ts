@@ -104,11 +104,11 @@ test('a copied video style: the AI video follows its scenes, voice and music', a
   // The reference sets the scenes; AI pictures in its look by default.
   await expect(dialog.getByLabel('Scenes')).toBeDisabled()
   await expect(dialog.getByLabel('Scenes')).toHaveValue('4')
-  await expect(dialog.getByRole('button', { name: /AI images/ })).toHaveAttribute('aria-pressed', 'true')
-  // script 1 + voice 1 + 4 images + music 1.
-  await expect(dialog.getByRole('button', { name: /Create · up to 7 credits/ })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'AI pictures' })).toHaveAttribute('aria-pressed', 'true')
+  // script 1 + voice 1 + 4 images × 4 + music 2.
+  await expect(dialog.getByRole('button', { name: /Create · up to 20 credits/ })).toBeVisible()
   await dialog.getByLabel(/AI music like the reference \(upbeat pop\)/).uncheck()
-  await expect(dialog.getByRole('button', { name: /Create · up to 6 credits/ })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: /Create · up to 18 credits/ })).toBeVisible()
   // Back to the standard look: scenes free again (the title changes too).
   await dialog.getByRole('radio', { name: /^Standard/ }).click()
   await expect(page.getByRole('dialog', { name: 'Create video with AI' }).getByLabel('Scenes')).toBeEnabled()

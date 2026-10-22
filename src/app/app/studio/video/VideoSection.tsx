@@ -224,6 +224,7 @@ function AiVideoModal({
   const [media, setMedia] = useState<LibraryItem[]>([])
   const [picking, setPicking] = useState(false)
   const [voice, setVoice] = useState(true)
+  const [subtitles, setSubtitles] = useState(true)
   const [language, setLanguage] = useState('English')
   const [error, setError] = useState<string>()
   const [pending, start] = useTransition()
@@ -268,56 +269,40 @@ function AiVideoModal({
         voice,
         language,
         look: look === 'sketch' ? 'sketch' : 'standard',
+        subtitles: voice && subtitles,
         ...(look === 'reference' && styleId ? { styleId, music: withMusic } : {}),
       })
       if (res.error || !res.id) return setError(res.error)
       router.push(`/app/studio/video/${res.id}`)
     })
 
+  // What fills the frames, explained (the main choice of the form).
+  const SOURCES = [
+    { v: 'library', Icon: ImageIcon, title: 'My photos & videos', hint: 'Your own shots, one per scene, in the order you pick.', price: 'No extra credits' },
+    { v: 'ai', Icon: Sparkles, title: 'AI pictures', hint: 'AI draws a new picture for every scene.', price: `${scenes * P.image} credits` },
+    { v: 'veo', Icon: Clapperboard, title: 'AI video clips', hint: 'Real moving footage made by Google Veo.', price: paid ? `from ${scenes * P[clipAction('quick')] * 4} credits` : 'Paid plans' },
+    { v: 'none', Icon: Palette, title: 'Text on colour', hint: 'No pictures: big text on your brand colours.', price: 'No extra credits' },
+  ] as const
+
   return (
-    <Modal title={look === 'sketch' ? 'Whiteboard explainer video' : look === 'reference' ? 'A video like one you saw' : 'Create video with AI'} onClose={onClose}>
-      <div className="space-y-4">
-        <label className="block text-sm font-medium">
-          What is the video about?
+    <Modal wide title={look === 'sketch' ? 'Whiteboard explainer video' : look === 'reference' ? 'A video like one you saw' : 'Create video with AI'} onClose={onClose}>
+      <p className="-mt-2 mb-5 text-sm text-zinc-500">AI writes the script, puts a shot in every scene and adds the voice-over. You can change everything in the editor afterwards.</p>
+      <div className="space-y-6">
+        <Step n={1} title="What is the video about?">
           <textarea
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
+            aria-label="What is the video about?"
             placeholder="e.g. Weekend custom cakes: order by Thursday, delivery across Tbilisi"
-            className="mt-1.5 min-h-24 w-full resize-y rounded-lg border border-zinc-200 px-3 py-2 text-sm font-normal outline-none focus:border-zinc-400"
+            className="min-h-24 w-full resize-y rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-zinc-400"
           />
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block text-sm font-medium">
-            Format
-            <select value={format} onChange={(e) => setFormat(e.target.value as Format)} className="mt-1.5 w-full rounded-lg border border-zinc-200 px-2 py-2 text-sm font-normal">
-              {(Object.keys(FORMATS) as Format[]).map((f) => (
-                <option key={f} value={f}>
-                  {f} · {FORMATS[f].name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm font-medium">
-            Scenes
-            <select
-              value={scenes}
-              onChange={(e) => setScenes(Number(e.target.value))}
-              disabled={Boolean(picked)}
-              title={picked ? 'As many as in the reference' : undefined}
-              className="mt-1.5 w-full rounded-lg border border-zinc-200 px-2 py-2 text-sm font-normal disabled:bg-zinc-50 disabled:text-zinc-500"
-            >
-              {[3, 4, 5, 6, 7, 8].map((n) => (
-                <option key={n}>{n}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div>
-          <p className="text-sm font-medium">Look</p>
-          <div role="radiogroup" aria-label="Video look" className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        </Step>
+
+        <Step n={2} title="Look">
+          <div role="radiogroup" aria-label="Video look" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {(
               [
-                ['standard', Sparkles, 'Standard', 'Photos, clips or brand colours'],
+                ['standard', Sparkles, 'Standard', 'Your pictures as they are, with text and voice'],
                 ['sketch', PenLine, 'Whiteboard sketch', 'Hand-drawn ink on paper, explained step by step'],
                 ['reference', Copy, 'Like a video I saw', 'Same look, rhythm, text and music'],
               ] as const
@@ -342,7 +327,7 @@ function AiVideoModal({
             ))}
           </div>
           {look !== 'standard' && (visuals === 'library' || (visuals === 'veo' && veoMode === 'photos')) && (
-            <p className="mt-1.5 text-xs text-amber-700">Your own photos stay as they are — pick AI images or AI clips to get the {look === 'sketch' ? 'drawings' : 'look'}.</p>
+            <p className="mt-1.5 text-xs text-amber-700">Your own photos stay as they are — pick AI pictures or AI video clips to get the {look === 'sketch' ? 'drawings' : 'look'}.</p>
           )}
           {look === 'reference' && (
             <div className="mt-2 space-y-2">
@@ -393,42 +378,51 @@ function AiVideoModal({
               )}
             </div>
           )}
-        </div>
-        <div>
-          <p className="text-sm font-medium">Pictures</p>
-          <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {(
-              [
-                ['library', ImageIcon, 'My photos & clips'],
-                ['ai', Sparkles, `AI images · ${scenes * P.image} cr`],
-                ['veo', Clapperboard, 'AI clips (Veo)'],
-                ['none', Palette, 'Brand colours'],
-              ] as const
-            ).map(([v, Icon, l]) => (
+        </Step>
+
+        <Step n={3} title="What is in the frames?" hint="Pick one — it decides where the pictures come from.">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {SOURCES.map(({ v, Icon, title, hint, price }) => (
               <button
                 key={v}
                 onClick={() => setVisuals(v)}
                 disabled={v === 'veo' && !paid}
                 title={v === 'veo' && !paid ? 'Paid plans only' : undefined}
                 aria-pressed={visuals === v}
-                className={`flex flex-col items-center gap-1 rounded-xl p-2.5 text-xs font-medium ring-1 disabled:cursor-not-allowed disabled:opacity-40 ${visuals === v ? 'bg-zinc-900 text-white ring-zinc-900' : 'ring-zinc-200 hover:bg-zinc-50'}`}
+                aria-label={title}
+                className={`flex flex-col items-start gap-1 rounded-xl p-3 text-left ring-1 transition disabled:cursor-not-allowed disabled:opacity-40 ${visuals === v ? 'bg-zinc-900 text-white ring-zinc-900' : 'ring-zinc-200 hover:bg-zinc-50'}`}
               >
-                <Icon size={16} /> {l}
+                <Icon size={18} />
+                <span className="text-sm font-semibold">{title}</span>
+                <span className={`text-xs ${visuals === v ? 'text-zinc-300' : 'text-zinc-500'}`}>{hint}</span>
+                <span className={`mt-auto pt-1 text-[11px] font-medium ${visuals === v ? 'text-emerald-300' : 'text-zinc-400'}`}>{price}</span>
               </button>
             ))}
           </div>
           {!paid && (
             <p className="mt-2 text-xs text-zinc-500">
-              AI clips (Veo) are part of paid plans.{' '}
+              AI video clips (Veo) are part of paid plans.{' '}
               <Link href="/app/plan" className="font-medium text-indigo-600 underline">
                 Choose a plan
               </Link>
             </p>
           )}
+          {visuals === 'library' && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-zinc-50 p-3 ring-1 ring-zinc-200">
+              {media.map((m) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={m.id} src={m.kind === 'video' ? (m.posterUrl ?? '') : m.url} alt="" className="h-14 w-14 rounded-lg object-cover ring-1 ring-zinc-200" />
+              ))}
+              <button onClick={() => setPicking(true)} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50">
+                {media.length ? 'Change' : 'Pick photos & videos'}
+              </button>
+              <span className="text-xs text-zinc-500">{media.length ? `${media.length} picked — scene 1 gets the first.` : 'Upload or pick from your library. None picked: scenes start on your brand colour.'}</span>
+            </div>
+          )}
           {visuals === 'veo' && (
-            <div className="mt-2 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-900">
-              <p>A real moving {clipSeconds}-second clip for every scene, made by Google Veo. They arrive in the editor within a few minutes.</p>
-              <div role="radiogroup" aria-label="Clip source" className="mt-2 grid grid-cols-3 gap-1">
+            <div className="mt-3 space-y-3 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-900">
+              <p>A real moving {clipSeconds}-second clip for every scene. They arrive in the editor within a few minutes.</p>
+              <div role="radiogroup" aria-label="Clip source" className="grid grid-cols-3 gap-1">
                 {(
                   [
                     ['text', 'From the script'],
@@ -448,7 +442,7 @@ function AiVideoModal({
                 ))}
               </div>
               {veoMode === 'photos' && (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {media
                     .filter((m) => m.kind === 'image')
                     .map((m) => (
@@ -463,7 +457,7 @@ function AiVideoModal({
               )}
               {veoMode === 'character' &&
                 (characters.length ? (
-                  <label className="mt-2 flex items-center gap-2">
+                  <label className="flex items-center gap-2">
                     Character
                     <select value={characterId} onChange={(e) => setCharacterId(e.target.value)} aria-label="Character" className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs">
                       {characters.map((c) => (
@@ -475,7 +469,7 @@ function AiVideoModal({
                     <span>Same person in every scene · Pro or Cinema, 8 s per clip.</span>
                   </label>
                 ) : (
-                  <p className="mt-2">
+                  <p>
                     No characters yet.{' '}
                     <Link href="/app/studio/characters" className="font-medium underline">
                       Add one from your photos
@@ -483,12 +477,7 @@ function AiVideoModal({
                     — then the same person appears in every clip.
                   </p>
                 ))}
-              {veo && (
-                <div className="mt-2">
-                  <VeoMeter veo={veo} need={scenes * clipSeconds} />
-                </div>
-              )}
-              <div role="radiogroup" aria-label="Clip quality" className="mt-2 flex gap-1">
+              <div role="radiogroup" aria-label="Clip quality" className="flex flex-wrap gap-1">
                 {(Object.keys(CLIP_QUALITIES) as ClipQuality[]).map((q) => (
                   <button
                     key={q}
@@ -502,36 +491,61 @@ function AiVideoModal({
                   </button>
                 ))}
               </div>
+              {veo && <VeoMeter veo={veo} need={scenes * clipSeconds} />}
             </div>
           )}
-          {visuals === 'library' && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {media.map((m) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={m.id} src={m.kind === 'video' ? (m.posterUrl ?? '') : m.url} alt="" className="h-12 w-12 rounded-lg object-cover ring-1 ring-zinc-200" />
-              ))}
-              <button onClick={() => setPicking(true)} className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-medium hover:bg-zinc-50">
-                {media.length ? 'Change' : 'Pick photos & clips'}
-              </button>
-              {media.length === 0 && <span className="text-xs text-zinc-500">Used in order, one per scene.</span>}
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={voice} onChange={(e) => setVoice(e.target.checked)} /> Voice-over
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            Language
-            <select value={language} onChange={(e) => setLanguage(e.target.value)} className="rounded-lg border border-zinc-200 px-2 py-1 text-sm">
-              {['English', 'Georgian', 'Russian'].map((l) => (
-                <option key={l}>{l}</option>
-              ))}
-            </select>
-          </label>
-        </div>
+        </Step>
+
+        <Step n={4} title="Format and sound">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block text-sm text-zinc-600">
+              Format
+              <select value={format} onChange={(e) => setFormat(e.target.value as Format)} className="mt-1 w-full rounded-lg border border-zinc-200 px-2 py-2 text-sm text-zinc-900">
+                {(Object.keys(FORMATS) as Format[]).map((f) => (
+                  <option key={f} value={f}>
+                    {f} · {FORMATS[f].name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm text-zinc-600">
+              Scenes
+              <select
+                value={scenes}
+                onChange={(e) => setScenes(Number(e.target.value))}
+                disabled={Boolean(picked)}
+                title={picked ? 'As many as in the reference' : undefined}
+                className="mt-1 w-full rounded-lg border border-zinc-200 px-2 py-2 text-sm text-zinc-900 disabled:bg-zinc-50 disabled:text-zinc-500"
+              >
+                {[3, 4, 5, 6, 7, 8].map((n) => (
+                  <option key={n} value={n}>
+                    {n} scenes · about {n * 3}s
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm text-zinc-600">
+              Language
+              <select value={language} onChange={(e) => setLanguage(e.target.value)} aria-label="Language" className="mt-1 w-full rounded-lg border border-zinc-200 px-2 py-2 text-sm text-zinc-900">
+                {['English', 'Georgian', 'Russian'].map((l) => (
+                  <option key={l}>{l}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={voice} onChange={(e) => setVoice(e.target.checked)} /> Voice-over
+            </label>
+            <label className={`flex items-center gap-2 text-sm ${voice ? '' : 'text-zinc-400'}`}>
+              <input type="checkbox" checked={voice && subtitles} disabled={!voice} onChange={(e) => setSubtitles(e.target.checked)} /> Subtitles of the voice-over
+            </label>
+          </div>
+        </Step>
+
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <div className="flex justify-end gap-2">
+        <div className="sticky -bottom-6 -mx-6 -mb-6 flex flex-wrap items-center justify-end gap-2 border-t border-zinc-100 bg-white px-6 py-4">
+          <span className="mr-auto text-xs text-zinc-500">Up to {cost} credits · charged only for what is made</span>
           <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100">
             Cancel
           </button>
@@ -565,5 +579,19 @@ function AiVideoModal({
         />
       )}
     </Modal>
+  )
+}
+
+// One numbered step of the form.
+function Step({ n, title, hint, children }: { n: number; title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="flex items-center gap-2 text-sm font-semibold">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-zinc-900 text-xs text-white">{n}</span>
+        {title}
+      </h3>
+      {hint && <p className="mt-0.5 ml-8 text-xs text-zinc-500">{hint}</p>}
+      <div className="mt-2">{children}</div>
+    </section>
   )
 }

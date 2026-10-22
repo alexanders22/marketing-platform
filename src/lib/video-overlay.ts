@@ -2,7 +2,7 @@
 // end card, in the browser. The renderer lays these PNGs over the video, so
 // the editor preview and the final MP4 look the same.
 
-import { FORMATS, type Format, type Scene } from './video'
+import { FORMATS, type Format, type Scene, type SubStyle } from './video'
 
 export type OverlayBrand = { name: string; colors: string[]; logoUrl: string | null }
 
@@ -37,27 +37,33 @@ const inkOn = (hex: string) => {
   return l > 0.6 ? '#111111' : '#ffffff'
 }
 
-export function drawOverlay(scene: Pick<Scene, 'text' | 'position' | 'style'>, format: Format, brand: OverlayBrand): HTMLCanvasElement {
+type TextScene = Pick<Scene, 'text' | 'position' | 'style'>
+
+// Where the scene's text goes: font, lines and the block's top.
+function textLayout(ctx: CanvasRenderingContext2D, scene: TextScene, w: number, h: number) {
+  const base = Math.min(w, h)
+  const size = { bold: base * 0.085, box: base * 0.065, caption: base * 0.05, minimal: base * 0.055 }[scene.style]
+  const weight = scene.style === 'caption' ? 600 : 800
+  ctx.font = `${weight} ${size}px ${FONT}`
+  const lines = wrap(ctx, scene.text.trim(), w * 0.82)
+  const lh = size * 1.18
+  const block = lines.length * lh
+  // Reels cover the bottom fifth with buttons and the caption: stay above it.
+  const cy = scene.position === 'top' ? h * 0.14 + block / 2 : scene.position === 'center' ? h / 2 : h * (h > w ? 0.72 : 0.8) - block / 2
+  return { size, lines, lh, block, top: cy - block / 2 }
+}
+
+export function drawOverlay(scene: TextScene, format: Format, brand: OverlayBrand): HTMLCanvasElement {
   const { w, h } = FORMATS[format]
   const c = document.createElement('canvas')
   c.width = w
   c.height = h
   const ctx = c.getContext('2d')!
-  const text = scene.text.trim()
-  if (!text) return c
+  if (!scene.text.trim()) return c
 
-  const base = Math.min(w, h)
-  const size = { bold: base * 0.085, box: base * 0.065, caption: base * 0.05, minimal: base * 0.055 }[scene.style]
-  const weight = scene.style === 'caption' ? 600 : 800
-  ctx.font = `${weight} ${size}px ${FONT}`
+  const { size, lines, lh, block, top } = textLayout(ctx, scene, w, h)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  const lines = wrap(ctx, text, w * 0.82)
-  const lh = size * 1.18
-  const block = lines.length * lh
-  // Reels cover the bottom fifth with buttons and the caption: stay above it.
-  const cy = scene.position === 'top' ? h * 0.14 + block / 2 : scene.position === 'center' ? h / 2 : h * (h > w ? 0.72 : 0.8) - block / 2
-  const top = cy - block / 2
 
   const accent = brand.colors[0] ?? '#ff2e63'
   if (scene.style === 'box' || scene.style === 'caption' || scene.style === 'minimal') {
@@ -74,6 +80,50 @@ export function drawOverlay(scene: Pick<Scene, 'text' | 'position' | 'style'>, f
   }
   lines.forEach((l, i) => ctx.fillText(l, w / 2, top + lh * (i + 0.5)))
   return c
+}
+
+// One subtitle line as a strip as wide as the video, and where it goes (y):
+// low in the frame, above the scene's own text when that sits at the bottom.
+export function drawSubtitle(text: string, scene: TextScene, style: SubStyle, format: Format, brand: OverlayBrand): { canvas: HTMLCanvasElement; y: number } {
+  const { w, h } = FORMATS[format]
+  const base = Math.min(w, h)
+  const size = base * 0.052
+  const c = document.createElement('canvas')
+  const ctx = c.getContext('2d')!
+  ctx.font = `700 ${size}px ${FONT}`
+  const lines = wrap(ctx, text.trim(), w * 0.84).slice(0, 2)
+  const lh = size * 1.22
+  const pad = size * 0.4
+  const stripH = Math.ceil(lines.length * lh + pad * 2 + size * 0.3)
+  let cy = h * (h > w ? 0.75 : 0.85)
+  if (scene.text.trim() && scene.position === 'bottom') {
+    const t = textLayout(ctx, scene, w, h)
+    cy = Math.min(cy, t.top - size * 0.8 - stripH / 2)
+  }
+  const y = Math.max(0, Math.round(cy - stripH / 2))
+  c.width = w
+  c.height = stripH
+  ctx.font = `700 ${size}px ${FONT}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const top = (stripH - lines.length * lh) / 2
+  const accent = brand.colors[0] ?? '#111111'
+  if (style !== 'outline') {
+    lines.forEach((l, i) => {
+      const lw = ctx.measureText(l).width
+      ctx.fillStyle = style === 'brand' ? accent : 'rgba(0,0,0,0.72)'
+      roundRect(ctx, w / 2 - lw / 2 - pad, top + lh * i - size * 0.08, lw + pad * 2, lh + size * 0.16, size * 0.25)
+    })
+  }
+  ctx.fillStyle = style === 'brand' ? inkOn(accent) : '#ffffff'
+  if (style === 'outline') {
+    ctx.lineJoin = 'round'
+    ctx.lineWidth = size * 0.16
+    ctx.strokeStyle = '#000000'
+    lines.forEach((l, i) => ctx.strokeText(l, w / 2, top + lh * (i + 0.5)))
+  }
+  lines.forEach((l, i) => ctx.fillText(l, w / 2, top + lh * (i + 0.5)))
+  return { canvas: c, y }
 }
 
 const loadImage = (url: string) =>

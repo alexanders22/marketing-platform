@@ -210,7 +210,7 @@ test('AI video: script, voice-over and scenes from my photos', async () => {
   await page.getByRole('button', { name: 'Create video with AI' }).click()
   const d = page.getByRole('dialog', { name: 'Create video with AI' })
   await d.locator('textarea').fill('Weekend custom cakes: order by Thursday, delivery across Tbilisi')
-  await d.getByRole('button', { name: 'Pick photos & clips' }).click()
+  await d.getByRole('button', { name: 'Pick photos & videos' }).click()
   const pick = page.getByRole('dialog', { name: 'Photos and clips' })
   await pick.getByRole('button', { name: /Select (image|video)/ }).first().click()
   await pick.getByRole('button', { name: /^Use/ }).click()
@@ -231,9 +231,9 @@ test('whiteboard explainer: opens with the sketch look and AI pictures; the styl
   const d = page.getByRole('dialog', { name: 'Whiteboard explainer video' })
   const looks = d.getByRole('radiogroup', { name: 'Video look' })
   await expect(looks.getByRole('radio', { name: /Whiteboard sketch/ })).toHaveAttribute('aria-checked', 'true')
-  await expect(d.getByRole('button', { name: /AI images/ })).toHaveAttribute('aria-pressed', 'true')
+  await expect(d.getByRole('button', { name: 'AI pictures' })).toHaveAttribute('aria-pressed', 'true')
   // Own photos are not redrawn: a hint says so.
-  await d.getByRole('button', { name: 'My photos & clips' }).click()
+  await d.getByRole('button', { name: 'My photos & videos' }).click()
   await expect(d.getByText(/Your own photos stay as they are/)).toBeVisible()
   // Back to the standard look: the usual title.
   await looks.getByRole('radio', { name: /Standard/ }).click()

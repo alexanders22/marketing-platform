@@ -23,6 +23,7 @@ export const ACTIONS = {
   videoScript: { label: 'Video script', unit: 'script', credits: 1, costUsd: 0.004 },
   voice: { label: 'Voice-over', unit: 'video', credits: 1, costUsd: 0.01 },
   music: { label: 'AI music (Lyria 3)', unit: 'track', credits: 2, costUsd: 0.04 },
+  subtitles: { label: 'Subtitles from speech', unit: 'scene', credits: 1, costUsd: 0.003 },
   clipQuick: { label: 'AI clip · Quick (Veo 3.1 Lite)', unit: 'second', credits: 3, costUsd: 0.05 },
   clipPro: { label: 'AI clip · Pro (Veo 3.1 Fast)', unit: 'second', credits: 8, costUsd: 0.15 },
   clipCinema: { label: 'AI clip · Cinema (Veo 3.1)', unit: 'second', credits: 20, costUsd: 0.4 },

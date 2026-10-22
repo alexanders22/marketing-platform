@@ -1,9 +1,11 @@
 'use server'
 
+import { readFile, rm } from 'node:fs/promises'
+import path from 'node:path'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
-import { aiEnabled, generateImage, generateMusic, LANGUAGES, speak, videoScript } from '@/lib/ai'
+import { aiEnabled, generateImage, generateMusic, LANGUAGES, speak, transcribe, videoScript } from '@/lib/ai'
 import { importFreeMusic, saveGeneratedMusic, searchFreeMusic, type FreeTrack } from '@/lib/music'
 import { requireContext } from '@/lib/context'
 import { charge, notEnough, prices } from '@/lib/credits'
@@ -12,9 +14,10 @@ import { prisma } from '@/lib/prisma'
 import { TEMPLATE_PHOTO } from '@/lib/design'
 import { templatePhotos } from '@/lib/template-photos'
 import { VIDEO_TEMPLATES } from '@/lib/video-templates'
-import { mediaUrl, saveMedia } from '@/lib/storage'
-import { emptyDoc, FORMATS, isFormat, MAX_SCENES, MOTIONS, newScene, POSITIONS, TEXT_STYLES, timeline, VOICES, type Format, type SceneMedia, type VideoDoc } from '@/lib/video'
-import { enqueueRender, stopRender } from '@/lib/video-render'
+import { mediaFile, mediaUrl, saveMedia, tempDir } from '@/lib/storage'
+import { emptyDoc, FORMATS, isFormat, MAX_SCENES, MOTIONS, newScene, POSITIONS, SUB_STYLES, TEXT_STYLES, timeline, VOICES, type Cue, type Format, type SceneMedia, type VideoDoc } from '@/lib/video'
+import { enqueueRender, stopRender, type SubtitleStrip } from '@/lib/video-render'
+import { ffmpeg, probe } from '@/lib/ffmpeg'
 import { advanceClip, CLIP_QUALITIES, CLIP_SECONDS, startVeo, veoAspect, veoEnabled, type ClipQuality } from '@/lib/veo'
 import { isPaid, PAID_ONLY } from '@/lib/plans'
 import { veoAllowance, veoLimitMessage } from '@/lib/credits'
@@ -48,6 +51,11 @@ const SceneSchema = z.object({
   voiceMs: z.number().int().min(0).max(120_000).nullable(),
   clipJobId: z.string().max(40).nullable().optional(),
   keepAudio: z.boolean().optional(),
+  subs: z
+    .array(z.object({ start: z.number().min(0).max(60), end: z.number().min(0).max(60), text: z.string().max(160) }))
+    .max(80)
+    .nullable()
+    .optional(),
 })
 const DocSchema = z.object({
   scenes: z.array(SceneSchema).min(1, 'Add at least one scene').max(MAX_SCENES),
@@ -56,6 +64,7 @@ const DocSchema = z.object({
   endCard: z.boolean(),
   voiceName: z.string().refine((v) => VOICES.some((x) => x.id === v)),
   caption: z.string().max(2200).optional(),
+  subtitles: z.object({ on: z.boolean(), style: z.enum(SUB_STYLES) }).optional(),
 })
 
 async function ownedMedia(workspaceId: string, doc: VideoDoc) {
@@ -153,9 +162,16 @@ export async function generateVoices(id: string): Promise<{ doc?: VideoDoc; erro
   return { doc }
 }
 
+const isPng = (buf: Buffer) => buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+
 // The browser sends one PNG per part of the timeline (text over each scene,
-// then the end card); the server renders in the background.
-export async function renderVideo(id: string, overlays: (string | null)[]): Promise<{ error?: string }> {
+// then the end card) and one strip per subtitle line; the server renders in
+// the background.
+export async function renderVideo(
+  id: string,
+  overlays: (string | null)[],
+  subs: { at: number; until: number; y: number; png: string }[] = [],
+): Promise<{ error?: string }> {
   const { workspace } = await requireContext()
   const video = await prisma.video.findFirst({ where: { id, workspaceId: workspace.id } })
   if (!video) return { error: 'Video not found' }
@@ -172,12 +188,58 @@ export async function renderVideo(id: string, overlays: (string | null)[]): Prom
       continue
     }
     const buf = Buffer.from(o, 'base64')
-    if (buf.length > 8 * 1024 * 1024 || !buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { error: 'Invalid overlay' }
+    if (buf.length > 8 * 1024 * 1024 || !isPng(buf)) return { error: 'Invalid overlay' }
     pngs.push(buf)
   }
-  if (!(await enqueueRender(id, pngs))) return { error: 'Already rendering' }
+  const { total } = timeline(doc)
+  const { h } = FORMATS[isFormat(video.format) ? video.format : '9:16']
+  if (subs.length > 400) return { error: 'Too many subtitle lines' }
+  const strips: SubtitleStrip[] = []
+  for (const x of subs) {
+    const png = Buffer.from(x.png, 'base64')
+    if (png.length > 2 * 1024 * 1024 || !isPng(png)) return { error: 'Invalid subtitle' }
+    if (!(x.at >= 0 && x.until > x.at && x.at < total + 0.01 && x.y >= 0 && x.y < h)) return { error: 'Save the video and try again' }
+    strips.push({ at: x.at, until: Math.min(x.until, total), y: Math.round(x.y), png })
+  }
+  if (!(await enqueueRender(id, pngs, strips))) return { error: 'Already rendering' }
   revalidatePath('/app/studio')
   return {}
+}
+
+// Subtitles from what is said in a scene's clip (its trimmed part). The
+// client saves first and puts the lines into the scene.
+export async function transcribeScene(id: string, sceneId: string): Promise<{ subs?: Cue[]; error?: string }> {
+  const { account, workspace } = await requireContext()
+  const COST = await prices()
+  const video = await prisma.video.findFirst({ where: { id, workspaceId: workspace.id } })
+  if (!video) return { error: 'Video not found' }
+  const scene = (video.data as unknown as VideoDoc).scenes.find((s) => s.id === sceneId)
+  if (!scene) return { error: 'Save the video and try again' }
+  if (scene.media?.kind !== 'video') return { error: 'Subtitles from speech need a video clip in this scene' }
+  const media = await prisma.media.findFirst({ where: { id: scene.media.id, workspaceId: workspace.id, kind: 'VIDEO' } })
+  if (!media) return { error: 'The clip is no longer available' }
+  if (!aiEnabled()) return { error: 'AI is not connected yet.' }
+  if (account.creditBalance < COST.subtitles) return { error: notEnough(COST.subtitles, account.creditBalance) }
+  const file = mediaFile(media.path)
+  if (!(await probe(file)).audio) return { error: 'This clip has no sound to turn into subtitles.' }
+  const seconds = scene.duration
+  const dir = await tempDir('subs')
+  let lines
+  try {
+    const mp3 = path.join(dir, 'speech.mp3')
+    await ffmpeg(['-y', '-ss', String(Math.max(0, scene.clipStart)), '-t', String(seconds), '-i', file, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '48k', mp3], 120_000)
+    lines = await transcribe(await readFile(mp3), 'audio/mp3', seconds)
+  } catch (e) {
+    console.error('transcription failed', e)
+    return { error: aiError(e, 'The speech could not be transcribed. Try again.') }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+  if (lines.length === 0) return { error: 'No speech found in this part of the clip.' }
+  const ok = await charge(account.id, workspace.id, [{ amount: COST.subtitles, reason: 'AI_VIDEO', note: 'Subtitles from speech', action: 'subtitles', units: 1 }])
+  if (!ok) return { error: notEnough(COST.subtitles, 0) }
+  revalidatePath('/app', 'layout')
+  return { subs: lines }
 }
 
 // Takes a video out of the render queue (or stops its render). The last
@@ -343,6 +405,8 @@ const AiInput = z.object({
   styleId: z.string().max(40).optional(),
   // With a copied style: AI music in the reference's mood.
   music: z.boolean().optional(),
+  // Subtitles of the voice-over.
+  subtitles: z.boolean().optional(),
 })
 
 // A voice like the reference's.
@@ -443,6 +507,7 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
   }
 
   const bg = sketch ? SKETCH_PAPER : (ref?.palette[0] ?? brandColor(brand?.colors))
+  const subtitled = Boolean(input.subtitles && input.voice)
   const beat = (i: number) => ref?.beats[i]
   const doc: VideoDoc = {
     ...emptyDoc(bg),
@@ -456,12 +521,14 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
         voice: sc.voice,
         // White bold text is lost on sketch paper; boxes read on any picture.
         style: ref ? ref.textStyle : i === 0 ? (sketch ? 'box' : 'bold') : 'caption',
-        position: ref ? ref.textPosition : i === 0 ? 'center' : 'bottom',
+        // Subtitles take the bottom: the scene text goes up.
+        position: ref ? ref.textPosition : i === 0 ? 'center' : subtitled ? 'top' : 'bottom',
         // Sketches only breathe; pans would cut the drawing off.
         motion: beat(i)?.camera ?? (sketch ? (['zoom-in', 'zoom-out'] as const)[i % 2] : (['zoom-in', 'pan-right', 'zoom-out', 'pan-left'] as const)[i % 4]),
       }),
     ),
     caption: [script.caption, script.hashtags.map((h) => `#${h}`).join(' ')].filter(Boolean).join('\n\n'),
+    ...(subtitled ? { subtitles: { on: true, style: 'box' as const } } : {}),
   }
 
   let voiced = false
