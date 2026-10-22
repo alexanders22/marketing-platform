@@ -35,7 +35,6 @@ export function ChannelPicker({ value, onChange, connected }: { value: Network[]
             key={n.id}
             type="button"
             title={n.name}
-            aria-description={off ? 'Not connected: the post waits in the Planner' : undefined}
             aria-pressed={on}
             onClick={() => onChange(on ? value.filter((v) => v !== n.id) : [...value, n.id])}
             className={`grid h-10 w-10 place-items-center rounded-xl border transition ${
