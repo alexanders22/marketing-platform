@@ -45,7 +45,9 @@ export async function planSeo(language: string): Promise<{ error?: string }> {
     console.error('seoAdvice failed', e)
     return { error: aiError(e, 'The SEO plan could not be written. Try again.') }
   }
-  await charge(account.id, workspace.id, [{ amount: COST.seoAdvice, reason: 'AI_TEXT', note: 'SEO action plan', action: 'seoAdvice', units: 1 }])
+  if (!(await charge(account.id, workspace.id, [{ amount: COST.seoAdvice, reason: 'AI_TEXT', note: 'SEO action plan', action: 'seoAdvice', units: 1 }]))) {
+    return { error: notEnough(COST.seoAdvice, await balanceOf(account.id)) }
+  }
   await prisma.websiteAudit.update({ where: { id: last.id }, data: { result: { ...r, advice: { ...advice, language: lang, createdAt: new Date().toISOString() } } } })
   revalidatePath('/app', 'layout')
   return {}
@@ -99,7 +101,9 @@ export async function checkGeoVisibility(language: string): Promise<{ error?: st
     console.error('geoVisibility failed', e)
     return { error: aiError(e, 'The AI search check could not run. Try again.') }
   }
-  await charge(account.id, workspace.id, [{ amount: COST.aiSearch, reason: 'AI_TEXT', note: 'AI search visibility check', action: 'aiSearch', units: 1 }])
+  if (!(await charge(account.id, workspace.id, [{ amount: COST.aiSearch, reason: 'AI_TEXT', note: 'AI search visibility check', action: 'aiSearch', units: 1 }]))) {
+    return { error: notEnough(COST.aiSearch, await balanceOf(account.id)) }
+  }
   await saveGeo(workspace.id, url, { readiness: await geoReadiness(url), visibility })
   revalidatePath('/app', 'layout')
   return {}

@@ -36,7 +36,9 @@ export async function explainComparison(kind: 'plan' | 'campaign', id: string, l
     console.error('explainResults failed', e)
     return { error: aiError(e, 'The results could not be explained. Try again.') }
   }
-  await charge(account.id, workspace.id, [{ amount: COST.summary, reason: 'AI_TEXT', note: 'Plan vs actual explained', action: 'summary', units: 1 }])
+  if (!(await charge(account.id, workspace.id, [{ amount: COST.summary, reason: 'AI_TEXT', note: 'Plan vs actual explained', action: 'summary', units: 1 }]))) {
+    return { error: notEnough(COST.summary, await balanceOf(account.id)) }
+  }
   revalidatePath('/app', 'layout')
   return { explanation }
 }

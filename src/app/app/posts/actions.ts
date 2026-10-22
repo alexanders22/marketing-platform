@@ -207,7 +207,10 @@ export async function generatePostImages(input: { prompt: string; caption: strin
   const ok = await charge(account.id, workspace.id, [
     { amount: media.length * COST.image, reason: 'AI_IMAGE', note: `${media.length} post image${media.length > 1 ? 's' : ''}`, action: 'image', units: media.length },
   ])
-  if (!ok) return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
+  if (!ok) {
+    await prisma.media.deleteMany({ where: { id: { in: media.map((m) => m.id) } } })
+    return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
+  }
   revalidatePath('/app', 'layout')
   return { images: media.map((m) => ({ id: m.id, url: mediaUrl(m.id) })) }
 }

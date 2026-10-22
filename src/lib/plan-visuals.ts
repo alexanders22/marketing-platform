@@ -73,6 +73,7 @@ export async function generatePlanVisuals(planId: string, price: number) {
       const ok = await charge(accountId, ws.id, [{ amount: price, reason: 'AI_IMAGE', note: `Plan image: ${plan.title}`.slice(0, 200), action: 'image', units: 1 }])
       if (!ok) {
         stop = true
+        await prisma.media.delete({ where: { id: media.id } })
         return null
       }
       return media

@@ -12,7 +12,7 @@ import { VideoEditor } from './VideoEditor'
 export const metadata: Metadata = { title: 'Video — Loudpilot Studio' }
 
 export default async function VideoPage({ params }: PageProps<'/app/studio/video/[id]'>) {
-  const { workspace, brand, account, user } = await requireContext()
+  const { workspace, brand, account, user, asAdmin } = await requireContext()
   const { id } = await params
   const v = await prisma.video.findFirst({ where: { id, workspaceId: workspace.id } })
   if (!v) notFound()
@@ -23,7 +23,7 @@ export default async function VideoPage({ params }: PageProps<'/app/studio/video
       video={{ id: v.id, name: v.name, format: isFormat(v.format) ? v.format : '9:16', doc: v.data as unknown as VideoDoc }}
       brand={{ name: workspace.name, colors: brand?.colors ?? [], logoUrl: logo }}
       paid={isPaid(account) || user.role === 'SUPER_ADMIN'}
-      veo={user.role === 'SUPER_ADMIN' ? null : await veoAllowance(account)}
+      veo={asAdmin ? null : await veoAllowance(account)}
       characters={await prisma.character.findMany({ where: { workspaceId: workspace.id }, orderBy: { createdAt: 'desc' }, select: { id: true, name: true } })}
       initialStatus={{
         status: v.status,
