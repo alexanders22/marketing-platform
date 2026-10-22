@@ -56,10 +56,11 @@ export const MAIN: Section[] = [
   },
   {
     label: 'Results',
-    href: '/app/weekly',
+    href: '/app/results',
     icon: LineChart,
     badge: 'insights',
     tabs: [
+      { label: 'Overview', href: '/app/results' },
       { label: 'This week', href: '/app/weekly', badge: 'recommendations' },
       { label: 'Goals', href: '/app/goals' },
       { label: 'Alerts', href: '/app/alerts', badge: 'alerts' },

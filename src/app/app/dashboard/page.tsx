@@ -180,6 +180,9 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
         </div>
         <DateFilter period={period} range={range} />
         {d.connected.ads > 0 && <SyncButton />}
+        <Link href={`/app/results?days=${period}`} className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium hover:bg-zinc-50">
+          From view to sale <ArrowRight size={14} />
+        </Link>
       </div>
 
       {/* Hero: plan + momentum */}
