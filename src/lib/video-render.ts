@@ -8,8 +8,8 @@ import { mediaFile, renderJobDir, saveMediaFile, tempDir } from './storage'
 import { FORMATS, isFormat, timeline, type VideoDoc } from './video'
 
 // Renders a Studio video to an H.264/AAC MP4 with ffmpeg. The browser sends
-// one transparent PNG per scene with its text (and the end card), so the text
-// looks exactly like the editor preview.
+// one transparent PNG per scene with its text (and the end card), and one strip
+// per subtitle line, so the text looks exactly like the editor preview.
 //
 // Renders wait in a queue: the job is the Video row (status RENDERING,
 // renderQueuedAt) plus its PNGs on disk, so a restart picks waiting and
@@ -26,13 +26,19 @@ const state = (g.__khmaRenders ??= { running: new Map(), resumed: false, filling
 
 const jobOf = (videoId: string, queuedAt: Date) => renderJobDir(`${videoId}-${queuedAt.getTime()}`)
 
+// A subtitle strip: shown from `at` until `until` (seconds in the video), `y` pixels from the top.
+export type SubtitleStrip = { at: number; until: number; y: number; png: Buffer }
+type JobSub = Omit<SubtitleStrip, 'png'>
+
 // Puts a video in the render queue. False when it is already waiting or rendering.
-export async function enqueueRender(videoId: string, overlays: (Buffer | null)[]): Promise<boolean> {
+export async function enqueueRender(videoId: string, overlays: (Buffer | null)[], subs: SubtitleStrip[] = []): Promise<boolean> {
   const queuedAt = new Date()
   const dir = jobOf(videoId, queuedAt)
   await mkdir(dir, { recursive: true })
   await Promise.all(overlays.map((o, i) => (o && o.length > 0 ? writeFile(path.join(dir, `o${i}.png`), o) : null)))
-  await writeFile(path.join(dir, 'job.json'), JSON.stringify({ parts: overlays.length }))
+  await Promise.all(subs.map((x, i) => writeFile(path.join(dir, `s${i}.png`), x.png)))
+  const jobSubs: JobSub[] = subs.map(({ at, until, y }) => ({ at, until, y }))
+  await writeFile(path.join(dir, 'job.json'), JSON.stringify({ parts: overlays.length, subs: jobSubs }))
   const claimed = await prisma.video.updateMany({
     where: { id: videoId, OR: [{ status: { not: 'RENDERING' } }, { renderQueuedAt: null }] },
     data: { status: 'RENDERING', error: null, renderQueuedAt: queuedAt, renderStartedAt: null, renderProgress: 0 },
@@ -144,7 +150,7 @@ async function render(videoId: string, queuedAt: Date, signal: AbortSignal) {
   const dir = await tempDir('render')
   try {
     if (ids.some((id) => !byId.has(id))) throw new Error('Some media are no longer available')
-    const { parts: count } = JSON.parse(await readFile(path.join(job, 'job.json'), 'utf8').catch(() => '{}')) as { parts?: number }
+    const { parts: count, subs = [] } = JSON.parse(await readFile(path.join(job, 'job.json'), 'utf8').catch(() => '{}')) as { parts?: number; subs?: JobSub[] }
     if (count !== parts.length) throw new Error(INTERRUPTED)
 
     const args: string[] = ['-y']
@@ -193,15 +199,28 @@ async function render(videoId: string, queuedAt: Date, signal: AbortSignal) {
       scenes.push(`[s${i}]`)
     }
 
-    if (scenes.length === 1) filters.push(`${scenes[0]}null[vout]`)
-    else if (!fade) filters.push(`${scenes.join('')}concat=n=${scenes.length}:v=1:a=0[vout]`)
+    // The scenes joined; subtitles go over the whole cut, each in its time.
+    const joined = subs.length ? '[cut]' : '[vout]'
+    if (scenes.length === 1) filters.push(`${scenes[0]}null${joined}`)
+    else if (!fade) filters.push(`${scenes.join('')}concat=n=${scenes.length}:v=1:a=0${joined}`)
     else {
       let prev = scenes[0]
       for (let i = 1; i < scenes.length; i++) {
-        const out = i === scenes.length - 1 ? '[vout]' : `[x${i}]`
+        const out = i === scenes.length - 1 ? joined : `[x${i}]`
         filters.push(`${prev}${scenes[i]}xfade=transition=fade:duration=${num(fade)}:offset=${num(parts[i].start)}${out}`)
         prev = out
       }
+    }
+    let under = joined
+    for (const [i, sub] of subs.entries()) {
+      const file = path.join(job, `s${i}.png`)
+      if (!existsSync(file)) throw new Error(INTERRUPTED)
+      const o = input++
+      // One still frame; the overlay keeps showing it while enabled.
+      args.push('-i', file)
+      const out = i === subs.length - 1 ? '[vout]' : `[u${i}]`
+      filters.push(`[${o}:v]format=rgba[t${i}]`, `${under}[t${i}]overlay=0:${Math.round(sub.y)}:enable='between(t,${num(sub.at)},${num(sub.until)})'${out}`)
+      under = out
     }
 
     // Voice-over lines start a beat after their scene; clips that keep their

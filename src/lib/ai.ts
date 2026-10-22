@@ -1490,3 +1490,48 @@ export async function writeChatSetup(brandName: string, brand: Brand | null, pag
     redFlags: strList(out?.redFlags, 5, 60),
   }
 }
+
+export type SpokenLine = { start: number; end: number; text: string }
+
+// What is said in a clip, as subtitle lines timed from the clip's start.
+// Audio is a short MP3 (one scene); the speech stays in its own language.
+export async function transcribe(audio: Buffer, mime: string, seconds: number): Promise<SpokenLine[]> {
+  if (!client) throw new Error('AI is not configured')
+  const schema = {
+    type: 'object',
+    properties: {
+      lines: {
+        type: 'array',
+        items: { type: 'object', properties: { start: { type: 'number' }, end: { type: 'number' }, text: { type: 'string' } }, required: ['start', 'end', 'text'] },
+      },
+    },
+    required: ['lines'],
+  }
+  const res = await retrying((model) =>
+    client.models.generateContent({
+      model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType: mime, data: audio.toString('base64') } },
+            {
+              text: [
+                `Transcribe the speech in this ${seconds.toFixed(1)}-second audio clip, word for word, in the language spoken (Georgian in Georgian script, Russian in Cyrillic, English…). Do not translate or summarise.`,
+                'Split it into subtitle lines of at most 7 words and 40 characters. Each line has "start" and "end" in seconds from the start of the clip, when it is said.',
+                'Leave out music, noises and silence. No speech: return an empty "lines" list.',
+              ].join('\n'),
+            },
+          ],
+        },
+      ],
+      config: { responseMimeType: 'application/json', responseJsonSchema: schema, maxOutputTokens: 4000, abortSignal: AbortSignal.timeout(90_000) },
+    }),
+  )
+  const parsed = JSON.parse(res.text ?? '{}') as { lines?: Partial<SpokenLine>[] }
+  return (parsed.lines ?? [])
+    .map((l) => ({ start: Math.max(0, Number(l.start) || 0), end: Math.min(seconds, Number(l.end) || 0), text: String(l.text ?? '').trim().slice(0, 120) }))
+    .filter((l) => l.text && l.end > l.start)
+    .sort((a, b) => a.start - b.start)
+    .slice(0, 80)
+}

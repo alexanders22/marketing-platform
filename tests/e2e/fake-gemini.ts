@@ -8,12 +8,13 @@ import { createServer, type Server } from 'node:http'
 //   "my orders"                    → lookup_my_orders (only when offered)
 //   a long number                  → save_contact
 //   a tool result                  → a sentence quoting it
+//   audio attached (subtitles)     → two timed lines of speech
 //   JSON wanted (set-up)           → a ready brief
 //   anything else                  → "We deliver across Tbilisi within 2 hours."
 
 export const FAKE_GEMINI_PORT = 18992
 
-type Part = { text?: string; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: unknown } }
+type Part = { text?: string; inlineData?: { mimeType: string; data: string }; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: unknown } }
 type Body = {
   contents: { role: string; parts: Part[] }[]
   tools?: { functionDeclarations?: { name: string }[] }[]
@@ -40,6 +41,8 @@ export function startFakeGemini() {
     const tools = body.tools?.flatMap((t) => t.functionDeclarations?.map((f) => f.name) ?? []) ?? []
     const call = (name: string, args: Record<string, unknown>) => reply([{ functionCall: { name, args } }])
 
+    if (body.contents.some((c) => c.parts.some((p) => p.inlineData?.mimeType.startsWith('audio/'))))
+      return reply([{ text: JSON.stringify({ lines: [{ start: 0.2, end: 1.3, text: 'Fresh bread every morning' }, { start: 1.4, end: 2.6, text: 'Order before ten' }] }) }])
     if (body.generationConfig?.responseMimeType === 'application/json' && cutNext) {
       cutNext = false
       return reply([{ text: '{"instructions": "You are the assistant of Bloom' }], 'MAX_TOKENS')

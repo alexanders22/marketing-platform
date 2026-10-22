@@ -95,7 +95,7 @@ test('AI video with Veo: animate my photos, or one character in every scene', as
     } else {
       await expect(page.getByRole('radiogroup', { name: 'Clip quality' }).getByRole('radio', { name: /Quick/ })).toBeDisabled()
     }
-    await page.getByLabel('Voice-over').uncheck()
+    await page.getByLabel('Voice-over', { exact: true }).uncheck()
     await page.getByRole('button', { name: /^Create · up to/ }).click()
     await page.waitForURL(/\/app\/studio\/video\/[a-z0-9]+$/, { timeout: 180_000 })
     return page.url().split('/').pop()!
