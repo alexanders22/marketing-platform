@@ -25,7 +25,7 @@ export function BrandSettings({ initial }: { initial: BrandDraft }) {
 
   return (
     <div className="max-w-2xl">
-      <PageHeader title="Brand settings" sub="Everything the AI creates follows these details." />
+      <PageHeader title="Brand kit" sub="Everything the AI creates follows these details." />
       <BrandEditor value={brand} onChange={(v) => (setBrand(v), setSaved(false))} extended />
       {error && <p className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="sticky bottom-0 mt-8 flex items-center gap-4 border-t border-zinc-100 bg-white py-4">

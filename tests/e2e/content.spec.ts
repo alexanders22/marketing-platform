@@ -52,22 +52,22 @@ test.afterEach(async () => {
 const sidebarCreate = () => page.locator('aside').getByRole('button', { name: 'Create new' })
 const createMenu = () => page.locator('div.fixed.z-\\[60\\]')
 
-test('Create-new menu: 8 items navigate; closes on outside click and Escape', async () => {
+test('Create-new menu: 8 items in groups navigate; closes on outside click and Escape', async () => {
   const items: [string, RegExp][] = [
     ['Plan my marketing with AI', /\/app\/strategy\/interview$/],
-    ['New post or thread', /\/app\/posts\/new$/],
-    ['New AI social post', /\/app\/create$/],
-    ['New AI social campaign', /\/app\/campaigns\/new\?kind=social$/],
-    ['New video', /\/app\/studio\?tab=video$/],
-    ['New blog', /\/app\/blog\/new$/],
-    ['New AI blog', /\/app\/blog\/ai$/],
-    ['New AI blog campaign', /\/app\/campaigns\/new\?kind=blog$/],
+    ['Post with AI', /\/app\/create$/],
+    ['Write a post', /\/app\/posts\/new$/],
+    ['Video', /\/app\/studio\?tab=video$/],
+    ['Blog article with AI', /\/app\/blog\/ai$/],
+    ['Blank blog article', /\/app\/blog\/new$/],
+    ['Content series', /\/app\/campaigns\/new\?kind=social$/],
+    ['Blog series', /\/app\/campaigns\/new\?kind=blog$/],
   ]
   await page.goto('/app/planner')
   for (const [label, url] of items) {
     await sidebarCreate().click()
     await expect(createMenu().getByRole('link')).toHaveCount(8)
-    await createMenu().getByRole('link', { name: label, exact: false }).filter({ hasText: new RegExp(`^${label}(NEW)?$`) }).click()
+    await createMenu().getByRole('link', { name: new RegExp(`^${label}`) }).first().click()
     await expect(page).toHaveURL(url)
     await expect(createMenu()).toHaveCount(0)
     await expect(page.locator('main h1, main h2').first()).toBeVisible()
@@ -118,7 +118,8 @@ test('Composer: tone / length / language / images popovers update labels and cre
     await pop()
       .getByRole('button', { name: n === 0 ? /^No images/ : new RegExp(`^${n} images?`) })
       .click()
-    await expect(badge).toHaveText(String(1 + n))
+    // 1 for the text + 4 an image.
+    await expect(badge).toHaveText(String(1 + 4 * n))
     await expect(chip(/^Images/)).toHaveText(n ? `Images (${n} · Realistic photo)` : 'Images')
   }
   await expect(badge).toHaveAttribute('title', '1 credit: 1 for the text')
@@ -500,7 +501,7 @@ test('Planner: month navigation, Today, Social/Blog filter, day "+" prefill', as
   await expect(page.getByText('QA social on 20th')).toHaveCount(0)
   await expect(page.getByText('Article outline — not written yet')).toBeVisible()
   await page.getByRole('link', { name: 'Calendar view' }).click()
-  await expect(page).toHaveURL(/\/app\/planner\?m=2026-10$/)
+  await expect(page).toHaveURL(/\/app\/planner\?view=calendar&m=2026-10$/)
 
   // "+" opens a new post at 10:00 that day.
   await cell.hover()

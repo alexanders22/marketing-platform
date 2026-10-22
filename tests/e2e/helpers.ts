@@ -54,7 +54,7 @@ export async function newAccount(page: Page, prefix: string, brand = `${prefix} 
   // The strategy interview comes first; these tests skip it.
   await page.waitForURL(/\/app\/strategy\/interview\?welcome=1/)
   await page.getByRole('link', { name: 'Skip for now' }).click()
-  await page.waitForURL(/\/app\/planner/)
+  await page.waitForURL(/\/app\/dashboard/)
   return { email, brand }
 }
 

@@ -102,7 +102,7 @@ test.describe('onboarding', () => {
 
     // Onboarding is done: visiting it again goes to the app.
     await page.goto('/onboarding')
-    await expect(page).toHaveURL(/\/app\/planner/)
+    await expect(page).toHaveURL(/\/app\/dashboard/)
 
     // Second plan pick: no second grant, trial end unchanged.
     const trialBefore = acct(email, 'a."trialEndsAt"')

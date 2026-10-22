@@ -7,7 +7,7 @@ import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
 import { ShowMore } from '@/components/ShowMore'
 
-export const metadata: Metadata = { title: 'Campaigns — Loudpilot' }
+export const metadata: Metadata = { title: 'Content series — Loudpilot' }
 
 // Shown in the viewer's time zone, like the campaign page and the Planner.
 const fmt = (d: Date) => <LocalTime iso={d.toISOString()} options={{ day: 'numeric', month: 'short' }} />
@@ -34,7 +34,7 @@ export default async function CampaignsPage() {
 
   return (
     <>
-      <PageHeader title="Campaigns" sub="Plan a run of posts or articles around one goal — a launch, a sale, an event." action={newButtons} />
+      <PageHeader title="Content series" sub="A run of posts or articles around one goal — a launch, a sale, an event." action={newButtons} />
       {campaigns.length === 0 ? (
         <div className="rounded-xl border border-zinc-200">
           <EmptyState icon={Target} title="No campaigns yet">

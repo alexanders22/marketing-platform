@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { CalendarDays, ChevronLeft, ChevronRight, FileText, List, PartyPopper, Plus, Sparkles, Target } from 'lucide-react'
 import { holidaysBetween, type Holiday } from '@/lib/holidays'
 import { ChannelIcons } from '@/components/channels'
@@ -38,7 +39,13 @@ const pad = (n: number) => String(n).padStart(2, '0')
 const localDay = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const href = (p: PlannerPost) => (p.kind === 'BLOG' ? `/app/blog/${p.id}` : `/app/posts/${p.id}`)
 
-export function Planner({ view, month, posts, now }: { view: 'calendar' | 'list'; month: string; posts: PlannerPost[]; now: number }) {
+export function Planner({ view, month, posts, now, chosen = false }: { view: 'calendar' | 'list'; month: string; posts: PlannerPost[]; now: number; chosen?: boolean }) {
+  const router = useRouter()
+  // A month grid is unreadable on a phone: open the list there, unless the
+  // calendar was picked on purpose.
+  useEffect(() => {
+    if (view === 'calendar' && !chosen && window.matchMedia('(max-width: 639px)').matches) router.replace(`/app/planner?view=list&m=${month}`)
+  }, [view, chosen, month, router])
   const [y, m] = month.split('-').map(Number)
   const [kind, setKind] = useState<'ALL' | 'SOCIAL' | 'BLOG'>('ALL')
   const shown = posts.filter((p) => kind === 'ALL' || p.kind === kind)
@@ -88,7 +95,7 @@ export function Planner({ view, month, posts, now }: { view: 'calendar' | 'list'
         <div className="ml-auto flex items-center gap-2">
           <div className="flex rounded-lg bg-zinc-100 p-0.5">
             <Link
-              href={`/app/planner?m=${month}`}
+              href={`/app/planner?view=calendar&m=${month}`}
               className={`rounded-md p-1.5 ${view === 'calendar' ? 'bg-white shadow-sm' : 'text-zinc-500'}`}
               aria-label="Calendar view"
             >

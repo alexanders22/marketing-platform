@@ -2,6 +2,7 @@ import {
   BookUser,
   Bot,
   CalendarDays,
+  Coins,
   Globe,
   Inbox,
   LayoutDashboard,
@@ -21,6 +22,8 @@ export type Section = {
   icon: typeof Inbox
   // Other paths that belong to the section (editors, sub-pages).
   also?: string[]
+  // Paths under its tabs that belong elsewhere (Pilot's interview).
+  not?: string[]
   tabs?: Tab[]
   badge?: 'inbox' | 'insights'
 }
@@ -28,7 +31,7 @@ export type Section = {
 export const MAIN: Section[] = [
   { label: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
   { label: 'Planner', href: '/app/planner', icon: CalendarDays, also: ['/app/posts', '/app/blog', '/app/create'] },
-  { label: 'Campaigns', href: '/app/campaigns', icon: Target },
+  { label: 'Content series', href: '/app/campaigns', icon: Target },
   {
     label: 'Studio',
     href: '/app/studio',
@@ -48,11 +51,11 @@ export const MAIN: Section[] = [
     tabs: [
       { label: 'Messenger & Instagram', href: '/app/inbox' },
       { label: 'Website chat', href: '/app/chat' },
-      { label: 'Assistant', href: '/app/chat/settings' },
+      { label: 'Chat settings', href: '/app/chat/settings' },
     ],
   },
   {
-    label: 'Insights',
+    label: 'Results',
     href: '/app/weekly',
     icon: LineChart,
     badge: 'insights',
@@ -64,25 +67,27 @@ export const MAIN: Section[] = [
   },
   {
     label: 'Website',
-    href: '/app/website',
+    href: '/app/website/tag',
     icon: Globe,
+    // Set-up first: the tag brings visitors, leads and sales in.
     tabs: [
+      { label: 'Loudpilot Tag', href: '/app/website/tag' },
       { label: 'SEO', href: '/app/website' },
       { label: 'AI search', href: '/app/website/ai' },
-      { label: 'Tracking', href: '/app/website/tracking' },
-      { label: 'Loudpilot Tag', href: '/app/website/tag' },
+      { label: 'Ad pixel check', href: '/app/website/tracking' },
     ],
   },
   {
     label: 'Brand',
-    href: '/app/dossier',
+    href: '/app/brand',
     icon: BookUser,
+    not: ['/app/strategy/interview'],
     tabs: [
+      { label: 'Brand kit', href: '/app/brand' },
       { label: 'Dossier', href: '/app/dossier' },
       { label: 'Strategy', href: '/app/strategy' },
       { label: 'Competitors', href: '/app/competitors' },
       { label: 'Brandbook', href: '/app/brandbook' },
-      { label: 'Brand kit', href: '/app/brand' },
     ],
   },
 ]
@@ -91,13 +96,21 @@ export const SETUP: Section[] = [
   { label: 'Channels', href: '/app/channels', icon: Send },
   { label: 'Team', href: '/app/team', icon: Users },
   {
+    label: 'Billing',
+    href: '/app/credits',
+    icon: Coins,
+    tabs: [
+      { label: 'Plan & credits', href: '/app/credits' },
+      { label: 'Change plan', href: '/app/plan' },
+    ],
+  },
+  {
     label: 'Integrations',
     href: '/app/mcp',
     icon: Bot,
     tabs: [
       { label: 'AI assistants', href: '/app/mcp' },
       { label: 'API', href: '/app/api' },
-      { label: 'Workflows', href: '/app/workflows' },
     ],
   },
 ]
@@ -109,7 +122,7 @@ const under = (path: string, href: string) => {
 
 export function sectionOf(path: string): Section | undefined {
   return [...MAIN, ...SETUP].find(
-    (s) => under(path, s.href) || s.also?.some((a) => under(path, a)) || s.tabs?.some((t) => under(path, t.href)),
+    (s) => !s.not?.some((n) => under(path, n)) && (under(path, s.href) || s.also?.some((a) => under(path, a)) || s.tabs?.some((t) => under(path, t.href))),
   )
 }
 

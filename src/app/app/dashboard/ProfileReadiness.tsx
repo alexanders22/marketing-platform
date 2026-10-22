@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowRight, BarChart3, BookOpen, Building2, Check, ChevronDown, Globe, Map as MapIcon, Megaphone, Palette, Rocket, Search, Share2, Sparkles, Swords, Target, Bot, Radar } from 'lucide-react'
+import { ArrowRight, BarChart3, BookOpen, Building2, Check, ChevronDown, Globe, Map as MapIcon, Megaphone, MessagesSquare, Palette, PenLine, Rocket, Search, Share2, Sparkles, Swords, Target, Bot, Radar, Tag } from 'lucide-react'
 import { Ring } from '@/components/viz'
 import type { Readiness, StepGroup } from '@/lib/readiness'
 
@@ -18,6 +18,9 @@ const ICON = {
   tracking: Target,
   goal: Rocket,
   plan: MapIcon,
+  post: PenLine,
+  tag: Tag,
+  chat: MessagesSquare,
 } as const
 
 const GROUP: Record<StepGroup, { bar: string; chip: string }> = {

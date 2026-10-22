@@ -521,7 +521,7 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
           )}
 
           {d.campaigns.length > 0 && (
-            <Section id="campaigns-heading" icon={<BarChart3 size={16} />} tint="bg-zinc-100 text-zinc-700" title="Campaigns">
+            <Section id="campaigns-heading" icon={<BarChart3 size={16} />} tint="bg-zinc-100 text-zinc-700" title="Ad campaigns">
               <div className={`${card} overflow-x-auto`}>
                 <table className="w-full min-w-[860px] text-sm">
                   <thead className="text-left text-xs text-zinc-500">

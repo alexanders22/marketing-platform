@@ -259,7 +259,7 @@ export function PostEditor({
         <div className="space-y-6">
           <section>
             <p className="mb-2 text-sm font-semibold">Channels</p>
-            <ChannelPicker value={channels} onChange={(v) => (setChannels(v), setSaved(false))} />
+            <ChannelPicker value={channels} connected={connected} onChange={(v) => (setChannels(v), setSaved(false))} />
             <p className="mt-2 text-xs text-zinc-500">
               {reachable.length > 0
                 ? `Publishes to your connected ${reachable.map((r) => NETWORKS.find((n) => n.id === r)?.name).join(' and ')} accounts.${

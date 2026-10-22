@@ -1,5 +1,6 @@
 import 'server-only'
 import type { BrandKit } from '@prisma/client'
+import { gaEnabled } from './ga'
 import { prisma } from './prisma'
 
 // How ready a workspace is to work: the setup steps Loudpilot needs (brand,
@@ -11,7 +12,7 @@ export type Step = { key: string; group: StepGroup; label: string; hint: string;
 const SOCIAL = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST'] as const
 
 export async function readinessOf(workspaceId: string, brand: BrandKit | null) {
-  const [profile, brandbook, competitors, accounts, audits, goals, plans] = await Promise.all([
+  const [profile, brandbook, competitors, accounts, audits, goals, plans, site, chat, published] = await Promise.all([
     prisma.brandProfile.count({ where: { workspaceId } }),
     prisma.brandbook.count({ where: { workspaceId } }),
     prisma.competitor.count({ where: { workspaceId } }),
@@ -19,14 +20,17 @@ export async function readinessOf(workspaceId: string, brand: BrandKit | null) {
     prisma.websiteAudit.groupBy({ by: ['kind'], where: { workspaceId } }),
     prisma.goal.count({ where: { workspaceId, active: true } }),
     prisma.strategyPlan.count({ where: { workspaceId } }),
+    prisma.site.findUnique({ where: { workspaceId }, select: { lastEventAt: true } }),
+    prisma.chatBot.findUnique({ where: { workspaceId }, select: { enabled: true } }),
+    prisma.post.count({ where: { workspaceId, status: 'PUBLISHED' } }),
   ])
   const networks = new Set<string>(accounts.map((a) => a.network))
   const checked = new Set(audits.map((a) => a.kind))
-  const site = Boolean(brand?.website)
+  const hasSite = Boolean(brand?.website)
   const needSite = 'Add your website in the brand kit first.'
 
   const steps: Step[] = [
-    { key: 'website', group: 'Brand', label: 'Add your website', hint: 'Loudpilot reads it to learn your offer, prices and tone.', href: '/app/brand', cta: 'Add website', done: site, weight: 2 },
+    { key: 'website', group: 'Brand', label: 'Add your website', hint: 'Loudpilot reads it to learn your offer, prices and tone.', href: '/app/brand', cta: 'Add website', done: hasSite, weight: 2 },
     { key: 'kit', group: 'Brand', label: 'Logo and brand colors', hint: 'Every design and video uses them.', href: '/app/brand', cta: 'Open brand kit', done: Boolean(brand?.logoUrl && brand.colors.length), weight: 1 },
     { key: 'about', group: 'Brand', label: 'Describe the business and audience', hint: 'Who you sell to and how you talk — the AI writes in this voice.', href: '/app/brand', cta: 'Describe', done: Boolean(brand?.description && brand.audience), weight: 1 },
     { key: 'dossier', group: 'Brand', label: 'Build the company dossier', hint: 'What works in your posts and ads over the last 12 months.', href: '/app/dossier', cta: 'Build dossier', done: profile > 0, weight: 2 },
@@ -34,10 +38,16 @@ export async function readinessOf(workspaceId: string, brand: BrandKit | null) {
     { key: 'competitors', group: 'Brand', label: 'Add competitors', hint: 'Two or three rivals — see where you win and what to copy.', href: '/app/competitors', cta: 'Add competitors', done: competitors > 0, weight: 1 },
     { key: 'social', group: 'Channels', label: 'Connect a social account', hint: 'Facebook, Instagram, TikTok, LinkedIn… to publish and measure posts.', href: '/app/channels', cta: 'Connect', done: SOCIAL.some((n) => networks.has(n)), weight: 2 },
     { key: 'ads', group: 'Channels', label: 'Connect Meta Ads', hint: 'Follow spend, leads and cost per result; boost posts.', href: '/app/channels', cta: 'Connect', done: networks.has('META_ADS'), weight: 2 },
-    { key: 'ga', group: 'Channels', label: 'Connect Google Analytics', hint: 'See what ads and posts bring to the website.', href: '/app/channels', cta: 'Connect', done: networks.has('GOOGLE_ANALYTICS'), weight: 1 },
-    { key: 'seo', group: 'Website', label: 'Run the SEO check', hint: site ? 'What to fix so Google ranks the site higher.' : needSite, href: '/app/website', cta: 'Check SEO', done: checked.has('SEO'), weight: 1 },
-    { key: 'geo', group: 'Website', label: 'Check visibility in AI search', hint: site ? 'Whether ChatGPT and other AI answers mention you.' : needSite, href: '/app/website/ai', cta: 'Check', done: checked.has('GEO'), weight: 1 },
-    { key: 'tracking', group: 'Website', label: 'Check ad tracking', hint: site ? 'Meta Pixel, Conversions API and Google tags on the site.' : needSite, href: '/app/website/tracking', cta: 'Check tracking', done: checked.has('TRACKING'), weight: 1 },
+    // Only while Google Analytics can be connected on this server.
+    ...(gaEnabled()
+      ? [{ key: 'ga', group: 'Channels' as const, label: 'Connect Google Analytics', hint: 'See what ads and posts bring to the website.', href: '/app/channels', cta: 'Connect', done: networks.has('GOOGLE_ANALYTICS'), weight: 1 }]
+      : []),
+    { key: 'post', group: 'Channels', label: 'Publish your first post', hint: 'Write it yourself or let AI draft it, then post or schedule it.', href: '/app/posts/new', cta: 'Write a post', done: published > 0, weight: 1 },
+    { key: 'tag', group: 'Website', label: 'Install the Loudpilot Tag', hint: 'One line on your site: see which ads and posts bring visitors, leads and sales.', href: '/app/website/tag', cta: 'Install', done: Boolean(site?.lastEventAt), weight: 2 },
+    { key: 'chat', group: 'Website', label: 'Switch on the website chat', hint: 'An assistant answers visitors and hands hard questions to your team.', href: '/app/chat/settings', cta: 'Set up chat', done: Boolean(chat?.enabled), weight: 1 },
+    { key: 'seo', group: 'Website', label: 'Run the SEO check', hint: hasSite ? 'What to fix so Google ranks the site higher.' : needSite, href: '/app/website', cta: 'Check SEO', done: checked.has('SEO'), weight: 1 },
+    { key: 'geo', group: 'Website', label: 'Check visibility in AI search', hint: hasSite ? 'Whether ChatGPT and other AI answers mention you.' : needSite, href: '/app/website/ai', cta: 'Check', done: checked.has('GEO'), weight: 1 },
+    { key: 'tracking', group: 'Website', label: 'Check ad tracking', hint: hasSite ? 'Meta Pixel, Conversions API and Google tags on the site.' : needSite, href: '/app/website/tracking', cta: 'Check tracking', done: checked.has('TRACKING'), weight: 1 },
     { key: 'goal', group: 'Growth', label: 'Set your first goal', hint: 'Loudpilot checks it every hour and alerts you when it slips.', href: '/app/goals', cta: 'Set a goal', done: goals > 0, weight: 1 },
     { key: 'plan', group: 'Growth', label: 'Make a marketing plan', hint: 'Audiences, budget, ads and content for one business goal.', href: '/app/strategy', cta: 'Make a plan', done: plans > 0, weight: 1 },
   ]

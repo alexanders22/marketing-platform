@@ -148,9 +148,10 @@ const photo = (ref: string, p: Partial<ImageLayer> & Pick<ImageLayer, 'x' | 'y' 
   ...p,
 })
 
+// General first: it fits any business; industry sets follow.
 export const TEMPLATE_CATEGORIES = [
-  { id: 'real-estate', name: 'Real estate' },
   { id: 'general', name: 'General' },
+  { id: 'real-estate', name: 'Real estate' },
 ] as const
 export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number]['id']
 
