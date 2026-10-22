@@ -45,6 +45,42 @@ export function reportClientError(e: unknown, where: string, reloaded = false) {
   }
 }
 
+// A request that failed on the way (offline, a laptop waking up, the server
+// restarting during a deploy: 502/500 pages instead of the app's answer).
+// Trying again shortly usually just works.
+const TRANSIENT = /Failed to fetch|NetworkError|Load failed|fetch failed|network error|An unexpected response was received from the server|Internal Server Error|Bad Gateway|Gateway Time-?out|Service Unavailable/i
+
+export const isTransient = (e: unknown) => {
+  const x = e as { name?: string; message?: string; digest?: string } | null
+  // An error the app itself threw on the server carries a digest: not a blip.
+  if (x?.digest) return false
+  return TRANSIENT.test(`${x?.name ?? ''} ${x?.message ?? String(e ?? '')}`)
+}
+
+// Automatic retries per page: a few within a minute, then the error is shown.
+let retries = { path: '', count: 0, at: 0 }
+export function nextRetryDelay(): number | null {
+  const path = location.pathname
+  if (retries.path !== path || Date.now() - retries.at > 60_000) retries = { path, count: 0, at: Date.now() }
+  if (retries.count >= 3) return null
+  return [1000, 3000, 6000][retries.count++]
+}
+
+// Tells the page a request was lost and the view was restored (ConnectionNotice).
+export const RECOVERED_EVENT = 'lp:recovered'
+
+// Runs fn once the browser is online, after the delay.
+export function whenOnline(delay: number, fn: () => void) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const go = () => (timer = setTimeout(fn, delay))
+  if (navigator.onLine) go()
+  else window.addEventListener('online', go, { once: true })
+  return () => {
+    window.removeEventListener('online', go)
+    if (timer) clearTimeout(timer)
+  }
+}
+
 // Browser noise that is not ours to fix.
 const NOISE = /ResizeObserver loop|Script error\.?$|extension:\/\//i
 

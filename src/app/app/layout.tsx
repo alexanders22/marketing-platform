@@ -8,6 +8,7 @@ import { AppSidebar } from './AppSidebar'
 import { CreditsBadge } from './CreditsBadge'
 import { SectionTabs } from './SectionTabs'
 import { creditValue, prices } from '@/lib/credits'
+import { ConnectionNotice } from '@/components/ConnectionNotice'
 import { CreditHints } from '@/components/CreditHints'
 import { PricesProvider } from '@/components/Prices'
 import { interviewState } from '@/lib/business'
@@ -109,6 +110,7 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
         </div>
       </main>
       <CreditHints value={value} />
+      <ConnectionNotice />
     </div>
     </PricesProvider>
   )

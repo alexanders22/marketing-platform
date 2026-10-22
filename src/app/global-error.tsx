@@ -1,12 +1,14 @@
 'use client'
 
 import { useEffect } from 'react'
-import { handleClientError } from '@/lib/client-errors'
+import { handleClientError, isTransient, reloadOnce, whenOnline } from '@/lib/client-errors'
 
 // Replaces the root layout when it fails: the error is reported (and a tab
 // on the previous build reloads once) before this screen is shown.
 export default function GlobalError({ error }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => handleClientError(error, 'global'), [error])
+  // A connection blip: reload once the browser is online again.
+  useEffect(() => (isTransient(error) ? whenOnline(1500, () => void reloadOnce()) : undefined), [error])
   return (
     <html lang="en">
       <body style={{ margin: 0, minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'Inter, Arial, sans-serif', background: '#fafafa', color: '#18181b' }}>

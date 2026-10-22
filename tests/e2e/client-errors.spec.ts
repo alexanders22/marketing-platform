@@ -29,3 +29,27 @@ test('the error log takes a report and ignores junk', async ({ request }) => {
   expect((await request.post('/api/client-errors', { data: { where: 'app', message: 'x'.repeat(5000) } })).status()).toBe(204)
   expect((await request.post('/api/client-errors', { data: 'not json', headers: { 'content-type': 'text/plain' } })).status()).toBe(204)
 })
+
+// A Server Action whose request fails on the way (offline, a laptop waking up,
+// a 502 while the server restarts for a deploy) used to leave the page on
+// "This page couldn't load" until a manual reload.
+for (const fail of ['network', '502'] as const) {
+  test(`a dropped action request (${fail}) reconnects by itself`, async ({ page }) => {
+    await newAccount(page, `drop${fail}`)
+    await page.goto('/app/credits')
+    let failed = 0
+    await page.route('**/app/credits', (route) => {
+      const r = route.request()
+      if (r.method() !== 'POST' || !r.headers()['next-action'] || failed > 0) return route.continue()
+      failed++
+      return fail === 'network' ? route.abort('internetdisconnected') : route.fulfill({ status: 502, contentType: 'text/html', body: '<html><body>502 Bad Gateway</body></html>' })
+    })
+    await page.getByRole('list', { name: 'Credit packs' }).getByRole('button', { name: 'Buy' }).first().click()
+    await expect(page.getByText('Connection lost — reconnecting…')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Buy more credits' })).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText(/This page couldn.t load/)).toHaveCount(0)
+    // The lost click is not dropped silently.
+    await expect(page.getByText(/your last action may not have gone through/)).toBeVisible()
+    expect(failed).toBe(1)
+  })
+}
