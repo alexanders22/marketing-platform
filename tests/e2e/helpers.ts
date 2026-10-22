@@ -49,6 +49,7 @@ export async function newAccount(page: Page, prefix: string, brand = `${prefix} 
   await page.locator('input').first().fill(brand)
   await page.getByRole('button', { name: /Continue/ }).click()
   await expect(page.getByText('Choose your plan')).toBeVisible()
+  // Start, the first plan.
   await page.getByRole('button', { name: /Start 7-day free trial/ }).first().click()
   // The strategy interview comes first; these tests skip it.
   await page.waitForURL(/\/app\/strategy\/interview\?welcome=1/)

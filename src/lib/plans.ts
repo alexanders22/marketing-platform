@@ -1,13 +1,18 @@
 // Plan limits used by the plan picker, credits page
 // and (later) billing.
+// Three plans (Start, Business, Agency). The ids stay STARTER / TEAM / AGENCY
+// (database, payments, Monrem plans); SOLO was retired — its accounts moved to
+// STARTER. People are not limited: every plan has unlimited users.
 export type PlanId = 'STARTER' | 'TEAM' | 'AGENCY'
 
 export const PLANS: {
   id: PlanId
   name: string
   blurb: string
+  // Price a month without VAT (18% is added at checkout): in dollars, and a fixed price in lari (not a
+  // conversion — charged as is when the terminal takes lari).
   monthly: number
-  users: number
+  monthlyGel: number
   profiles: number
   // Companies (brands) one account can run, each with its own channels.
   companies: number
@@ -16,23 +21,23 @@ export const PLANS: {
 }[] = [
   {
     id: 'STARTER',
-    name: 'Starter',
-    blurb: 'For founders and small brands running their own marketing.',
+    name: 'Start',
+    blurb: 'For a small business doing its own marketing.',
     monthly: 29,
-    users: 1,
+    monthlyGel: 79,
     profiles: 5,
-    companies: 2,
-    credits: 300,
+    companies: 1,
+    credits: 200,
   },
   {
     id: 'TEAM',
-    name: 'Team',
-    blurb: 'For marketing teams handling a few brands and ad accounts.',
-    monthly: 79,
-    users: 5,
-    profiles: 20,
-    companies: 10,
-    credits: 1500,
+    name: 'Business',
+    blurb: 'For growing businesses with a few brands, ads and a team.',
+    monthly: 75,
+    monthlyGel: 199,
+    profiles: 15,
+    companies: 3,
+    credits: 700,
     popular: true,
   },
   {
@@ -40,41 +45,44 @@ export const PLANS: {
     name: 'Agency',
     blurb: 'For agencies and partners serving many clients at once.',
     monthly: 199,
-    users: 20,
+    monthlyGel: 529,
     profiles: 100,
-    companies: 50,
-    credits: 5000,
+    companies: 25,
+    credits: 2500,
   },
 ]
+
+export const PLAN_IDS = PLANS.map((p) => p.id)
 
 // What a plan's monthly credits buy, in things people count — shown instead
 // of credits. Each bundle fits in the plan's credits at the default prices
 // (checked in tests); credits stay the mechanism, so the mix is flexible.
 export type Bundle = { posts: number; images: number; videos: number; articles: number; strategies: number }
 export const BUNDLES: Record<PlanId, Bundle> = {
-  STARTER: { posts: 100, images: 100, videos: 10, articles: 4, strategies: 2 },
-  TEAM: { posts: 400, images: 400, videos: 50, articles: 20, strategies: 10 },
-  AGENCY: { posts: 1500, images: 1500, videos: 150, articles: 60, strategies: 30 },
+  STARTER: { posts: 40, images: 20, videos: 10, articles: 4, strategies: 1 },
+  TEAM: { posts: 120, images: 60, videos: 30, articles: 12, strategies: 4 },
+  AGENCY: { posts: 400, images: 250, videos: 80, articles: 40, strategies: 15 },
 }
 
 // The plans with the prices and credits super admins set (Admin → Pricing):
 // `overrides` comes from Pricing.plans. What the credits buy scales with them.
 export type Plan = (typeof PLANS)[number]
-export function plansWith(overrides: Partial<Record<PlanId, { monthly: number; credits: number }>> | undefined): (Plan & { bundle: Bundle })[] {
+export function plansWith(overrides: Partial<Record<PlanId, { monthly: number; monthlyGel?: number; credits: number }>> | undefined): (Plan & { bundle: Bundle })[] {
   return PLANS.map((p) => {
     const o = overrides?.[p.id]
     const monthly = o && Number.isFinite(o.monthly) && o.monthly > 0 ? o.monthly : p.monthly
+    const monthlyGel = o && Number.isFinite(o.monthlyGel) && o.monthlyGel! > 0 ? o.monthlyGel! : p.monthlyGel
     const credits = o && Number.isFinite(o.credits) && o.credits > 0 ? Math.round(o.credits) : p.credits
     const k = credits / p.credits
     const b = BUNDLES[p.id]
     const bundle = { posts: Math.floor(b.posts * k), images: Math.floor(b.images * k), videos: Math.floor(b.videos * k), articles: Math.floor(b.articles * k), strategies: Math.floor(b.strategies * k) }
-    return { ...p, monthly, credits, bundle }
+    return { ...p, monthly, monthlyGel, credits, bundle }
   })
 }
 
 // What the plan picker shows: prices, credits and clip seconds as set in
-// Admin → Pricing, and lari per dollar for the ₾ equivalent.
-export type PickerPrices = { plans: { id: PlanId; monthly: number; credits: number; bundle: Bundle; veo: number }[]; gelPerUsd: number }
+// Admin → Pricing.
+export type PickerPrices = { plans: { id: PlanId; monthly: number; monthlyGel: number; credits: number; bundle: Bundle; veo: number }[] }
 
 export const TRIAL_DAYS = 7
 // Credits granted once when a trial starts, whatever plan is picked.
@@ -82,12 +90,12 @@ export const TRIAL_CREDITS = 50
 
 export const yearlyTotal = (monthly: number) => monthly * 10
 
-// What an account may have: the plan's numbers, or a single seat before a
-// plan is picked.
-export type Limits = { companies: number; users: number; profiles: number; api: boolean }
+// What an account may have: the plan's numbers, or the smallest before a plan
+// is picked. Users are never limited.
+export type Limits = { companies: number; profiles: number; api: boolean }
 export function planLimits(plan: string): Limits {
   const p = PLANS.find((x) => x.id === plan)
-  return p ? { companies: p.companies, users: p.users, profiles: p.profiles, api: p.id === 'AGENCY' } : { companies: 1, users: 1, profiles: 2, api: false }
+  return p ? { companies: p.companies, profiles: p.profiles, api: p.id === 'AGENCY' } : { companies: 1, profiles: 2, api: false }
 }
 export const companyLimit = (plan: string) => planLimits(plan).companies
 

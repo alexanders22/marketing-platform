@@ -90,14 +90,14 @@ test('AI post (text only): caption + AI/library hashtags merged, exactly 1 credi
   await expect(page.locator('main span.bg-sky-50').filter({ hasText: 'AI' })).toBeVisible()
 })
 
-test('AI post with 1 image: 2 credits, image private to owner, Add to planner', async ({ baseURL }) => {
+test('AI post with 1 image: 5 credits, image private to owner, Add to planner', async ({ baseURL }) => {
   const acct = accountIdOf(email)
   const bal0 = balance(acct)
   const t0 = mark()
   await page.goto('/app/create')
   await chip(/^Images/).click()
   await pop().getByRole('button', { name: /^1 image/ }).click()
-  await expect(page.locator('main span[title*="credit"]')).toHaveText('2')
+  await expect(page.locator('main span[title*="credit"]')).toHaveText('5')
   await chip(/^Hashtags/).click()
   await pop().getByRole('button', { name: /AI hashtags/ }).click() // AI hashtags off
   await page.keyboard.press('Escape')
@@ -108,10 +108,10 @@ test('AI post with 1 image: 2 credits, image private to owner, Add to planner', 
   await expect(result.getByText(/Your post · \d credits? used/)).toBeVisible({ timeout: 180_000 })
   const usedText = await result.getByText(/Your post ·/).textContent()
   console.log('image run:', usedText)
-  expect.soft(usedText).toContain('2 credits used')
+  expect.soft(usedText).toContain('5 credits used')
   await expect.soft(result.locator('p.text-sky-700')).toHaveCount(0) // AI hashtags off, no library selected
-  expect.soft(balance(acct)).toBe(bal0 - 2)
-  expect.soft(spendSince(acct, t0)).toBe('AI_IMAGE:-1,AI_TEXT:-1')
+  expect.soft(balance(acct)).toBe(bal0 - 5)
+  expect.soft(spendSince(acct, t0)).toBe('AI_IMAGE:-4,AI_TEXT:-1')
 
   const src = await result.locator('img').first().getAttribute('src')
   expect(src).toMatch(/^\/media\/c[a-z0-9]+$/)

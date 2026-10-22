@@ -4,10 +4,9 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { confirmDialog } from '@/components/ui/Dialog'
+import type { PlanId } from '@/lib/plans'
 import { BuyButton } from './BuyButton'
 import { cancelRenewal } from './actions'
-
-type PlanId = 'STARTER' | 'TEAM' | 'AGENCY'
 
 // Pay for the plan: a month or a year, renewing automatically when Monrem
 // has a recurring plan for that price (on by default), or once.

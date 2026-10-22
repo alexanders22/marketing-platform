@@ -79,19 +79,18 @@ test.describe('onboarding', () => {
       ),
     ).toBe('https://qa-onb.example|https://instagram.com/qa')
 
-    // Monthly / yearly prices.
-    for (const [m, y] of [
-      ['$29', '$290'],
-      ['$79', '$790'],
-      ['$199', '$1,990'],
-    ]) {
-      await expect(page.getByText(new RegExp(`^\\${m} / month`))).toBeVisible()
-      void y
-    }
+    // Monthly / yearly prices, lari first, without VAT.
+    for (const [m, usd] of [
+      ['₾79', '$29'],
+      ['₾199', '$75'],
+      ['₾529', '$199'],
+    ])
+      await expect(page.getByText(`${m} / month${usd}`, { exact: true })).toBeVisible()
+    await expect(page.getByText('Billed monthly · 18% VAT not included')).toHaveCount(3)
     await page.getByRole('button', { name: 'Yearly (2 months free)' }).click()
-    for (const y of ['$290', '$790', '$1,990']) await expect(page.getByText(new RegExp(`^\\${y} / year`))).toBeVisible()
+    for (const y of ['₾790 / year$290', '₾1,990 / year$750', '₾5,290 / year$1,990']) await expect(page.getByText(y, { exact: true })).toBeVisible()
 
-    // Pick Team, yearly.
+    // Pick Business, yearly.
     await page.getByRole('button', { name: /Start 7-day free trial/ }).nth(1).click()
     // The app opens on the strategy interview.
     await page.waitForURL(/\/app\/strategy\/interview\?welcome=1/)
@@ -109,7 +108,9 @@ test.describe('onboarding', () => {
     const trialBefore = acct(email, 'a."trialEndsAt"')
     await page.goto('/app/plan')
     await expect(page.getByRole('button', { name: 'Current plan' })).toBeVisible()
-    await page.getByRole('button', { name: /Start 7-day free trial/ }).last().click()
+    // The trial was used: no trial offer the second time.
+    await expect(page.getByRole('button', { name: /free trial/ })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Choose Agency' }).click()
     await page.waitForURL(/\/app\/credits/)
     expect(acct(email, 'a.plan, a."creditBalance"')).toBe('AGENCY|50')
     expect(acct(email, `(select count(*) from "CreditEntry" c where c."accountId"=a.id)`)).toBe('1')
@@ -119,7 +120,7 @@ test.describe('onboarding', () => {
     await expect(page.getByText('Agency', { exact: true })).toBeVisible()
     await expect(page.getByText(/Free trial until \d{2}\/\d{2}\/\d{4}/)).toBeVisible()
     await expect(page.locator('p.text-2xl', { hasText: /^50$/ })).toBeVisible()
-    await expect(page.getByText('5,000 credits per month on Agency')).toBeVisible()
+    await expect(page.getByText('2,500 credits per month on Agency')).toBeVisible()
     const row = page.locator('li', { hasText: 'Free trial' })
     await expect(row).toContainText('Bonus')
     await expect(row).toContainText('+50')

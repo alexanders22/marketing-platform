@@ -2,7 +2,9 @@ import 'server-only'
 import { getPlans } from './credits'
 import { terminalUrl } from './hosts'
 import { actionEmail, sendMail } from './mail'
+import { monremCurrency } from './monrem'
 import { yearlyTotal } from './plans'
+import { priceLabel } from './pricing'
 import { prisma } from './prisma'
 
 // Paid periods don't renew by themselves (Bank of Georgia cards can't be
@@ -45,7 +47,10 @@ export async function renewalRemindersDue(now = new Date()) {
     if (claimed.count === 0) continue
     const plan = plans.find((p) => p.id === a.plan)
     if (!plan) continue
-    const price = a.billingCycle === 'YEARLY' ? `$${yearlyTotal(plan.monthly)} / year` : `$${plan.monthly} / month`
+    const price =
+      a.billingCycle === 'YEARLY'
+        ? `${priceLabel({ usd: yearlyTotal(plan.monthly), gel: yearlyTotal(plan.monthlyGel) }, monremCurrency())} + VAT / year`
+        : `${priceLabel({ usd: plan.monthly, gel: plan.monthlyGel }, monremCurrency())} + VAT / month`
     const link = `${terminalUrl()}/app/credits?renew=1`
     const [subject, intro] =
       stage === 'due'

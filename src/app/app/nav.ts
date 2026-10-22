@@ -40,7 +40,17 @@ export const MAIN: Section[] = [
       { label: 'Bio pages', href: '/app/bio' },
     ],
   },
-  { label: 'Inbox', href: '/app/inbox', icon: Inbox, badge: 'inbox' },
+  {
+    label: 'Inbox',
+    href: '/app/inbox',
+    icon: Inbox,
+    badge: 'inbox',
+    tabs: [
+      { label: 'Messenger & Instagram', href: '/app/inbox' },
+      { label: 'Website chat', href: '/app/chat' },
+      { label: 'Assistant', href: '/app/chat/settings' },
+    ],
+  },
   {
     label: 'Insights',
     href: '/app/weekly',
@@ -60,6 +70,7 @@ export const MAIN: Section[] = [
       { label: 'SEO', href: '/app/website' },
       { label: 'AI search', href: '/app/website/ai' },
       { label: 'Tracking', href: '/app/website/tracking' },
+      { label: 'Loudpilot Tag', href: '/app/website/tag' },
     ],
   },
   {

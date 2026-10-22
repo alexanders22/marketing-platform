@@ -1,14 +1,15 @@
 import 'server-only'
 import { GoogleGenAI, type Part } from '@google/genai'
 import type { BrandKit } from '@prisma/client'
-import { noteAiFailure } from './ai-health'
+import { isProviderDown, noteAiFailure } from './ai-health'
 import type { ImageStyleDef } from './image-styles'
 import { COPY_RULES, MARKETING_PLAYBOOK } from './marketing-kb'
 
 // GEMINI_API_KEY enables generation. GEMINI_MODEL / GEMINI_IMAGE_MODEL
-// override the defaults.
+// override the defaults. GEMINI_BASE_URL points at a fake Gemini (e2e only).
 const key = process.env.GEMINI_API_KEY
-const client = key ? new GoogleGenAI({ apiKey: key }) : null
+const baseUrl = process.env.NODE_ENV !== 'production' ? process.env.GEMINI_BASE_URL : undefined
+const client = key ? new GoogleGenAI({ apiKey: key, ...(baseUrl ? { httpOptions: { baseUrl } } : {}) }) : null
 const MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest'
 // Used when the main model stays overloaded (503) after retries.
 const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest'
@@ -192,7 +193,14 @@ async function json<T>(system: string, prompt: string, maxOutputTokens: number, 
       abortSignal: AbortSignal.timeout(timeoutMs),
     },
   }))
-  return JSON.parse(res.text ?? 'null') as T
+  try {
+    return JSON.parse(res.text ?? 'null') as T
+  } catch {
+    // Usually the answer hit maxOutputTokens (thinking counts towards it,
+    // and Georgian takes several tokens a word): say so in the log.
+    const reason = res.candidates?.[0]?.finishReason ?? 'unknown'
+    throw new Error(`AI answer is not valid JSON (finish: ${reason}, ${res.text?.length ?? 0} chars)`)
+  }
 }
 
 export type PlannedPost = { angle: string; caption: string; hashtags: string[] }
@@ -1394,4 +1402,91 @@ export async function askAiSearch(question: string): Promise<AiAnswer> {
     .filter((s, i, all) => all.findIndex((x) => x.title === s.title) === i)
     .slice(0, 10)
   return { answer: (m ? text.slice(0, m.index) : text).trim().slice(0, 3000), businesses, sources }
+}
+
+// ─── Website chat ──────────────────────────────────────────────────────────
+
+export type ChatTurn = { role: 'user' | 'model'; parts: Part[] }
+export type ChatTool = { name: string; description: string; params: Record<string, { type: 'string'; description: string }>; required: string[] }
+export type ChatCall = { id?: string; name: string; args: Record<string, unknown> }
+
+// One step of the website assistant (src/lib/chatbot.ts): text for the
+// visitor, or tool calls to run first. `parts` go back into the next step.
+export async function chatStep(system: string, contents: ChatTurn[], tools: ChatTool[]): Promise<{ text: string; calls: ChatCall[]; parts: Part[] }> {
+  if (!client) throw new Error('AI is not configured')
+  const res = await retrying((model) =>
+    client.models.generateContent({
+      model,
+      contents,
+      config: {
+        systemInstruction: system,
+        temperature: 0.3,
+        maxOutputTokens: 1500,
+        abortSignal: AbortSignal.timeout(45_000),
+        ...(tools.length
+          ? {
+              tools: [
+                {
+                  functionDeclarations: tools.map((t) => ({
+                    name: t.name,
+                    description: t.description,
+                    parametersJsonSchema: { type: 'object', properties: t.params, required: t.required },
+                  })),
+                },
+              ],
+            }
+          : {}),
+      },
+    }),
+  )
+  const parts = res.candidates?.[0]?.content?.parts ?? []
+  return {
+    text: parts
+      .filter((p) => p.text && !p.thought)
+      .map((p) => p.text)
+      .join('')
+      .trim(),
+    calls: parts.flatMap((p) => (p.functionCall?.name ? [{ id: p.functionCall.id, name: p.functionCall.name, args: (p.functionCall.args ?? {}) as Record<string, unknown> }] : [])),
+    parts,
+  }
+}
+
+export type ChatSetup = { instructions: string; knowledge: string; greeting: string; redFlags: string[] }
+
+// The assistant's first brief, written from the company website and what
+// Loudpilot already knows: who it is, the key facts and the topics a person
+// should take. Short on purpose — the owner adds the rest by hand.
+export async function writeChatSetup(brandName: string, brand: Brand | null, pages: { url: string; text: string }[], language: PostOptions['language']): Promise<ChatSetup> {
+  const system = [
+    'You set up the customer-support assistant for a company website. Read the pages and the brand details and write its brief.',
+    'Use ONLY what the pages and details say. Never invent prices, policies, delivery times, guarantees or contacts. Where something customers will ask is missing, write "[fill in: …]" so the owner completes it.',
+    'Return JSON {"instructions": string, "knowledge": string, "greeting": string, "redFlags": string[]}:',
+    'Keep it SHORT — a starting point the owner will extend by hand:',
+    '- instructions: 3–4 short sentences — who the assistant is, what the company sells and to whom, the tone, where to send people (page or phone).',
+    '- knowledge: at most 10 lines, one fact each starting with "- " (main products / prices, hours, address, delivery, payment, contacts). Only facts the pages state; no explanations.',
+    '- greeting: one short friendly first message.',
+    '- redFlags: 3–5 topics of 1–3 words that a person must handle (e.g. refund, complaint, payment problem).',
+    `Write everything in ${language}.`,
+    brandContext(brandName, brand),
+  ].join('\n\n')
+  const body = pages.map((p) => `### ${p.url}\n${p.text}`).join('\n\n').slice(0, 30_000)
+  // A long brief in Georgian plus the model's thinking needs room: a cut-off
+  // answer is broken JSON. One retry, since the length varies run to run.
+  const ask = () =>
+    json<Partial<ChatSetup>>(system, `Company: ${brandName}\n\n${body || '(the website could not be read)'}`, 16_000, 120_000, {
+      type: 'object',
+      properties: { instructions: { type: 'string' }, knowledge: { type: 'string' }, greeting: { type: 'string' }, redFlags: { type: 'array', items: { type: 'string' } } },
+      required: ['instructions', 'knowledge', 'greeting', 'redFlags'],
+    })
+  const out = await ask().catch((e) => {
+    if (isProviderDown(e)) throw e
+    console.warn('writeChatSetup: retrying —', e instanceof Error ? e.message : e)
+    return ask()
+  })
+  return {
+    instructions: String(out?.instructions ?? '').trim().slice(0, 1500),
+    knowledge: String(out?.knowledge ?? '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 12).join('\n').slice(0, 2500),
+    greeting: String(out?.greeting ?? '').trim().slice(0, 300),
+    redFlags: strList(out?.redFlags, 5, 60),
+  }
 }

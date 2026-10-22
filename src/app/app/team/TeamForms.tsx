@@ -15,7 +15,7 @@ function Send({ disabled }: { disabled: boolean }) {
   )
 }
 
-export function InviteForm({ disabled, limit }: { disabled: boolean; limit: number }) {
+export function InviteForm({ disabled }: { disabled: boolean }) {
   const [state, action] = useActionState(inviteMember, undefined)
   return (
     <form action={action} className="rounded-xl border border-zinc-200 p-4">
@@ -36,7 +36,7 @@ export function InviteForm({ disabled, limit }: { disabled: boolean; limit: numb
         </select>
         <Send disabled={disabled} />
       </div>
-      {disabled && <p className="mt-2 text-sm text-zinc-500">All {limit} seats are taken.</p>}
+      {disabled && <p className="mt-2 text-sm text-zinc-500">Choose a plan to invite teammates.</p>}
       {state?.error && <p className="mt-2 text-sm text-red-600">{state.error}</p>}
       {state?.ok && <p className="mt-2 text-sm text-emerald-700">{state.ok}</p>}
     </form>

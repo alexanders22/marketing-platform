@@ -8,14 +8,16 @@ import { creditMoney } from '@/lib/money'
 import { creditValue, getPlans, getPricing } from '@/lib/credits'
 import { VAT } from '@/lib/tax'
 import { prisma } from '@/lib/prisma'
-import { monremEnabled } from '@/lib/monrem'
+import { monremCurrency, monremEnabled } from '@/lib/monrem'
 import { recurringOption, syncPayment, TEST_PAYMENT } from '@/lib/payments'
 import { convertRemaining } from '@/lib/billing'
 import { billingState, yearlyTotal } from '@/lib/plans'
+import { priceLabel } from '@/lib/pricing'
 import { BillingAddressLine } from './AddressDialog'
 import { BuyButton } from './BuyButton'
 import { EscapeFrame } from './PayFrame'
 import { CancelRenewal, PlanPay } from './PlanPay'
+import { ShowMore } from '@/components/ShowMore'
 
 export const metadata: Metadata = { title: 'Plan & credits — Loudpilot' }
 
@@ -44,12 +46,15 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
   const entries = await prisma.creditEntry.findMany({
     where: { accountId: account.id },
     orderBy: { createdAt: 'desc' },
-    take: 100,
+    take: 500,
   })
   const [plans, pricing, value] = await Promise.all([getPlans(), getPricing(), creditValue()])
   const plan = plans.find((p) => p.id === account.plan)
   const worth = creditMoney(account.creditBalance, value)
-  const gel = (usd: number) => `₾${Math.round(usd * value.gelPerUsd).toLocaleString('en-US')}`
+  // Plan prices in what the card is charged in; VAT is added at checkout.
+  const cur = monremCurrency()
+  const monthly = plan && `${priceLabel({ usd: plan.monthly, gel: plan.monthlyGel }, cur)} + VAT`
+  const yearly = plan && `${priceLabel({ usd: yearlyTotal(plan.monthly), gel: yearlyTotal(plan.monthlyGel) }, cur)} + VAT`
   const trial = account.trialEndsAt && account.trialEndsAt > new Date()
   const active = billingState(account) === 'active'
   const upgradeTo = plans.find((p) => p.id === q.upgrade && p.id !== account.plan)
@@ -57,7 +62,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
     upgradeTo && plan && active && account.paidUntil
       ? (() => {
           const now = new Date()
-          const converted = convertRemaining(account.paidUntil, plan.monthly, upgradeTo.monthly, now)!
+          const converted = convertRemaining(account.paidUntil, cur === 'GEL' ? plan.monthlyGel : plan.monthly, cur === 'GEL' ? upgradeTo.monthlyGel : upgradeTo.monthly, now)!
           const days = (d: Date) => Math.max(0, Math.round((d.getTime() - now.getTime()) / 86_400_000))
           return { plan: upgradeTo, cycle: q.cycle === 'YEARLY' ? ('YEARLY' as const) : ('MONTHLY' as const), daysLeft: days(account.paidUntil), daysConverted: days(converted) }
         })()
@@ -84,7 +89,10 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
               disabled={cantPay}
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
             >
-              Pay for {upgrade.plan.name} · {upgrade.cycle === 'YEARLY' ? `$${yearlyTotal(upgrade.plan.monthly)} / year` : `$${upgrade.plan.monthly} / month`}
+              Pay for {upgrade.plan.name} ·{' '}
+              {upgrade.cycle === 'YEARLY'
+                ? `${priceLabel({ usd: yearlyTotal(upgrade.plan.monthly), gel: yearlyTotal(upgrade.plan.monthlyGel) }, cur)} + VAT / year`
+                : `${priceLabel({ usd: upgrade.plan.monthly, gel: upgrade.plan.monthlyGel }, cur)} + VAT / month`}
             </BuyButton>
           </div>
         </section>
@@ -106,7 +114,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
               disabled={cantPay}
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
             >
-              Renew 1 {account.billingCycle === 'YEARLY' ? `year · $${yearlyTotal(plan.monthly)}` : `month · $${plan.monthly}`}
+              Renew 1 {account.billingCycle === 'YEARLY' ? `year · ${yearly}` : `month · ${monthly}`}
             </BuyButton>
           </div>
         </section>
@@ -140,7 +148,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
               )}
             </div>
           ) : (
-            plan && <PlanPay plan={plan.id} monthly={`$${plan.monthly}`} yearly={`$${yearlyTotal(plan.monthly)}`} renew={renew} active={active} disabled={cantPay} />
+            plan && <PlanPay plan={plan.id} monthly={monthly!} yearly={yearly!} renew={renew} active={active} disabled={cantPay} />
           )}
           <Link href="/app/plan" className={`inline-block text-sm font-medium ${plan ? 'mt-3 text-indigo-600 hover:underline' : 'mt-4 rounded-lg bg-zinc-900 px-4 py-2 font-semibold text-white hover:bg-zinc-800'}`}>
             {plan ? 'Change plan' : 'Choose a plan'}
@@ -166,7 +174,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
         <h2 id="buy-heading" className="font-semibold">
           Buy more credits
         </h2>
-        <p className="mt-0.5 text-sm text-zinc-500">On top of your plan, they never expire. Prices include {Math.round(VAT.rate * 100)}% VAT.</p>
+        <p className="mt-0.5 text-sm text-zinc-500">On top of your plan, they never expire. Prices without VAT: {Math.round(VAT.rate * 100)}% is added at checkout.</p>
         <ul className="mt-4 grid gap-3 sm:grid-cols-3" aria-label="Credit packs">
           {pricing.packs.map((pk) => {
             const save = 1 - pk.priceUsd / (pk.credits * pricing.creditPriceUsd)
@@ -175,10 +183,10 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
                 {save >= 0.05 && <span className="absolute -top-2.5 right-3 rounded-full bg-emerald-500 px-2 py-0.5 text-[11px] font-bold text-white">Save {Math.round(save * 100)}%</span>}
                 <p className="text-lg font-semibold">{pk.credits.toLocaleString()} credits</p>
                 <p className="mt-1 text-2xl font-semibold" data-no-credit-hint>
-                  {gel(pk.priceUsd)} <span className="text-sm font-normal text-zinc-500">· ${pk.priceUsd.toLocaleString('en-US')}</span>
+                  ₾{pk.priceGel.toLocaleString('en-US')} <span className="text-sm font-normal text-zinc-500">· ${pk.priceUsd.toLocaleString('en-US')}</span>
                 </p>
                 <p className="text-xs text-zinc-500" data-no-credit-hint>
-                  {gel(pk.priceUsd / pk.credits * 100)} per 100 credits
+                  ₾{((pk.priceGel / pk.credits) * 100).toFixed(2)} per 100 credits
                 </p>
                 <BuyButton purchase={{ kind: 'PACK', credits: pk.credits }} disabled={cantPay} className="mt-3 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800">
                   Buy
@@ -228,21 +236,23 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
           <p className="px-5 py-10 text-center text-sm text-zinc-500">No credit activity yet.</p>
         ) : (
           <ul className="divide-y divide-zinc-100">
-            {entries.map((e) => (
-              <li key={e.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
-                <div>
-                  <p className="font-medium">{REASON[e.reason] ?? e.reason}</p>
-                  {e.note && <p className="text-xs text-zinc-500">{e.note}</p>}
-                </div>
-                <div className="text-right">
-                  <p className={e.amount >= 0 ? 'font-medium text-emerald-600' : 'text-zinc-800'}>
-                    {e.amount >= 0 ? '+' : ''}
-                    {e.amount.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-zinc-500">{e.createdAt.toLocaleDateString('en-GB')}</p>
-                </div>
-              </li>
-            ))}
+            <ShowMore as="li">
+              {entries.map((e) => (
+                <li key={e.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
+                  <div>
+                    <p className="font-medium">{REASON[e.reason] ?? e.reason}</p>
+                    {e.note && <p className="text-xs text-zinc-500">{e.note}</p>}
+                  </div>
+                  <div className="text-right">
+                    <p className={e.amount >= 0 ? 'font-medium text-emerald-600' : 'text-zinc-800'}>
+                      {e.amount >= 0 ? '+' : ''}
+                      {e.amount.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-zinc-500">{e.createdAt.toLocaleDateString('en-GB')}</p>
+                  </div>
+                </li>
+              ))}
+            </ShowMore>
           </ul>
         )}
       </section>

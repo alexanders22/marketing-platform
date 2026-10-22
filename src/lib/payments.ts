@@ -3,7 +3,6 @@ import { Prisma, type BillingCycle, type Payment } from '@prisma/client'
 import { convertRemaining, extendPaidUntil, grantPlanCredits } from './billing'
 import { phoneParts, type BillingAddress } from './billing-address'
 import { getPlans, getPricing } from './credits'
-import { gelPerUsd } from './fx'
 import { siteUrl, terminalUrl } from './hosts'
 import {
   canEmbed,
@@ -22,6 +21,7 @@ import {
 } from './monrem'
 import { yearlyTotal, type PlanId } from './plans'
 import { prisma } from './prisma'
+import { grossOf } from './tax'
 
 // Card payments: what is for sale (priced on the server, never from the
 // browser), the hosted checkout, and fulfilment — exactly once per payment,
@@ -39,28 +39,32 @@ export type Purchase = { kind: 'PACK'; credits: number; test?: boolean } | { kin
 // Test payments: 1.00 in the terminal's currency for a few credits or a plan month.
 export const TEST_PAYMENT = { amount: 100, credits: 10 }
 
-// The price in USD (VAT included) and what it buys.
+// The list price (without VAT) in dollars and in lari, and what it buys.
 async function quote(p: Purchase) {
-  if (p.test && p.kind === 'PACK') return p.credits === TEST_PAYMENT.credits ? { usd: 1, label: `TEST: ${p.credits} Loudpilot credits` } : null
+  if (p.test && p.kind === 'PACK') return p.credits === TEST_PAYMENT.credits ? { usd: 1, gel: 1, label: `TEST: ${p.credits} Loudpilot credits` } : null
   if (p.test && p.kind === 'PLAN') {
     const plan = (await getPlans()).find((x) => x.id === p.plan)
-    return plan && p.cycle === 'MONTHLY' ? { usd: 1, label: `TEST: Loudpilot ${plan.name} plan, 1 month` } : null
+    return plan && p.cycle === 'MONTHLY' ? { usd: 1, gel: 1, label: `TEST: Loudpilot ${plan.name} plan, 1 month` } : null
   }
   if (p.kind === 'PACK') {
     const pack = (await getPricing()).packs.find((x) => x.credits === p.credits)
     if (!pack) return null
-    return { usd: pack.priceUsd, label: `${pack.credits.toLocaleString('en-US')} Loudpilot credits` }
+    return { usd: pack.priceUsd, gel: pack.priceGel, label: `${pack.credits.toLocaleString('en-US')} Loudpilot credits` }
   }
   const plan = (await getPlans()).find((x) => x.id === p.plan)
   if (!plan) return null
-  const usd = p.cycle === 'YEARLY' ? yearlyTotal(plan.monthly) : plan.monthly
-  return { usd, label: `Loudpilot ${plan.name} plan, ${p.cycle === 'YEARLY' ? '1 year' : '1 month'}` }
+  const yearly = p.cycle === 'YEARLY'
+  return {
+    usd: yearly ? yearlyTotal(plan.monthly) : plan.monthly,
+    gel: yearly ? yearlyTotal(plan.monthlyGel) : plan.monthlyGel,
+    label: `Loudpilot ${plan.name} plan, ${yearly ? '1 year' : '1 month'}`,
+  }
 }
 
-async function inCurrency(usd: number) {
+// What the terminal charges: the dollar price, or the fixed lari price, plus VAT.
+function inCurrency(q: { usd: number; gel: number }) {
   const currency = monremCurrency()
-  const major = currency === 'GEL' ? usd * (await gelPerUsd()) : usd
-  return { currency, amount: Math.round(major * 100) }
+  return { currency, amount: Math.round(grossOf(currency === 'GEL' ? q.gel : q.usd) * 100) }
 }
 
 const isUnique = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002'
@@ -89,7 +93,7 @@ export async function monremPlans(fresh = false) {
 export const planAmount = (p: MonremPlan) => ({ amount: Math.round(parseFloat(p.amount) * 100), currency: (p.currency?.code ?? '').toUpperCase() })
 
 // Auto-renewal for a plan and cycle, when its Monrem plan exists, is active and
-// costs what we sell it for (USD exactly; GEL within 5% — the rate moves).
+// costs exactly what we sell it for.
 export async function recurringOption(plan: PlanId, cycle: BillingCycle) {
   if (!monremEnabled()) return null
   const ref = (await recurringRefs())[`${plan}_${cycle}`]
@@ -97,10 +101,9 @@ export async function recurringOption(plan: PlanId, cycle: BillingCycle) {
   const mp = (await monremPlans().catch(() => [] as MonremPlan[])).find((x) => x.ref_id === ref && x.is_active)
   const q = await quote({ kind: 'PLAN', plan, cycle })
   if (!mp || !q) return null
-  const want = await inCurrency(q.usd)
+  const want = inCurrency(q)
   const got = planAmount(mp)
-  if (got.currency !== want.currency) return null
-  if (want.currency === 'USD' ? got.amount !== want.amount : Math.abs(got.amount - want.amount) > want.amount * 0.05) return null
+  if (got.currency !== want.currency || got.amount !== want.amount) return null
   return { refId: ref, amount: got.amount, currency: got.currency }
 }
 
@@ -115,11 +118,12 @@ export async function startCheckout(o: {
   purchase: Purchase
 }): Promise<{ url?: string; embed?: boolean; error?: string }> {
   const q = await quote(o.purchase)
-  if (!q || q.usd <= 0) return { error: 'This is not for sale' }
+  if (!q || q.usd <= 0 || q.gel <= 0) return { error: 'This is not for sale' }
   const p = o.purchase
   const recurring = p.kind === 'PLAN' && p.autoRenew && !p.test ? await recurringOption(p.plan, p.cycle) : null
   if (p.kind === 'PLAN' && p.autoRenew && !recurring) return { error: 'Auto-renewal is not available for this plan right now — pay once instead.' }
-  const { currency, amount } = recurring ?? (p.test ? { currency: monremCurrency(), amount: TEST_PAYMENT.amount } : await inCurrency(q.usd))
+  // A test is exactly 1.00, no VAT on top.
+  const { currency, amount } = recurring ?? (p.test ? { currency: monremCurrency(), amount: TEST_PAYMENT.amount } : inCurrency(q))
   const payment = await prisma.payment.create({
     data: {
       accountId: o.accountId,
@@ -248,7 +252,10 @@ async function fulfil(id: string) {
       const a = await tx.account.findUniqueOrThrow({ where: { id: p.accountId }, select: { paidUntil: true, plan: true } })
       const now = new Date()
       // Another plan: the rest of the old one's paid time is converted first.
-      const price = (id: string) => plans.find((x) => x.id === id)?.monthly ?? 0
+      const price = (id: string) => {
+        const x = plans.find((y) => y.id === id)
+        return (p.currency === 'GEL' ? x?.monthlyGel : x?.monthly) ?? 0
+      }
       const from = a.plan !== p.plan ? convertRemaining(a.paidUntil, price(a.plan), price(p.plan), now) : a.paidUntil
       await tx.account.update({
         where: { id: p.accountId },

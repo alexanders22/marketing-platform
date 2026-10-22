@@ -188,7 +188,7 @@ export function EconomicsEditor({
           <thead className="border-y border-zinc-100 text-left text-xs text-zinc-500">
             <tr>
               <th className="px-4 py-2 font-medium">Plan</th>
-              <th className="px-3 py-2 text-right font-medium">Price</th>
+              <th className="px-3 py-2 text-right font-medium">Paid incl. VAT</th>
               <th className="px-3 py-2 text-right font-medium">Without VAT</th>
               <th className="px-3 py-2 text-right font-medium">Fees, tax, partner</th>
               <th className="px-3 py-2 text-right font-medium">AI · share used</th>
@@ -223,7 +223,7 @@ export function EconomicsEditor({
           <thead className="border-y border-zinc-100 text-left text-xs text-zinc-500">
             <tr>
               <th className="px-4 py-2 font-medium">Pack</th>
-              <th className="px-3 py-2 text-right font-medium">Price</th>
+              <th className="px-3 py-2 text-right font-medium">Paid incl. VAT</th>
               <th className="px-3 py-2 text-right font-medium">Without VAT</th>
               <th className="px-3 py-2 text-right font-medium">Fees, tax, partner</th>
               <th className="px-3 py-2 text-right font-medium">AI</th>

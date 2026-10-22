@@ -36,16 +36,16 @@ test('generate a clip for a scene: charged, pending, then it arrives', async () 
   await page.getByRole('button', { name: 'Generate clip with AI' }).click()
   await page.getByLabel('Clip description').fill('[test] baker dusting sugar over croissants')
   await expect(page.getByRole('radiogroup', { name: 'Clip quality' }).getByRole('radio', { name: /Quick/ })).toHaveAttribute('aria-checked', 'true')
-  await page.getByRole('button', { name: 'Generate · 4 credits' }).click()
+  await page.getByRole('button', { name: 'Generate · 12 credits' }).click()
   await expect(page.getByText(/Generating the AI clip/)).toBeVisible()
   await expect(page.getByLabel('AI clip generating')).toBeVisible()
   await expect(page.getByRole('button', { name: /Render video/ })).toBeDisabled()
-  expect(balance()).toBe(before - 4)
+  expect(balance()).toBe(before - 12)
 
   await expect(page.getByText(/Generating the AI clip/)).toHaveCount(0, { timeout: 30_000 })
   await expect(page.getByLabel('AI clip generating')).toHaveCount(0)
   await expect.poll(() => sql(`select data->'scenes'->0->'media'->>'kind' from "Video" where id='${videoId}'`), { timeout: 10_000 }).toBe('video')
-  expect(sql(`select status||':'||credits||':'||quality||':'||aspect from "ClipJob" where "videoId"='${videoId}'`)).toBe('DONE:4:quick:9:16')
+  expect(sql(`select status||':'||credits||':'||quality||':'||aspect from "ClipJob" where "videoId"='${videoId}'`)).toBe('DONE:12:quick:9:16')
   // The ledger knows what was bought: for the admin's unit economics.
   expect(sql(`select action||':'||units from "CreditEntry" where "accountId"='${accountId}' and action is not null order by "createdAt" desc limit 1`)).toBe('clipQuick:4')
   expect(sql(`select m.kind||':'||(m."posterId" is not null) from "ClipJob" j join "Media" m on m.id=j."mediaId" where j."videoId"='${videoId}'`)).toBe('VIDEO:true')
@@ -58,11 +58,11 @@ test('a failed clip gives the credits back once', async () => {
   await page.getByLabel('Clip description').fill('[test] fail on purpose')
   await page.getByRole('radiogroup', { name: 'Clip quality' }).getByRole('radio', { name: /Pro/ }).click()
   await page.getByRole('radiogroup', { name: 'Clip length' }).getByRole('radio', { name: '6s' }).click()
-  await page.getByRole('button', { name: 'Generate · 24 credits' }).click()
+  await page.getByRole('button', { name: 'Generate · 48 credits' }).click()
   await expect(page.getByText(/AI clip failed: The clip was blocked by safety filters/)).toBeVisible({ timeout: 30_000 })
   expect(balance()).toBe(before)
   const job = sql(`select id from "ClipJob" where "videoId"='${videoId}' and status='FAILED'`)
-  expect(sql(`select count(*)||':'||sum(amount) from "CreditEntry" where "refId"='${job}' and reason='REFUND'`)).toBe('1:24')
+  expect(sql(`select count(*)||':'||sum(amount) from "CreditEntry" where "refId"='${job}' and reason='REFUND'`)).toBe('1:48')
   // The scene is free again.
   await expect(page.getByRole('button', { name: 'Generate clip with AI' })).toBeVisible()
 })
@@ -85,22 +85,22 @@ test('render with the clip and its own sound', async () => {
 })
 
 test('monthly Veo limit: the meter, refunds give seconds back, over the limit is refused', async () => {
-  // Starter: 32 s a month. One 4 s clip made, the failed Pro clip given back.
+  // Start: 10 s a month. One 4 s clip made, the failed Pro clip given back.
   await page.getByRole('button', { name: 'Generate clip with AI' }).click()
   await expect(page.getByText('AI clips this month')).toBeVisible()
-  await expect(page.getByText('4 / 32s')).toBeVisible()
-  // Pretend 26 more seconds were used this month: 2 s left.
-  sql(`insert into "CreditEntry"(id,"accountId",amount,reason,note,action,units) values ('ce${Date.now()}','${accountId}',-26,'AI_VIDEO','test usage','clipQuick',26)`)
-  sql(`update "Account" set "creditBalance"="creditBalance"+26 where id='${accountId}'`)
+  await expect(page.getByText('4 / 10s')).toBeVisible()
+  // Pretend 4 more seconds were used this month: 2 s left.
+  sql(`insert into "CreditEntry"(id,"accountId",amount,reason,note,action,units) values ('ce${Date.now()}','${accountId}',-12,'AI_VIDEO','test usage','clipQuick',4)`)
+  sql(`update "Account" set "creditBalance"="creditBalance"+12 where id='${accountId}'`)
   await page.reload()
   await page.getByRole('button', { name: 'Generate clip with AI' }).click()
   await page.getByLabel('Clip description').fill('[test] over the limit')
   await expect(page.getByText(/2s left this month/)).toBeVisible()
-  await expect(page.getByRole('button', { name: /Generate · 4 credits/ })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /Generate · 12 credits/ })).toBeDisabled()
   sql(`delete from "CreditEntry" where "accountId"='${accountId}' and note='test usage'`)
   await page.reload()
   await page.getByRole('button', { name: 'Generate clip with AI' }).click()
-  await expect(page.getByText('4 / 32s')).toBeVisible()
+  await expect(page.getByText('4 / 10s')).toBeVisible()
 })
 
 test('trial accounts see Veo locked and cannot start a clip', async ({ browser }) => {
@@ -132,7 +132,7 @@ test('real Veo: a 4-second clip from Google', async () => {
   await page.getByRole('button', { name: 'Add scene' }).click()
   await page.getByRole('button', { name: 'Generate clip with AI' }).click()
   await page.getByLabel('Clip description').fill('Close-up of steam rising from a fresh loaf of sourdough on a wooden board, warm morning light')
-  await page.getByRole('button', { name: 'Generate · 4 credits' }).click()
+  await page.getByRole('button', { name: 'Generate · 12 credits' }).click()
   await expect(page.getByText(/Generating the AI clip/)).toBeVisible()
   await expect(page.getByText(/Generating the AI clip/)).toHaveCount(0, { timeout: 360_000 })
   const job = sql(`select status||':'||coalesce(error,'') from "ClipJob" where "videoId"='${videoId}' order by "createdAt" desc limit 1`)

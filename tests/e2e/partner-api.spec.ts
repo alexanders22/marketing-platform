@@ -126,3 +126,15 @@ test('another partner cannot reach the workspace', async () => {
   }
   expect((await other.post(`/api/v1/workspaces/${ext}/connect-links`, { data: { network: 'meta', returnUrl: 'https://x.test/' } })).status()).toBe(404)
 })
+
+test('website tag: the snippet for the customer’s site, only for own workspaces', async () => {
+  const res = await api.get(`/api/v1/workspaces/${ext}/tag`)
+  expect(res.status()).toBe(200)
+  const tag = await res.json()
+  expect(tag.siteKey).toMatch(/^lp_/)
+  expect(tag.snippet).toBe(`<script async src="${tag.scriptUrl}" data-site="${tag.siteKey}"></script>`)
+  expect(tag).toMatchObject({ installed: false, lastEventAt: null, chatEnabled: false })
+  // Same site on every call.
+  expect((await (await api.get(`/api/v1/workspaces/${ext}/tag`)).json()).siteKey).toBe(tag.siteKey)
+  expect((await other.get(`/api/v1/workspaces/${ext}/tag`)).status()).toBe(404)
+})

@@ -9,6 +9,7 @@ import { formatMoney, formatNumber, formatPercent } from '@/lib/format'
 import { resultLabel } from '@/lib/meta-ads'
 import { prisma } from '@/lib/prisma'
 import { dayIn, isValidTimeZone } from '@/lib/time'
+import { ShowMore } from '@/components/ShowMore'
 
 export const metadata: Metadata = { title: 'Ad campaign — Loudpilot' }
 
@@ -101,16 +102,18 @@ export default async function AdCampaignPage({ params, searchParams }: PageProps
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100 tabular-nums">
-            {[...days].reverse().map((d) => (
-              <tr key={d.date}>
-                <td className="px-4 py-2.5">{d.date}</td>
-                <td className="px-3 py-2.5 text-right">{formatMoney(d.spend, c.currency)}</td>
-                <td className="px-3 py-2.5 text-right">{formatNumber(d.results)}</td>
-                <td className="px-3 py-2.5 text-right">{d.results ? formatMoney(d.spend / d.results, c.currency) : '—'}</td>
-                <td className="px-3 py-2.5 text-right">{formatNumber(d.impressions)}</td>
-                <td className="px-4 py-2.5 text-right">{formatPercent(ratio(d.clicks, d.impressions))}</td>
-              </tr>
-            ))}
+            <ShowMore as="tr" colSpan={6}>
+              {[...days].reverse().map((d) => (
+                <tr key={d.date}>
+                  <td className="px-4 py-2.5">{d.date}</td>
+                  <td className="px-3 py-2.5 text-right">{formatMoney(d.spend, c.currency)}</td>
+                  <td className="px-3 py-2.5 text-right">{formatNumber(d.results)}</td>
+                  <td className="px-3 py-2.5 text-right">{d.results ? formatMoney(d.spend / d.results, c.currency) : '—'}</td>
+                  <td className="px-3 py-2.5 text-right">{formatNumber(d.impressions)}</td>
+                  <td className="px-4 py-2.5 text-right">{formatPercent(ratio(d.clicks, d.impressions))}</td>
+                </tr>
+              ))}
+            </ShowMore>
             {days.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">

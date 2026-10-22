@@ -1,22 +1,24 @@
 import { expect, test } from '@playwright/test'
 import { latestMail, linkFrom, newAccount, sql, uniqueEmail } from './helpers'
 
-// Plan limits (companies, seats, social profiles), the paid state, monthly
+// Plan limits (companies, social profiles; users are unlimited), the paid state, monthly
 // plan credits and the Agency API.
 
 const acct = (email: string) =>
   sql(`select m."accountId" from "AccountMember" m join "User" u on u.id=m."userId" where u.email='${email}'`)
 
-test('Starter has one seat; Team invites teammates by email up to five seats', async ({ page, browser }) => {
+test('every plan has unlimited users; Start invites teammates by email', async ({ page, browser }) => {
   const { email } = await newAccount(page, 'team')
   const id = acct(email)
+  // No plan: no invitations.
+  sql(`update "Account" set plan='NONE' where id='${id}'`)
   await page.goto('/app/team')
-  await expect(page.getByText(/1\s*of\s*1\s*seat used/)).toBeVisible()
   await expect(page.getByLabel('Teammate email')).toBeDisabled()
 
-  sql(`update "Account" set plan='TEAM' where id='${id}'`)
+  sql(`update "Account" set plan='STARTER' where id='${id}'`)
   await page.reload()
-  await expect(page.getByText(/1\s*of\s*5\s*seats used/)).toBeVisible()
+  await expect(page.getByText(/1\s*member/)).toBeVisible()
+  await expect(page.getByText('Start plan · unlimited users')).toBeVisible()
   const mate = uniqueEmail('mate')
   await page.getByLabel('Teammate email').fill(mate)
   await page.getByLabel('Role').selectOption('ADMIN')
@@ -37,44 +39,21 @@ test('Starter has one seat; Team invites teammates by email up to five seats', a
   await expect(other.getByText("This invitation can't be used")).toBeVisible()
   await other.close()
 
-  // Fill the remaining seats with pending invitations: the next is refused.
-  for (let i = 0; i < 3; i++) {
+  // Many pending invitations: still room for one more.
+  for (let i = 0; i < 6; i++) {
     sql(
       `insert into "Invitation" (id, "accountId", email, role, "tokenHash", "invitedById", "expiresAt") values ('inv-${Date.now()}-${i}', '${id}', 'x${i}-${Date.now()}@khma.test', 'EDITOR', 'h-${Date.now()}-${i}', 'x', now() + interval '1 day')`,
     )
   }
   await page.reload()
-  await expect(page.getByText(/5\s*of\s*5\s*seats used/)).toBeVisible()
-  await expect(page.getByText('All 5 seats are taken.')).toBeVisible()
-  // Cancelling one frees a seat.
-  await page.getByRole('button', { name: /Cancel invitation for x0-/ }).click()
-  await expect(page.getByText(/4\s*of\s*5\s*seats used/)).toBeVisible()
-})
-
-test('an invitation sent on Team cannot be used once the plan has shrunk to Starter', async ({ page, browser }) => {
-  const { email } = await newAccount(page, 'shrink')
-  const id = acct(email)
-  sql(`update "Account" set plan='TEAM' where id='${id}'`)
-  await page.goto('/app/team')
-  const mate = uniqueEmail('late')
-  await page.getByLabel('Teammate email').fill(mate)
+  await expect(page.getByText(/2\s*members\s*·\s*6 invitations pending/)).toBeVisible()
+  const next = uniqueEmail('mate2')
+  await page.getByLabel('Teammate email').fill(next)
   await page.getByRole('button', { name: 'Send invite' }).click()
-  await expect(page.getByText(`Invitation sent to ${mate}`)).toBeVisible()
-  sql(`update "Account" set plan='STARTER' where id='${id}'`)
-
-  const mail = await latestMail(mate, 'invited you')
-  const other = await browser.newPage()
-  await other.goto(linkFrom(mail.Text, '/auth/invite?token='))
-  await other.getByRole('button', { name: 'Join the team' }).click()
-  await expect(other.getByText("The team is full on its current plan, so the invitation can't be used.")).toBeVisible()
-  expect(sql(`select count(*) from "AccountMember" where "accountId"='${id}'`)).toBe('1')
-  // Not used up: once a seat is back (plan upgraded), the same link works.
-  sql(`update "Account" set plan='TEAM' where id='${id}'`)
-  await other.goto(linkFrom(mail.Text, '/auth/invite?token='))
-  await other.getByRole('button', { name: 'Join the team' }).click()
-  await other.waitForURL(/\/app/)
-  expect(sql(`select count(*) from "AccountMember" where "accountId"='${id}'`)).toBe('2')
-  await other.close()
+  await expect(page.getByText(`Invitation sent to ${next}`)).toBeVisible()
+  // Cancelling one removes it.
+  await page.getByRole('button', { name: /Cancel invitation for x0-/ }).click()
+  await expect(page.getByText(/6 invitations pending/)).toBeVisible()
 })
 
 test('a trial is not a payment; a recorded payment unlocks paid features and grants plan credits', async ({ page, browser }) => {
@@ -93,30 +72,30 @@ test('a trial is not a payment; a recorded payment unlocks paid features and gra
   await admin.goto(`/admin/companies/${id}`)
   await admin.getByRole('textbox', { name: 'Note' }).first().fill('bank transfer #1')
   await admin.getByRole('button', { name: 'Record payment' }).click()
-  // Starter $29, VAT included: $4.42 of it is 18% VAT.
-  await expect(admin.getByText(/Paid until \d{4}-\d{2}-\d{2} · \$29 incl\. \$4\.42 VAT · \+300 credits/)).toBeVisible()
+  // Start $29 plus 18% VAT ($5.22).
+  await expect(admin.getByText(/Paid until \d{4}-\d{2}-\d{2} · \$34\.22 incl\. \$5\.22 VAT · \+200 credits/)).toBeVisible()
   // A second month paid ahead: paid longer, but this month's credits only once.
   await admin.getByRole('textbox', { name: 'Note' }).first().fill('bank transfer #2')
   await admin.getByRole('button', { name: 'Record payment' }).click()
-  await expect(admin.getByText(/Paid until \d{4}-\d{2}-\d{2} · \$29 incl\. \$4\.42 VAT$/)).toBeVisible()
-  expect(sql(`select details->>'net' from "AdminLog" where action='payment.record' and "targetId"='${id}' order by "createdAt" desc limit 1`)).toBe('24.58')
+  await expect(admin.getByText(/Paid until \d{4}-\d{2}-\d{2} · \$34\.22 incl\. \$5\.22 VAT$/)).toBeVisible()
+  expect(sql(`select details->>'net' from "AdminLog" where action='payment.record' and "targetId"='${id}' order by "createdAt" desc limit 1`)).toBe('29')
   await admin.goto('/admin/payments')
   await expect(admin.getByText('VAT 18% to pay')).toBeVisible()
   await admin.close()
   expect(Number(sql(`select extract(day from "paidUntil" - now()) from "Account" where id='${id}'`))).toBeGreaterThan(55)
-  expect(sql(`select "creditBalance" from "Account" where id='${id}'`)).toBe('350')
+  expect(sql(`select "creditBalance" from "Account" where id='${id}'`)).toBe('250')
   expect(sql(`select count(*) from "CreditEntry" where "accountId"='${id}' and "idempotencyKey" like 'plan:%'`)).toBe('1')
 
   await page.reload()
   await expect(page.getByText('Your free trial has ended.')).toHaveCount(0)
-  await expect(page.getByRole('link', { name: /Starter plan/ }).first()).toBeAttached()
+  await expect(page.getByRole('link', { name: /Start plan/ }).first()).toBeAttached()
 })
 
 test('Agency API: own keys, own companies, closed when the plan ends', async ({ page, request }) => {
   const { email } = await newAccount(page, 'api')
   const id = acct(email)
   const base = '/api/v1'
-  // Trial on Starter: the API is open.
+  // Trial on Start: the API is open.
   await page.goto('/app/api')
   await expect(page.getByText('The API is open during your free trial.')).toBeVisible()
   await page.getByLabel('API key name').fill('CRM')
@@ -130,15 +109,12 @@ test('Agency API: own keys, own companies, closed when the plan ends', async ({ 
   const list = await (await request.get(`${base}/workspaces`, { headers: auth })).json()
   const own = sql(`select id from "Workspace" where "accountId"='${id}'`)
   expect(list.workspaces.map((w: { externalId: string }) => w.externalId)).toEqual([own])
-  // A company made through the API belongs to the account, within the limit.
-  const made = await request.post(`${base}/workspaces`, { headers: auth, data: { externalId: 'client-1', name: 'Client One' } })
-  expect(made.status()).toBe(200)
-  expect(sql(`select count(*) from "Workspace" where "accountId"='${id}'`)).toBe('2')
-  const third = await request.post(`${base}/workspaces`, { headers: auth, data: { externalId: 'client-2', name: 'Client Two' } })
-  expect(third.status()).toBe(409)
-  expect((await third.json()).error.code).toBe('company_limit')
+  // Companies made through the API count against the plan: Start includes one.
+  const second = await request.post(`${base}/workspaces`, { headers: auth, data: { externalId: 'client-1', name: 'Client One' } })
+  expect(second.status()).toBe(409)
+  expect((await second.json()).error.code).toBe('company_limit')
 
-  // Trial over on Starter: closed. Agency paid: open again.
+  // Trial over on Start: closed. Agency paid: open again.
   sql(`update "Account" set "trialEndsAt"=now() - interval '1 day' where id='${id}'`)
   const closed = await request.get(`${base}/ping`, { headers: auth })
   expect(closed.status()).toBe(403)
@@ -147,6 +123,10 @@ test('Agency API: own keys, own companies, closed when the plan ends', async ({ 
   await expect(page.getByRole('heading', { name: 'The API is part of the Agency plan' })).toBeVisible()
   sql(`update "Account" set plan='AGENCY', "paidUntil"=now() + interval '20 days' where id='${id}'`)
   expect((await request.get(`${base}/ping`, { headers: auth })).status()).toBe(200)
+  // A company made through the API belongs to the account.
+  const made = await request.post(`${base}/workspaces`, { headers: auth, data: { externalId: 'client-1', name: 'Client One' } })
+  expect(made.status()).toBe(200)
+  expect(sql(`select count(*) from "Workspace" where "accountId"='${id}'`)).toBe('2')
 })
 
 test('social profiles count is shown against the plan', async ({ page }) => {

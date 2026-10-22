@@ -6,7 +6,6 @@ import { WORKSPACE_COOKIE } from '@/lib/context'
 import { sha256 } from '@/lib/crypto'
 import { prisma } from '@/lib/prisma'
 import { createSession } from '@/lib/session'
-import { seatLimit } from '@/lib/team'
 
 // The emailed invitation proves the address: claim it once, sign that
 // address in (creating the user if new) and add them to the account.
@@ -17,13 +16,9 @@ export async function acceptInvite(form: FormData) {
   if (!invite || invite.acceptedAt || invite.expiresAt < new Date()) redirect('/login?error=invite')
 
   const joined = await prisma.$transaction(async (tx) => {
-    const existing = await tx.user.findUnique({ where: { email: invite.email } })
-    // Seats are checked again (before claiming): the plan may have shrunk since the invitation went out.
-    const account = await tx.account.findUniqueOrThrow({ where: { id: invite.accountId }, select: { plan: true } })
-    const already = existing && (await tx.accountMember.findUnique({ where: { accountId_userId: { accountId: invite.accountId, userId: existing.id } }, select: { userId: true } }))
-    if (!already && (await tx.accountMember.count({ where: { accountId: invite.accountId } })) >= seatLimit(account.plan)) return 'full' as const
     const claimed = await tx.invitation.updateMany({ where: { id: invite.id, acceptedAt: null }, data: { acceptedAt: new Date() } })
     if (claimed.count !== 1) return null
+    const existing = await tx.user.findUnique({ where: { email: invite.email } })
     const user = existing
       ? existing.emailVerifiedAt
         ? existing
@@ -38,7 +33,6 @@ export async function acceptInvite(form: FormData) {
     const first = await tx.workspace.findFirst({ where: { accountId: invite.accountId }, orderBy: { createdAt: 'asc' }, select: { id: true } })
     return { userId: user.id, workspaceId: first?.id }
   })
-  if (joined === 'full') redirect('/login?error=seats')
   if (!joined) redirect('/login?error=invite')
   await createSession(joined.userId)
   if (joined.workspaceId) {

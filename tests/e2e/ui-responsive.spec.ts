@@ -24,6 +24,9 @@ const APP = [
   '/app/credits',
   '/app/channels',
   '/app/inbox',
+  '/app/chat',
+  '/app/chat/settings',
+  '/app/website/tag',
   '/app/workflows',
 ]
 

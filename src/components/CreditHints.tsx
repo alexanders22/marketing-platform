@@ -9,6 +9,15 @@ import { creditMoney, type CreditValue } from '@/lib/money'
 const AMOUNT = /(\d[\d,]*(?:\.\d+)?)\s*(?:AI\s+)?(?:credits?|cr)\b/i
 const OWN_TEXT_MAX = 160
 
+// A label is text, a link or button, or an inline piece of one. A layout box
+// that only holds other elements (a header row, a card) is not: hovering its
+// empty space must not show the hint of something inside it.
+function isLabel(el: Element) {
+  if (el.matches('a,button,label,summary,[role=button],[role=link]')) return true
+  if (ownText(el).trim()) return true
+  return getComputedStyle(el).display.startsWith('inline')
+}
+
 function ownText(el: Element) {
   let t = ''
   for (const n of el.childNodes) if (n.nodeType === Node.TEXT_NODE) t += n.textContent ?? ''
@@ -30,6 +39,7 @@ function amountAt(target: EventTarget | null): { n: number; el: Element } | null
   let el = target instanceof Element ? target : null
   for (let depth = 0; el && depth < 4; depth++, el = el.parentElement) {
     if (el.closest('input,textarea,select,[data-no-credit-hint]')) return null
+    if (!isLabel(el)) return null
     const own = ownText(el)
     const whole = spacedText(el)
     const m = own.match(AMOUNT) ?? (whole.length <= OWN_TEXT_MAX ? whole.match(AMOUNT) : null)
@@ -57,7 +67,9 @@ export function CreditHints({ value }: { value: CreditValue }) {
       const r = hit.el.getBoundingClientRect()
       const m = creditMoney(hit.n, value)
       const below = r.top < 48
-      setTip({ x: Math.min(window.innerWidth - 12, Math.max(12, r.left + r.width / 2)), y: below ? r.bottom + 8 : r.top - 8, below, text: `${hit.n.toLocaleString('en-US')} credit${hit.n === 1 ? '' : 's'} ≈ ${m.gel} · ${m.usd}` })
+      // Over the label, under the pointer (a long label: where the pointer is).
+      const x = r.width > 160 ? e.clientX : r.left + r.width / 2
+      setTip({ x: Math.min(window.innerWidth - 12, Math.max(12, x)), y: below ? r.bottom + 6 : r.top - 6, below, text: `${hit.n.toLocaleString('en-US')} credit${hit.n === 1 ? '' : 's'} ≈ ${m.gel} · ${m.usd}` })
     }
     const away = () => {
       current = null

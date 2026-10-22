@@ -10,7 +10,13 @@ export default async function PlanPage() {
   const { account } = await requireContext()
   return (
     <div className="-m-2 sm:-m-4">
-      <PlanPicker current={account.plan === 'NONE' ? null : (account.plan as PlanId)} after="/app/credits" prices={await pickerPrices()} paid={billingState(account) === 'active'} />
+      <PlanPicker
+        current={account.plan === 'NONE' ? null : (account.plan as PlanId)}
+        after="/app/credits"
+        prices={await pickerPrices()}
+        trialUsed={account.trialEndsAt !== null}
+        paid={billingState(account) === 'active'}
+      />
     </div>
   )
 }

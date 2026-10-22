@@ -66,7 +66,12 @@ test('campaign table and detail page', async () => {
   await expect(page.locator('tr', { hasText: 'Spring Awareness' })).toContainText('Paused')
   await row.getByRole('link', { name: 'Lead Gen — Tbilisi' }).click()
   await expect(page.getByRole('heading', { name: 'Lead Gen — Tbilisi' })).toBeVisible()
+  // Ten days at first, then the rest with "Load more" (10 at a time).
+  await expect(page.locator('tbody tr')).toHaveCount(11)
+  await page.getByRole('button', { name: /Load more \(20\)/ }).click()
+  await page.getByRole('button', { name: /Load more \(10\)/ }).click()
   await expect(page.locator('tbody tr')).toHaveCount(30)
+  await expect(page.getByRole('button', { name: /Load more/ })).toHaveCount(0)
   await page.getByRole('navigation', { name: 'Period' }).getByRole('link', { name: '7 days' }).click()
   await expect(page.locator('tbody tr')).toHaveCount(7)
   await expect(page.getByText('₾140.00')).toBeVisible()
