@@ -147,7 +147,7 @@ export async function startCheckout(o: {
       description: recurring ? `${q.label}, renews automatically` : q.label,
       ip: o.ip,
       refererUrl: terminalUrl(),
-      returnUrl: `${terminalUrl()}/app/credits?payment=${payment.id}`,
+      returnUrl: `${terminalUrl()}/pay/done?payment=${payment.id}`,
       callbackUrl: `${siteUrl()}/api/payments/monrem`,
       customer: { firstName: o.billing.firstName, lastName: o.billing.lastName, email: o.user.email, ...phoneParts(o.billing.phone) },
       billing: o.billing,
