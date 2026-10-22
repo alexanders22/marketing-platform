@@ -98,6 +98,10 @@ export function planLimits(plan: string): Limits {
   return p ? { companies: p.companies, profiles: p.profiles, api: p.id === 'AGENCY' } : { companies: 1, profiles: 2, api: false }
 }
 export const companyLimit = (plan: string) => planLimits(plan).companies
+// Customers who came through a partner (Upla, Zavnili, Dotcom…) pay by
+// credits, without a plan: until they pick one they get Business limits.
+export const PARTNER_PLAN = 'TEAM'
+export const limitsFor = (a: { plan: string; partnerId?: string | null }) => planLimits(a.plan === 'NONE' && a.partnerId ? PARTNER_PLAN : a.plan)
 
 // none: no plan picked · trial: free trial running · active: paid through
 // paidUntil · expired: trial over and not paid.
@@ -119,5 +123,22 @@ export const apiAllowed = (a: Billable, now = new Date()) => {
   const state = billingState(a, now)
   return state === 'trial' || (state === 'active' && planLimits(a.plan).api)
 }
+
+// After a paid period ends everything keeps working for a few days (the
+// renewal reminders go out meanwhile); then publishing, connecting channels
+// and the free background AI stop until the plan is renewed. Credits stay
+// spendable — bought credits never expire. Partner customers pay by credits
+// and are always served.
+export const GRACE_MS = 3 * 86_400_000
+type Served = Billable & { partnerId?: string | null }
+export function serviceOn(a: Served | null | undefined, now = new Date()) {
+  if (!a || a.partnerId) return true
+  if (a.paidUntil && a.paidUntil.getTime() > now.getTime() - GRACE_MS) return true
+  return billingState(a, now) === 'trial'
+}
+export const serviceOff = (a: Served) =>
+  a.plan === 'NONE'
+    ? 'Choose a plan to start your free trial — then you can publish and connect channels.'
+    : 'Your plan has ended. Renew it to publish and connect channels again — your posts, channels and credits are kept.'
 
 export const PAID_ONLY = 'AI video clips are part of paid plans. Your trial includes everything else — choose a plan to unlock them.'

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { requireContext } from '@/lib/context'
-import { PLANS, billingState } from '@/lib/plans'
+import { GRACE_MS, PLANS, billingState, serviceOn } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { AppSidebar } from './AppSidebar'
 import { CreditsBadge } from './CreditsBadge'
@@ -81,14 +81,20 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
             <div className="-mt-1 mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-violet-50 px-4 py-2.5 text-sm text-violet-900 ring-1 ring-violet-200">
               {account.paidUntil ? (
                 <>
-                  <span>Your plan ended on {account.paidUntil.toLocaleDateString('en-GB')}. Renew to keep going — your posts, channels and credits are kept.</span>
+                  <span>
+                    Your plan ended on {account.paidUntil.toLocaleDateString('en-GB')}.{' '}
+                    {serviceOn(account)
+                      ? `Publishing stops on ${new Date(account.paidUntil.getTime() + GRACE_MS).toLocaleDateString('en-GB')} unless you renew.`
+                      : 'Publishing and connecting channels are paused until you renew.'}{' '}
+                    Your posts, channels and credits are kept.
+                  </span>
                   <Link href="/app/credits?renew=1" className="ml-auto font-medium underline">
                     Renew
                   </Link>
                 </>
               ) : (
                 <>
-                  <span>Your free trial has ended. Choose how to continue — your posts, channels and credits are kept.</span>
+                  <span>Your free trial has ended. Publishing and connecting channels are paused until you choose a plan — your posts, channels and credits are kept.</span>
                   <Link href="/app/plan" className="ml-auto font-medium underline">
                     Plans
                   </Link>

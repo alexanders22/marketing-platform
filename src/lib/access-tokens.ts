@@ -1,6 +1,7 @@
 import 'server-only'
 import { randomBytes } from 'node:crypto'
 import { sha256 } from './crypto'
+import { serviceOn } from './plans'
 import { prisma } from './prisma'
 
 // Keys for the MCP server: personal tokens a user creates, and OAuth tokens
@@ -59,7 +60,8 @@ export async function authenticate(req: Request) {
     include: { user: true, workspace: { include: { account: true, brandKit: true } } },
   })
   if (!row || row.revokedAt || (row.expiresAt && row.expiresAt < new Date())) return null
-  if (row.user.disabledAt || row.workspace.account?.pausedAt) return null
+  // A plan that ended closes AI apps too (they publish and run AI for free otherwise).
+  if (row.user.disabledAt || row.workspace.account?.pausedAt || !serviceOn(row.workspace.account)) return null
   // The user must still belong to the account that owns the workspace.
   const member = row.workspace.accountId
     ? await prisma.accountMember.findFirst({ where: { userId: row.userId, accountId: row.workspace.accountId } })

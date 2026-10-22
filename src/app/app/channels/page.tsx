@@ -4,7 +4,7 @@ import { SiFacebook, SiGoogleads, SiInstagram, SiPinterest, SiTelegram, SiThread
 import { PageHeader } from '@/components/EmptyState'
 import { requireContext } from '@/lib/context'
 import { metaEnabled } from '@/lib/meta'
-import { planLimits } from '@/lib/plans'
+import { limitsFor } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { countProfiles } from '@/lib/profiles'
 import { DisconnectButton } from './DisconnectButton'
@@ -64,6 +64,7 @@ const ERRORS: Record<string, string> = {
   'ga-api': 'Google did not accept the connection. Please try again.',
   'ga-empty': 'This Google account has no Google Analytics 4 property. Sign in with the account that owns the website’s analytics.',
   profiles: 'Your plan has no room for more social profiles. Disconnect one or upgrade your plan.',
+  plan: 'Your plan has ended (or none is picked yet). Renew or choose a plan to connect channels — your posts, channels and credits are kept.',
 }
 
 export default async function ChannelsPage({ searchParams }: PageProps<'/app/channels'>) {
@@ -81,7 +82,7 @@ export default async function ChannelsPage({ searchParams }: PageProps<'/app/cha
   const connected = typeof q.connected === 'string' ? Number(q.connected) : 0
   const error = typeof q.error === 'string' ? ERRORS[q.error] : undefined
   const skipped = typeof q.skipped === 'string' ? Number(q.skipped) : 0
-  const limit = planLimits(account.plan).profiles
+  const limit = limitsFor(account).profiles
   const profiles = await countProfiles(account.id)
 
   return (

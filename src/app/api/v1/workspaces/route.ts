@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApiError, body, handler, json, requirePartner } from '@/lib/api'
-import { companyLimit } from '@/lib/plans'
+import { limitsFor } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { serializeWorkspace } from '@/lib/workspaces'
 
@@ -36,8 +36,10 @@ export const POST = handler(async (req) => {
     // the plan's company limit.
     let accountId: string | undefined
     if (partner.ownerAccountId) {
-      const owner = await tx.account.findUniqueOrThrow({ where: { id: partner.ownerAccountId }, select: { plan: true } })
-      const limit = companyLimit(owner.plan)
+      // The same lock as adding a company in the app, so the two can't race past the limit.
+      await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'companies:' + partner.ownerAccountId}))`
+      const owner = await tx.account.findUniqueOrThrow({ where: { id: partner.ownerAccountId }, select: { plan: true, partnerId: true } })
+      const limit = limitsFor(owner).companies
       if ((await tx.workspace.count({ where: { accountId: partner.ownerAccountId } })) >= limit) {
         throw new ApiError(409, 'company_limit', `Your plan includes ${limit} companies`)
       }

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { requireContext } from '@/lib/context'
-import { companyLimit } from '@/lib/plans'
+import { limitsFor } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { Onboarding } from '../Onboarding'
 
@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: 'Add a company — Loudpilot' }
 
 export default async function AddCompanyPage() {
   const { account, asAdmin } = await requireContext()
-  const limit = companyLimit(account.plan)
+  const limit = limitsFor(account).companies
   const count = await prisma.workspace.count({ where: { accountId: account.id } })
   if (!asAdmin && count >= limit) {
     return (

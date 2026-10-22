@@ -60,7 +60,7 @@ export async function renewalRemindersDue(now = new Date()) {
           ]
         : [
             `Your Loudpilot ${plan.name} plan has ended`,
-            `Your ${plan.name} plan ended on <b>${fmt(until)}</b>. Paid features are paused until you renew — your posts, channels and credits are kept. ${price}.`,
+            `Your ${plan.name} plan ended on <b>${fmt(until)}</b>. Publishing and connecting channels stop 3 days later unless you renew — your posts, channels and credits are kept. ${price}.`,
           ]
     const members = await prisma.accountMember.findMany({ where: { accountId: a.id, role: { in: ['OWNER', 'ADMIN'] } }, select: { user: { select: { email: true } } } })
     for (const m of members) {

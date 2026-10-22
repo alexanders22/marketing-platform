@@ -9,7 +9,7 @@ import { boardsOf } from '@/lib/networks/pinterest'
 import { findChannel, PLATFORM_BOT, platformBot } from '@/lib/networks/telegram'
 import { creatorInfo } from '@/lib/networks/tiktok'
 import { NetworkError } from '@/lib/networks/types'
-import { planLimits } from '@/lib/plans'
+import { limitsFor, serviceOff, serviceOn } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { countProfiles } from '@/lib/profiles'
 
@@ -41,6 +41,7 @@ export async function connectTelegram(raw: z.input<typeof TelegramInput>): Promi
   const parsed = TelegramInput.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the channel' }
   const { channel, botToken } = parsed.data
+  if (!serviceOn(account)) return { error: serviceOff(account) }
   if (!botToken && !platformBot()) return { error: 'Paste your bot token from @BotFather' }
   const stored = botToken || PLATFORM_BOT
   let found
@@ -49,17 +50,18 @@ export async function connectTelegram(raw: z.input<typeof TelegramInput>): Promi
   } catch (e) {
     return { error: e instanceof NetworkError ? e.message : 'Telegram did not answer — try again' }
   }
-  const existing = await prisma.socialAccount.findUnique({
-    where: { workspaceId_network_externalId: { workspaceId: workspace.id, network: 'TELEGRAM', externalId: found.externalId } },
-  })
-  if (!existing && (await countProfiles(account.id)) >= planLimits(account.plan).profiles)
-    return { error: `Your plan includes ${planLimits(account.plan).profiles} social profiles. Disconnect one or upgrade to add more.` }
+  const limit = limitsFor(account).profiles
   const data = { name: found.name, handle: found.handle, meta: { bot: found.bot, ownBot: !!botToken }, accessTokenEnc: encrypt(stored), scopes: ['post'], status: 'ACTIVE' as const, lastError: null }
-  await prisma.socialAccount.upsert({
-    where: { workspaceId_network_externalId: { workspaceId: workspace.id, network: 'TELEGRAM', externalId: found.externalId } },
-    create: { workspaceId: workspace.id, network: 'TELEGRAM', externalId: found.externalId, ...data },
-    update: data,
+  // One connect at a time per account, so two can't both use the last place.
+  const full = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'profiles:' + account.id}))`
+    const where = { workspaceId_network_externalId: { workspaceId: workspace.id, network: 'TELEGRAM' as const, externalId: found.externalId } }
+    const existing = await tx.socialAccount.findUnique({ where })
+    if (!existing && (await countProfiles(account.id, tx)) >= limit) return true
+    await tx.socialAccount.upsert({ where, create: { workspaceId: workspace.id, network: 'TELEGRAM', externalId: found.externalId, ...data }, update: data })
+    return false
   })
+  if (full) return { error: `Your plan includes ${limit} social profiles. Disconnect one or upgrade to add more.` }
   revalidatePath('/app', 'layout')
   return { name: found.name }
 }
