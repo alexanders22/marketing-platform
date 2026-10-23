@@ -166,7 +166,7 @@ export function PlanPicker({
                 <p className="mt-5 text-xs font-semibold tracking-wide text-zinc-500">WHAT&apos;S INCLUDED</p>
                 <ul className="mt-2 space-y-2.5 text-sm text-zinc-700">
                   <Row icon={Building2} label="Companies" value={p.companies} />
-                  <Row icon={Share2} label="Social profiles" value={p.profiles} />
+                  <Row icon={Share2} label="Social profiles per company" value={p.profiles} />
                   <Row icon={Code2} label="API & webhooks" value={p.id === 'AGENCY' ? 'Included' : '—'} />
                 </ul>
                 <p className="mt-4 text-xs font-semibold tracking-wide text-zinc-500">EVERY MONTH</p>

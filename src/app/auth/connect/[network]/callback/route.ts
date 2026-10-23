@@ -40,15 +40,16 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/auth/connect/[ne
   }
   if (found.length === 0) return back(`error=network-empty&network=${network}`)
 
-  // Profiles already here are refreshed; new ones take free plan room. One
-  // connect at a time per account, so two can't both use the last place.
+  // Profiles already here are refreshed; new ones take the company's free
+  // plan room. One connect at a time per company, so two can't both use the
+  // last place.
   const { allowed, skipped } = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'profiles:' + account.id}))`
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'profiles:' + workspace.id}))`
     const existing = await tx.socialAccount.findMany({
-      where: { workspace: { accountId: account.id }, network: { in: PROFILE_NETWORKS } },
-      select: { workspaceId: true, network: true, externalId: true },
+      where: { workspaceId: workspace.id, network: { in: PROFILE_NETWORKS } },
+      select: { network: true, externalId: true },
     })
-    const known = new Set(existing.filter((e) => e.workspaceId === workspace.id && e.network === c.network).map((e) => e.externalId))
+    const known = new Set(existing.filter((e) => e.network === c.network).map((e) => e.externalId))
     let room = limitsFor(account).profiles - existing.length
     let skipped = 0
     const allowed = found.filter((f) => {

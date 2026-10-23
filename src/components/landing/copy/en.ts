@@ -296,7 +296,7 @@ export const en = {
     startTrial: "Start free trial",
     included: "What's included",
     companies: "Companies",
-    profiles: "Social & ad profiles",
+    profiles: "Social profiles per company",
     credits: "AI credits / month",
     monthHead: "Every month",
     posts: "AI-written posts",

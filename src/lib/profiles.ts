@@ -1,11 +1,9 @@
 import 'server-only'
-import type { SocialNetwork } from '@prisma/client'
+import { PROFILE_NETWORKS } from './plans'
 import { prisma } from './prisma'
 
-// Networks whose accounts count as "social profiles" against the plan (ad
-// accounts, Analytics and Search Console don't).
-export const PROFILE_NETWORKS: SocialNetwork[] = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST']
+export { PROFILE_NETWORKS }
 
-// Social profiles across every company of the customer account.
-export const countProfiles = (accountId: string, db: Pick<typeof prisma, 'socialAccount'> = prisma) =>
-  db.socialAccount.count({ where: { workspace: { accountId }, network: { in: PROFILE_NETWORKS } } })
+// Social profiles of one company — the plan's limit is per company.
+export const countProfiles = (workspaceId: string, db: Pick<typeof prisma, 'socialAccount'> = prisma) =>
+  db.socialAccount.count({ where: { workspaceId, network: { in: PROFILE_NETWORKS } } })

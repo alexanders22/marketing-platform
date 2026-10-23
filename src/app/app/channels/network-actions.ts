@@ -52,16 +52,16 @@ export async function connectTelegram(raw: z.input<typeof TelegramInput>): Promi
   }
   const limit = limitsFor(account).profiles
   const data = { name: found.name, handle: found.handle, meta: { bot: found.bot, ownBot: !!botToken }, accessTokenEnc: encrypt(stored), scopes: ['post'], status: 'ACTIVE' as const, lastError: null }
-  // One connect at a time per account, so two can't both use the last place.
+  // One connect at a time per company, so two can't both use the last place.
   const full = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'profiles:' + account.id}))`
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'profiles:' + workspace.id}))`
     const where = { workspaceId_network_externalId: { workspaceId: workspace.id, network: 'TELEGRAM' as const, externalId: found.externalId } }
     const existing = await tx.socialAccount.findUnique({ where })
-    if (!existing && (await countProfiles(account.id, tx)) >= limit) return true
+    if (!existing && (await countProfiles(workspace.id, tx)) >= limit) return true
     await tx.socialAccount.upsert({ where, create: { workspaceId: workspace.id, network: 'TELEGRAM', externalId: found.externalId, ...data }, update: data })
     return false
   })
-  if (full) return { error: `Your plan includes ${limit} social profiles. Disconnect one or upgrade to add more.` }
+  if (full) return { error: `Your plan includes ${limit} social profiles per company. Disconnect one or upgrade to add more.` }
   revalidatePath('/app', 'layout')
   return { name: found.name }
 }

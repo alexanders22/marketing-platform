@@ -132,5 +132,5 @@ test('Agency API: own keys, own companies, closed when the plan ends', async ({ 
 test('social profiles count is shown against the plan', async ({ page }) => {
   await newAccount(page, 'prof')
   await page.goto('/app/channels')
-  await expect(page.getByText(/Social profiles:\s*0\s*of 5 on your plan/)).toBeVisible()
+  await expect(page.getByText(/Social profiles:\s*0\s*of 3 on your plan/)).toBeVisible()
 })

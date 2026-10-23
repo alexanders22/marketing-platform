@@ -123,18 +123,18 @@ export async function GET(req: NextRequest) {
     select: { account: { select: { id: true, plan: true, partnerId: true, trialEndsAt: true, paidUntil: true } } },
   })
   if (!serviceOn(ws?.account)) return back('error=plan')
-  // One connect at a time per account, so two can't both use the last place.
+  // One connect at a time per company, so two can't both use the last place.
   const { saved, allowed, skipped } = await prisma.$transaction(async (tx) => {
     let skipped = 0
     let allowed = rows
     if (ws?.account) {
-      await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'profiles:' + ws.account.id}))`
+      await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'profiles:' + workspaceId}))`
       const limit = limitsFor(ws.account).profiles
       const existing = await tx.socialAccount.findMany({
-        where: { workspace: { accountId: ws.account.id }, network: { in: PROFILE_NETWORKS } },
-        select: { workspaceId: true, network: true, externalId: true },
+        where: { workspaceId, network: { in: PROFILE_NETWORKS } },
+        select: { network: true, externalId: true },
       })
-      const known = new Set(existing.filter((e) => e.workspaceId === workspaceId).map((e) => `${e.network}:${e.externalId}`))
+      const known = new Set(existing.map((e) => `${e.network}:${e.externalId}`))
       let room = limit - existing.length
       allowed = rows.filter((r) => {
         if (r.network === 'META_ADS' || known.has(`${r.network}:${r.externalId}`)) return true
