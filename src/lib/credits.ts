@@ -16,6 +16,7 @@ export async function getPricing(): Promise<Pricing> {
   const saved = (row?.value ?? {}) as Partial<Pricing>
   const value: Pricing = {
     creditPriceUsd: typeof saved.creditPriceUsd === 'number' ? saved.creditPriceUsd : DEFAULT_PRICING.creditPriceUsd,
+    gelPerUsd: typeof saved.gelPerUsd === 'number' && saved.gelPerUsd > 1 && saved.gelPerUsd < 10 ? saved.gelPerUsd : null,
     veoSecondsPerMonth: Object.fromEntries(
       VEO_PLANS.map((p) => [p, Number.isFinite(saved.veoSecondsPerMonth?.[p]) ? saved.veoSecondsPerMonth![p] : DEFAULT_PRICING.veoSecondsPerMonth[p]]),
     ) as Pricing['veoSecondsPerMonth'],

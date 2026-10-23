@@ -1,4 +1,7 @@
 import { getPricing } from '@/lib/credits'
+import { DEFAULT_ECONOMICS, type Economics } from '@/lib/economics'
+import { gelPerUsd } from '@/lib/fx'
+import { monremCurrency } from '@/lib/monrem'
 import { prisma } from '@/lib/prisma'
 import { PLANS } from '@/lib/plans'
 import { ACTION_KEYS } from '@/lib/pricing'
@@ -7,7 +10,7 @@ import { PricingEditor } from './PricingEditor'
 
 // Unit economics: what each action earns in credits vs what it costs us.
 export default async function AdminPricing() {
-  const [pricing, row, usage, refunded] = await Promise.all([
+  const [pricing, row, usage, refunded, nbg, econRow] = await Promise.all([
     getPricing(),
     prisma.setting.findUnique({ where: { key: 'pricing' } }),
     prisma.creditEntry.groupBy({
@@ -22,7 +25,12 @@ export default async function AdminPricing() {
       where: { action: { not: null }, reason: 'REFUND', createdAt: { gte: daysAgo(30) } },
       _count: { _all: true },
     }),
+    gelPerUsd(),
+    prisma.setting.findUnique({ where: { key: 'economics' } }),
   ])
+  // Card fee, taxes, partner share and fixed costs as set in Admin → Economics.
+  const e: Economics = { ...DEFAULT_ECONOMICS, ...((econRow?.value ?? {}) as Partial<Economics>) }
+  const costs = { paymentFeePct: e.paymentFeePct, paymentFeeUsd: e.paymentFeeUsd, turnoverTaxPct: e.turnoverTaxPct, partnerSharePct: e.partnerSharePct, fixed: e.fixed }
   // Times = charges minus the ones given back.
   const refundsOf = (a: string) => refunded.find((r) => r.action === a)?._count._all ?? 0
   const plans = PLANS.map((p) => ({ id: p.id, name: p.name, ...pricing.plans[p.id] }))
@@ -46,11 +54,10 @@ export default async function AdminPricing() {
           )}
         </p>
       </div>
-      <PricingEditor initial={pricing} plans={plans} used={used} />
+      <PricingEditor initial={pricing} plans={plans} used={used} nbgRate={nbg} costs={costs} currency={monremCurrency()} />
       <p className={`${card} text-xs text-zinc-500`}>
         Provider costs are estimates to start from — Gemini text ~$0.001–0.03 per call, Gemini 3.1 Flash Image ~$0.067 per 1K image (2.5 Flash Image ~$0.039), Veo 3.1
-        Lite/Fast/Standard per second of clip. Check your Google Cloud billing and put your real numbers here. Default credits: one credit per $0.02 of cost or less, so even
-        the cheapest credit (Agency, paid yearly) earns twice its cost.
+        Lite/Fast/Standard per second of clip. Check your Google Cloud billing and put your real numbers here. Default credits: one credit per $0.02 of cost or less.
       </p>
     </div>
   )

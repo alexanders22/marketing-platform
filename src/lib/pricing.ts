@@ -62,6 +62,9 @@ export type Pricing = {
   plans: Record<PlanId, { monthly: number; monthlyGel: number; credits: number }>
   // Credit packs for sale on top of a plan, cheaper per credit when bigger.
   packs: CreditPack[]
+  // Lari per dollar for pricing in Admin → Pricing (dollar prices fill in
+  // the lari ones, margins in lari); null = the National Bank's rate.
+  gelPerUsd: number | null
 }
 
 // Dearer per credit than any plan (Start is ₾0.40 a credit), so a bigger
@@ -76,6 +79,7 @@ export const DEFAULT_PACKS: CreditPack[] = [
 
 export const DEFAULT_PRICING: Pricing = {
   creditPriceUsd: 0.17,
+  gelPerUsd: null,
   veoSecondsPerMonth: { STARTER: 10, TEAM: 30, AGENCY: 120 },
   plans: Object.fromEntries(PLANS.map((p) => [p.id, { monthly: p.monthly, monthlyGel: p.monthlyGel, credits: p.credits }])) as Pricing['plans'],
   packs: DEFAULT_PACKS,
