@@ -95,7 +95,7 @@ test('a partner customer without a plan is served, with Business limits', async 
   sql(`update "Account" set plan='NONE', "trialEndsAt"=null, "paidUntil"=null, "partnerId"='${partner}' where id='${accountId}'`)
   try {
     await page.goto('/app/channels')
-    await expect(page.getByText(/Social profiles: \d+ of 15 on your plan/)).toBeVisible()
+    await expect(page.getByText(/Social profiles: \d+ of 5 on your plan/)).toBeVisible()
     const post = scheduledPost('Partner post')
     await tick()
     await expect.poll(() => status(post)).toBe('PUBLISHED')

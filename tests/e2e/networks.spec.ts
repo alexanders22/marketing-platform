@@ -255,15 +255,24 @@ test('a revoked token marks the account for reconnecting', async () => {
   await expect(card('X').getByText(/Needs reconnecting/)).toBeVisible()
 })
 
-test('the plan limit counts every network', async () => {
+test('the plan limit counts every network of the company', async () => {
   sql(`update "Account" set plan='STARTER' where id=(select "accountId" from "Workspace" where id='${workspaceId}')`)
+  const fillers: string[] = []
   try {
     sql(`delete from "SocialAccount" where "workspaceId"='${workspaceId}' and network='THREADS'`)
+    // Start has 3 places per company: fill them, whatever is connected so far.
+    const count = () => Number(sql(`select count(*) from "SocialAccount" where "workspaceId"='${workspaceId}' and network not in ('META_ADS','GOOGLE_ANALYTICS','SEARCH_CONSOLE')`))
+    while (count() < 3) {
+      const id = `limit-${Date.now()}-${fillers.length}`
+      fillers.push(id)
+      sql(`insert into "SocialAccount"(id,"workspaceId",network,"externalId",name,scopes,"updatedAt") values ('${id}','${workspaceId}','PINTEREST','${id}','Filler','{}',now())`)
+    }
     await page.goto('/app/channels')
-    await expect(page.getByText(/Social profiles: \d+ of 5/)).toBeVisible()
+    await expect(page.getByText(/Social profiles: \d+ of 3 on your plan \(per company/)).toBeVisible()
     await card('Threads').getByRole('link', { name: 'Connect' }).click()
     await page.waitForURL(/error=profiles/)
   } finally {
+    if (fillers.length) sql(`delete from "SocialAccount" where id in (${fillers.map((f) => `'${f}'`).join(',')})`)
     sql(`update "Account" set plan='AGENCY' where id=(select "accountId" from "Workspace" where id='${workspaceId}')`)
   }
 })

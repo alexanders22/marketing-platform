@@ -297,7 +297,7 @@ export const ka: Copy = {
     startTrial: "დაიწყეთ უფასოდ",
     included: "რა შედის",
     companies: "კომპანიები",
-    profiles: "სოცქსელები და სარეკლამო ანგარიშები",
+    profiles: "სოცქსელები თითო კომპანიაზე",
     credits: "AI კრედიტები / თვე",
     monthHead: "ყოველთვიურად",
     posts: "AI-ს მიერ დაწერილი პოსტი",

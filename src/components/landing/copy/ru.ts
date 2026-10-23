@@ -297,7 +297,7 @@ export const ru: Copy = {
     startTrial: "Начать бесплатно",
     included: "Что входит",
     companies: "Компании",
-    profiles: "Соцсети и рекл. аккаунты",
+    profiles: "Соцсети на компанию",
     credits: "AI-кредиты / мес",
     monthHead: "Каждый месяц",
     posts: "Постов, написанных AI",

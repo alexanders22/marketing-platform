@@ -63,7 +63,7 @@ const ERRORS: Record<string, string> = {
   'ga-state': 'The connection expired — please try again.',
   'ga-api': 'Google did not accept the connection. Please try again.',
   'ga-empty': 'This Google account has no Google Analytics 4 property. Sign in with the account that owns the website’s analytics.',
-  profiles: 'Your plan has no room for more social profiles. Disconnect one or upgrade your plan.',
+  profiles: 'Your plan has no room for more social profiles in this company. Disconnect one or upgrade your plan.',
   plan: 'Your plan has ended (or none is picked yet). Renew or choose a plan to connect channels — your posts, channels and credits are kept.',
 }
 
@@ -83,7 +83,7 @@ export default async function ChannelsPage({ searchParams }: PageProps<'/app/cha
   const error = typeof q.error === 'string' ? ERRORS[q.error] : undefined
   const skipped = typeof q.skipped === 'string' ? Number(q.skipped) : 0
   const limit = limitsFor(account).profiles
-  const profiles = await countProfiles(account.id)
+  const profiles = await countProfiles(workspace.id)
 
   return (
     <>
@@ -97,11 +97,11 @@ export default async function ChannelsPage({ searchParams }: PageProps<'/app/cha
       {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {skipped > 0 && (
         <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          {skipped} profile{skipped === 1 ? ' was' : 's were'} not added: your plan includes {limit} social profiles. Disconnect one or upgrade to add more.
+          {skipped} profile{skipped === 1 ? ' was' : 's were'} not added: your plan includes {limit} social profiles per company. Disconnect one or upgrade to add more.
         </p>
       )}
       <p className="mb-4 text-sm text-zinc-500">
-        Social profiles: <b className="text-zinc-800 tabular-nums">{profiles}</b> of {limit} on your plan (all companies together; ad accounts don&apos;t count).
+        Social profiles: <b className="text-zinc-800 tabular-nums">{profiles}</b> of {limit} on your plan (per company; ad accounts don&apos;t count).
       </p>
 
       <section className="rounded-2xl border border-zinc-200 p-5">

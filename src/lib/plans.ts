@@ -3,7 +3,13 @@
 // Three plans (Start, Business, Agency). The ids stay STARTER / TEAM / AGENCY
 // (database, payments, Monrem plans); SOLO was retired — its accounts moved to
 // STARTER. People are not limited: every plan has unlimited users.
+import type { SocialNetwork } from '@prisma/client'
+
 export type PlanId = 'STARTER' | 'TEAM' | 'AGENCY'
+
+// Networks whose accounts count as "social profiles" against the plan (ad
+// accounts, Analytics and Search Console don't).
+export const PROFILE_NETWORKS: SocialNetwork[] = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN', 'YOUTUBE', 'TELEGRAM', 'X', 'THREADS', 'PINTEREST']
 
 export const PLANS: {
   id: PlanId
@@ -13,6 +19,7 @@ export const PLANS: {
   // conversion — charged as is when the terminal takes lari).
   monthly: number
   monthlyGel: number
+  // Social profiles each company may connect (Agency: one per network).
   profiles: number
   // Companies (brands) one account can run, each with its own channels.
   companies: number
@@ -25,7 +32,7 @@ export const PLANS: {
     blurb: 'For a small business doing its own marketing.',
     monthly: 29,
     monthlyGel: 79,
-    profiles: 5,
+    profiles: 3,
     companies: 1,
     credits: 200,
   },
@@ -35,7 +42,7 @@ export const PLANS: {
     blurb: 'For growing businesses with a few brands, ads and a team.',
     monthly: 75,
     monthlyGel: 199,
-    profiles: 15,
+    profiles: 5,
     companies: 3,
     credits: 700,
     popular: true,
@@ -46,7 +53,7 @@ export const PLANS: {
     blurb: 'For agencies and partners serving many clients at once.',
     monthly: 199,
     monthlyGel: 529,
-    profiles: 100,
+    profiles: PROFILE_NETWORKS.length,
     companies: 25,
     credits: 2500,
   },
