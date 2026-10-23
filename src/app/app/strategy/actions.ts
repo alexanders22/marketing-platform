@@ -79,10 +79,12 @@ async function makeVisuals(planId: string) {
   const todo = await postsWithoutVisuals(planId)
   if (todo.length === 0) return 0
   const { image } = await prices()
-  await startPlanVisuals(planId, todo.length)
+  if (!(await startPlanVisuals(planId, todo.length))) return 0
   after(() => generatePlanVisuals(planId, image).catch((e) => console.error('plan visuals failed', planId, e)))
   return todo.length
 }
+
+const ALREADY_RUNNING = 'Pictures and videos are still being made for this plan — try again when they are done'
 
 const notApplied = (plan: { data: unknown }, ids?: string[]) => (plan.data as PlanData).posts.filter((p) => !p.postId && (!ids || ids.includes(p.id)))
 
@@ -90,6 +92,7 @@ export async function applyPlanPosts(id: string, ids?: string[], visuals = false
   const plan = await ownPlan(id)
   if (!plan) return { error: 'Plan not found' }
   if (visuals) {
+    if (visualsRunning((plan.data as unknown as PlanData).visuals)) return { error: ALREADY_RUNNING }
     const error = await canMakeVisuals(plan.id, notApplied(plan, ids))
     if (error) return { error }
   }
@@ -125,6 +128,7 @@ export async function launchPlan(id: string, visuals = false): Promise<{ error?:
   const plan = await ownPlan(id)
   if (!plan) return { error: 'Plan not found' }
   if (visuals) {
+    if (visualsRunning((plan.data as unknown as PlanData).visuals)) return { error: ALREADY_RUNNING }
     const error = await canMakeVisuals(plan.id, notApplied(plan))
     if (error) return { error }
   }

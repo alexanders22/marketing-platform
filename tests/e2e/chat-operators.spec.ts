@@ -14,9 +14,10 @@ let owner = ''
 const ana = uniqueEmail('ana-operator')
 
 // A visitor writes a red-flag message: the chat is handed over at once.
+// Each visitor has their own IP (one IP may start only 5 chats an hour).
 async function refund(n: number) {
   const res = await page.request.post('/api/chat/send', {
-    headers: { 'content-type': 'text/plain' },
+    headers: { 'content-type': 'text/plain', 'x-forwarded-for': `10.0.0.${n}` },
     data: JSON.stringify({ s: key, v: `visitor-${Date.now()}-${n}`, text: `I want a refund #${n}` }),
   })
   expect(res.status()).toBe(200)
@@ -107,4 +108,15 @@ test('a reply makes an unassigned chat the replier’s', async () => {
   await page.getByLabel('Your answer').fill('Hi, I can help with that.')
   await page.getByRole('button', { name: 'Send', exact: true }).click()
   await expect.poll(() => chat.operator()).toBe(owner)
+})
+
+test('one IP can start only a few new chats an hour on a site', async () => {
+  const start = (n: number) =>
+    page.request.post('/api/chat/send', {
+      headers: { 'content-type': 'text/plain', 'x-forwarded-for': '10.9.9.9' },
+      data: JSON.stringify({ s: key, v: `flood-${Date.now()}-${n}`, text: `I want a refund, flood ${n}` }),
+    })
+  for (let n = 1; n <= 5; n++) expect((await start(n)).status()).toBe(200)
+  expect((await start(6)).status()).toBe(429)
+  expect(sql(`select count(*) from "ChatMessage" m join "ChatConversation" c on c.id=m."conversationId" where c."workspaceId"='${ws}' and m.text like 'I want a refund, flood %'`)).toBe('5')
 })

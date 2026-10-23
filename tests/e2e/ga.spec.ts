@@ -128,3 +128,18 @@ test('dashboard date filter: presets and a custom range compared with the days b
   await page.waitForURL(/days=7/)
   await expect(page.getByRole('button', { name: 'Dates' })).toBeVisible()
 })
+
+test('after the plan ended, connecting Google is refused before Google is asked', async () => {
+  const account = sql(`select "accountId" from "Workspace" where id='${ws}'`)
+  sql(`update "Account" set "trialEndsAt"=now() - interval '1 day', "paidUntil"=null where id='${account}'`)
+  try {
+    await page.goto('/auth/google-analytics')
+    await expect(page).toHaveURL(/\/app\/channels\?error=plan/)
+    await expect(page.getByText('Your plan has ended (or none is picked yet).', { exact: false })).toBeVisible()
+    await page.goto('/auth/google-analytics?product=search-console')
+    await expect(page).toHaveURL(/\/app\/website\?error=plan/)
+    await expect(page.getByText('Renew or choose a plan to connect Search Console', { exact: false })).toBeVisible()
+  } finally {
+    sql(`update "Account" set "trialEndsAt"=now() + interval '14 days' where id='${account}'`)
+  }
+})

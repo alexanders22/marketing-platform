@@ -208,12 +208,11 @@ export function cuesOf(s: Scene): Cue[] {
 // The subtitle on screen `t` seconds into the scene.
 export const cueAt = (cues: Cue[], t: number) => cues.find((c) => t >= c.start && t < c.end) ?? null
 
-// AI clips (Google Veo 3.1): credits per second of clip.
+// AI clips (Google Veo 3.1). Credits per second: clipAction() in pricing.ts.
 export const CLIP_QUALITIES = {
-  quick: { label: 'Quick', perSecond: 1, hint: 'Good for most scenes' },
-  pro: { label: 'Pro', perSecond: 4, hint: 'Sharper motion and detail' },
-  cinema: { label: 'Cinema', perSecond: 5, hint: 'Best quality, slowest' },
+  quick: { label: 'Quick', hint: 'Good for most scenes' },
+  pro: { label: 'Pro', hint: 'Sharper motion and detail' },
+  cinema: { label: 'Cinema', hint: 'Best quality, slowest' },
 } as const
 export type ClipQuality = keyof typeof CLIP_QUALITIES
 export const CLIP_SECONDS = [4, 6, 8] as const
-export const clipCredits = (q: ClipQuality, seconds: number) => CLIP_QUALITIES[q].perSecond * seconds

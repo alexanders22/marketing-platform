@@ -14,7 +14,7 @@ import type { ClipQuality } from './video'
 // long-running operation: start it, then poll (the ticker and the editor
 // both do) until the MP4 is ready to download into the media library.
 
-export { CLIP_QUALITIES, CLIP_SECONDS, clipCredits, type ClipQuality } from './video'
+export { CLIP_QUALITIES, CLIP_SECONDS, type ClipQuality } from './video'
 
 const MODELS: Record<ClipQuality, string> = {
   quick: 'veo-3.1-lite-generate-preview',
@@ -116,11 +116,14 @@ async function checkOperation(job: ClipJob): Promise<Outcome> {
   return { done: true, file, dir }
 }
 
-// Credits back, once, when a clip fails.
-async function refund(job: ClipJob, reason: string) {
+// A clip that failed: marked FAILED (if still `from`) and its credits given
+// back, once, in one transaction; the scene that waited for it is freed.
+export async function failClip(job: ClipJob, reason: string, from: 'PENDING' | 'DONE' = 'PENDING') {
   const idempotencyKey = `clip-refund:${job.id}`
-  await prisma.$transaction(async (tx) => {
-    if (await tx.creditEntry.findUnique({ where: { idempotencyKey }, select: { id: true } })) return
+  const failed = await prisma.$transaction(async (tx) => {
+    const claim = await tx.clipJob.updateMany({ where: { id: job.id, status: from }, data: { status: 'FAILED', error: reason.slice(0, 500) } })
+    if (claim.count === 0) return false
+    if (await tx.creditEntry.findUnique({ where: { idempotencyKey }, select: { id: true } })) return true
     await tx.account.update({ where: { id: job.accountId }, data: { creditBalance: { increment: job.credits } } })
     await tx.creditEntry.create({
       // Same action, negative units: unit economics count only clips that were made.
@@ -137,7 +140,12 @@ async function refund(job: ClipJob, reason: string) {
         units: -job.seconds,
       },
     })
+    return true
   })
+  if (failed) await updateScene(job, (scene) => {
+    scene.clipJobId = null
+  }).catch((e) => console.error('clip scene free failed', job.id, e))
+  return prisma.clipJob.findUnique({ where: { id: job.id } })
 }
 
 const TIMEOUT_MS = 20 * 60_000
@@ -160,15 +168,12 @@ export async function advanceClip(jobId: string) {
     }
     outcome = { done: true, error: 'Veo took too long. Your credits are back — try again.' }
   }
+  if ('error' in outcome) return failClip(job, outcome.error)
   // Claim: only one checker finishes the job.
   const claim = await prisma.clipJob.updateMany({ where: { id: job.id, status: 'PENDING' }, data: { status: 'DONE' } })
   if (claim.count === 0) {
-    if ('dir' in outcome) await rm(outcome.dir, { recursive: true, force: true })
+    await rm(outcome.dir, { recursive: true, force: true })
     return prisma.clipJob.findUnique({ where: { id: job.id } })
-  }
-  if ('error' in outcome) {
-    await refund(job, outcome.error)
-    return prisma.clipJob.update({ where: { id: job.id }, data: { status: 'FAILED', error: outcome.error } })
   }
   try {
     const info = await probe(outcome.file)
@@ -181,34 +186,45 @@ export async function advanceClip(jobId: string) {
       height: info.height ?? undefined,
       posterId: posterMedia.id,
     })
-    await attachToScene(job, media.id, media.durationMs, posterMedia.id)
+    await updateScene(job, (scene) => {
+      scene.media = { id: media.id, kind: 'video', url: `/media/${media.id}`, durationMs: media.durationMs, posterUrl: `/media/${posterMedia.id}` }
+      scene.clipJobId = null
+      scene.clipStart = 0
+    })
     return prisma.clipJob.update({ where: { id: job.id }, data: { mediaId: media.id, error: null } })
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
-    await refund(job, message)
-    return prisma.clipJob.update({ where: { id: job.id }, data: { status: 'FAILED', error: message.slice(0, 500) } })
+    return failClip(job, e instanceof Error ? e.message : String(e), 'DONE')
   } finally {
     await rm(outcome.dir, { recursive: true, force: true })
   }
 }
 
-// The scene that asked for the clip gets it — unless someone picked other
-// media for it meanwhile.
-async function attachToScene(job: ClipJob, mediaId: string, durationMs: number | null, posterId: string) {
+// The scene that asked for the clip gets it (or is freed when it failed) —
+// unless someone picked other media for it meanwhile.
+type DocScene = { id: string; clipJobId?: string | null; media: unknown; keepAudio?: boolean; clipStart: number }
+async function updateScene(job: ClipJob, change: (scene: DocScene) => void) {
   if (!job.videoId || !job.sceneId) return
   const video = await prisma.video.findFirst({ where: { id: job.videoId, workspaceId: job.workspaceId } })
   if (!video || video.status === 'RENDERING') return
-  const doc = video.data as { scenes: { id: string; clipJobId?: string | null; media: unknown; keepAudio?: boolean; clipStart: number }[] }
+  const doc = video.data as { scenes: DocScene[] }
   const scene = doc.scenes.find((s) => s.id === job.sceneId && s.clipJobId === job.id)
   if (!scene) return
-  scene.media = { id: mediaId, kind: 'video', url: `/media/${mediaId}`, durationMs, posterUrl: `/media/${posterId}` }
-  scene.clipJobId = null
-  scene.clipStart = 0
+  change(scene)
   await prisma.video.update({ where: { id: video.id }, data: { data: doc as object } })
 }
 
+// A job is created in the same transaction as its charge, then Veo is asked
+// to start it; one still without an operation after this never started
+// (Veo error or a restart in between).
+const START_MS = 5 * 60_000
+
 // Ticker: pending clips checked every ~20 seconds.
 export async function advanceClipsDue(now = new Date()) {
+  const stuck = await prisma.clipJob.findMany({
+    where: { status: 'PENDING', operation: null, createdAt: { lt: new Date(now.getTime() - START_MS) } },
+    take: 10,
+  })
+  for (const j of stuck) await failClip(j, 'The clip did not start. Your credits are back — try again.').catch((e) => console.error('clip unstick failed', j.id, e))
   const due = await prisma.clipJob.findMany({
     where: { status: 'PENDING', operation: { not: null }, updatedAt: { lt: new Date(now.getTime() - 20_000) }, workspace: ACTIVE_WORKSPACE },
     orderBy: { updatedAt: 'asc' },
@@ -216,7 +232,7 @@ export async function advanceClipsDue(now = new Date()) {
     select: { id: true },
   })
   for (const j of due) await advanceClip(j.id).catch((e) => console.error('clip advance failed', j.id, e))
-  return due.length
+  return due.length + stuck.length
 }
 
 // Re-encode a clip's own sound check: whether the file has audio at all.

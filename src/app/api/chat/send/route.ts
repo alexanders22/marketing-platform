@@ -16,6 +16,9 @@ const schema = z.object({
   text: z.string().trim().min(1).max(2000),
 })
 
+// New conversations per visitor IP and site (each one can cost the owner a credit).
+const NEW_CHATS_PER_HOUR = 5
+
 const fail = (status: number, code: string, message: string) => corsJson({ error: { code, message } }, status)
 
 export async function POST(req: Request) {
@@ -37,6 +40,8 @@ export async function POST(req: Request) {
   let conv = id ? await prisma.chatConversation.findFirst({ where: { id, siteId: site.id } }) : null
   if (body.token && !conv) return fail(404, 'unknown_conversation', 'This chat has ended')
   if (conv && overLimit(`chat-conv:${conv.id}`, 20, 60_000)) return fail(429, 'rate_limited', 'Too many messages. Wait a minute.')
+  if (!conv && !preview && overLimit(`chat-new:${site.id}:${meta.ip ?? 'unknown'}`, NEW_CHATS_PER_HOUR, 3_600_000))
+    return fail(429, 'rate_limited', 'Too many new chats. Try again later.')
   conv ??= await startConversation(site, { v: body.v, url: body.url, id: body.id, test: preview })
 
   const out = await visitorSays(site, conv, body.text, { url: body.url, id: body.id })

@@ -7,7 +7,7 @@ import { aiEnabled } from '@/lib/ai'
 import { BrandInput, type BrandDraft } from '@/lib/brand-schema'
 import { listCompanies, requireContext, WORKSPACE_COOKIE } from '@/lib/context'
 import { refreshProfile } from '@/lib/dossier'
-import { limitsFor } from '@/lib/plans'
+import { limitsFor, serviceOff, serviceOn } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/session'
 
@@ -37,6 +37,7 @@ export async function switchCompany(workspaceId: string) {
 export async function addCompany(draft: BrandDraft): Promise<{ error?: string }> {
   const { account, role, asAdmin } = await requireContext()
   if (role === 'EDITOR' && !asAdmin) return { error: 'Only owners and admins can add companies.' }
+  if (!serviceOn(account)) return { error: serviceOff(account) }
   const parsed = BrandInput.safeParse(draft)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   const b = parsed.data
