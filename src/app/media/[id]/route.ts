@@ -5,10 +5,12 @@ import { validMediaSignature } from '@/lib/media-url'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/session'
 import { mediaFile } from '@/lib/storage'
+import { jpegCopy } from '@/lib/ffmpeg'
 
 // Private media: only members of the account that owns the workspace — or
 // anyone holding a short-lived signed link (used when a network fetches the
 // file to publish it). Streams from disk with Range support so videos seek.
+// ?format=jpeg serves a JPEG copy of a PNG/WebP image (for Instagram).
 export async function GET(req: NextRequest, ctx: RouteContext<'/media/[id]'>) {
   const { id } = await ctx.params
   const signed = validMediaSignature(id, req.nextUrl.searchParams.get('exp'), req.nextUrl.searchParams.get('sig'))
@@ -25,14 +27,25 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/media/[id]'>) {
   }
   if (!media) return new Response('Not found', { status: 404 })
 
-  const file = mediaFile(media.path)
-  const { size } = await stat(file).catch(() => ({ size: -1 }))
-  if (size < 0) return new Response('Not found', { status: 404 })
+  let file = mediaFile(media.path)
+  const { size: original } = await stat(file).catch(() => ({ size: -1 }))
+  if (original < 0) return new Response('Not found', { status: 404 })
+  let mime = media.mime
+  if (req.nextUrl.searchParams.get('format') === 'jpeg' && media.kind === 'IMAGE' && mime !== 'image/jpeg') {
+    try {
+      file = await jpegCopy(file)
+      mime = 'image/jpeg'
+    } catch (e) {
+      console.error('jpeg copy failed', media.id, e instanceof Error ? e.message : e)
+      return new Response('Could not convert the image', { status: 500 })
+    }
+  }
+  const { size } = await stat(file)
   const headers: Record<string, string> = {
-    'content-type': media.mime,
+    'content-type': mime,
     'accept-ranges': 'bytes',
     'cache-control': signed ? 'public, max-age=300' : 'private, max-age=31536000, immutable',
-    'content-disposition': `inline; filename="loudpilot-${media.id}.${media.path.split('.').pop() ?? 'bin'}"`,
+    'content-disposition': `inline; filename="loudpilot-${media.id}.${file.split('.').pop() ?? 'bin'}"`,
   }
 
   const range = req.headers.get('range')?.match(/^bytes=(\d*)-(\d*)$/)

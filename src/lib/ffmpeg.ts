@@ -1,5 +1,6 @@
 import 'server-only'
 import { spawn } from 'node:child_process'
+import { rename, rm, stat } from 'node:fs/promises'
 import ffmpegPath from 'ffmpeg-static'
 
 // The ffmpeg binary that ships with the ffmpeg-static package (no system
@@ -72,6 +73,21 @@ export async function probe(file: string): Promise<Probe> {
     video: /Stream #[^\n]*Video:/.test(out),
     audio: /Stream #[^\n]*Audio:/.test(out),
   }
+}
+
+// A JPEG copy of a PNG/WebP image (Instagram takes JPEG only), made once and
+// kept next to the original. Transparent parts go on white.
+export async function jpegCopy(file: string) {
+  const out = `${file.replace(/\.[^./]+$/, '')}.jpeg.jpg`
+  if (await stat(out).then(() => true, () => false)) return out
+  const tmp = `${out}.${process.pid}-${Date.now()}.tmp.jpg`
+  try {
+    await ffmpeg(['-y', '-i', file, '-filter_complex', 'color=white[c];[c][0:v]scale2ref[bg][img];[bg][img]overlay=shortest=1:format=auto,format=yuvj420p', '-frames:v', '1', '-q:v', '2', tmp], 60_000)
+    await rename(tmp, out)
+  } finally {
+    await rm(tmp, { force: true })
+  }
+  return out
 }
 
 // A JPEG still from a video, for lists and the post preview.

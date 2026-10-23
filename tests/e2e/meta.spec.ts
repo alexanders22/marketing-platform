@@ -37,14 +37,17 @@ function addImage() {
   return id
 }
 
-function addPost(content: string, extra: { mediaIds?: string[]; status?: string; scheduledAt?: string } = {}) {
+function addPost(content: string, extra: { mediaIds?: string[]; status?: string; scheduledAt?: string; channels?: string[] } = {}) {
   const id = `testpost${Date.now()}${Math.floor(Math.random() * 1e4)}`
   const media = `{${(extra.mediaIds ?? []).join(',')}}`
   sql(
-    `insert into "Post"(id,"workspaceId",kind,status,content,hashtags,"mediaIds",channels,"scheduledAt","updatedAt") values ('${id}','${workspaceId}','SOCIAL','${extra.status ?? 'DRAFT'}','${content}','{bakery,fresh}','${media}','{FACEBOOK,INSTAGRAM}',${extra.scheduledAt ? `'${extra.scheduledAt}'` : 'null'},now())`,
+    `insert into "Post"(id,"workspaceId",kind,status,content,hashtags,"mediaIds",channels,"scheduledAt","updatedAt") values ('${id}','${workspaceId}','SOCIAL','${extra.status ?? 'DRAFT'}','${content}','{bakery,fresh}','${media}','{${(extra.channels ?? ['FACEBOOK', 'INSTAGRAM']).join(',')}}',${extra.scheduledAt ? `'${extra.scheduledAt}'` : 'null'},now())`,
   )
   return id
 }
+const status = (id: string) => sql(`select status from "Post" where id='${id}'`)
+const alerts = (id: string) => sql(`select coalesce(string_agg(title||': '||body, ' / '),'') from "Alert" where href='/app/posts/${id}'`)
+const ago = (ms: number) => new Date(Date.now() - ms).toISOString()
 
 test.beforeAll(async ({ browser }) => {
   await meta.listen()
@@ -115,7 +118,7 @@ test('call to action: a UTM-tagged link on Facebook, "link in bio" on Instagram'
   expect(ig.params.caption).toBe('Order your birthday cake\n\n📅 Book now — link in bio\n\n#bakery #fresh')
 })
 
-test('publish with an image: both networks fetch it through a signed link', async () => {
+test('publish with an image: both networks fetch it through a signed link (Instagram as JPEG)', async () => {
   const img = addImage()
   const id = addPost('Pistachio week', { mediaIds: [img] })
   await page.goto(`/app/posts/${id}`)
@@ -124,7 +127,9 @@ test('publish with an image: both networks fetch it through a signed link', asyn
   await expect(page.getByText('Published to 2 accounts.')).toBeVisible()
   const fetched = meta.fetchedImages.filter((f) => f.url.includes(img))
   expect(fetched.length).toBe(2)
-  for (const f of fetched) expect([f.status, f.type]).toEqual([200, 'image/png'])
+  // Facebook gets the PNG as stored; Instagram takes JPEG only and gets a copy.
+  expect(fetched.map((f) => `${f.status} ${f.type}`).sort()).toEqual(['200 image/jpeg', '200 image/png'])
+  expect(fetched.find((f) => f.type === 'image/jpeg')!.url).toContain('format=jpeg')
   expect(sql(`select count(*) from "PostDelivery" where "postId"='${id}' and status='PUBLISHED'`)).toBe('2')
 
   // The same link with a forged signature, or no signature, is refused.
@@ -148,18 +153,72 @@ test('scheduled post is sent by the ticker; planner drafts are not', async () =>
   expect(meta.calls.filter((c) => c.path === '/ig-1/media_publish').length).toBe(before)
 })
 
-test('schedule button needs a future time and a connected network', async () => {
+test('schedule button needs a future time, a connected network and what each network needs', async () => {
   const id = addPost('Schedule me')
   await page.goto(`/app/posts/${id}`)
   await page.locator('input[type="datetime-local"]').fill('2020-01-01T10:00')
   await page.getByRole('button', { name: 'Schedule' }).click()
   await expect(page.getByText('Pick a time in the future')).toBeVisible()
+  // Text only, Instagram picked: it would fail at the hour, so it is refused now.
+  await page.locator('input[type="datetime-local"]').fill('2099-01-01T10:00')
+  await page.getByRole('button', { name: 'Schedule' }).click()
+  await expect(page.getByText('Instagram posts need an image or a video')).toBeVisible()
+  expect(status(id)).toBe('DRAFT')
+  sql(`update "Post" set channels='{FACEBOOK}' where id='${id}'`)
+  await page.goto(`/app/posts/${id}`)
   await page.locator('input[type="datetime-local"]').fill('2099-01-01T10:00')
   await page.getByRole('button', { name: 'Schedule' }).click()
   await expect(page.getByText('Scheduled', { exact: true })).toBeVisible()
   expect(sql(`select status from "Post" where id='${id}'`)).toBe('SCHEDULED')
   await page.getByRole('button', { name: 'Unschedule — keep as draft' }).click()
   await expect(page.getByText('Draft', { exact: true })).toBeVisible()
+})
+
+test('the ticker says what it could not send: missing network, nothing connected, held too long, stuck', async () => {
+  const img = addImage()
+  // TikTok is picked but not connected here: Facebook and Instagram get it.
+  const partly = addPost('Harvest loaf', { mediaIds: [img], status: 'SCHEDULED', scheduledAt: ago(60_000), channels: ['FACEBOOK', 'INSTAGRAM', 'TIKTOK'] })
+  const none = addPost('Only TikTok', { status: 'SCHEDULED', scheduledAt: ago(60_000), channels: ['TIKTOK'] })
+  // Held back past the 24-hour window (plan ended, paused): not sent late.
+  const lapsed = addPost('Two days late', { mediaIds: [img], status: 'SCHEDULED', scheduledAt: ago(2 * 86_400_000) })
+  // A tick that died mid-publish 20 minutes ago.
+  const stuck = addPost('Stuck one', { status: 'PUBLISHING' })
+  sql(`update "Post" set "updatedAt"=(now() at time zone 'utc') - interval '20 minutes' where id='${stuck}'`)
+  await tick(page)
+  await expect.poll(() => status(partly)).toBe('PUBLISHED')
+  await expect.poll(() => alerts(partly)).toContain('no TikTok account is connected')
+  await expect.poll(() => status(none)).toBe('FAILED')
+  expect(alerts(none)).toContain('Post could not be published: Nothing was sent: no TikTok account is connected')
+  await expect.poll(() => status(lapsed)).toBe('FAILED')
+  expect(alerts(lapsed)).toContain('Scheduled post was not sent')
+  expect(sql(`select count(*) from "PostDelivery" where "postId"='${lapsed}'`)).toBe('0')
+  await expect.poll(() => status(stuck)).toBe('FAILED')
+  expect(alerts(stuck)).toContain('Publishing stopped part-way')
+})
+
+test('one tick publishes at a time: another one skips publishing', async () => {
+  // Another tick holds the publishing lease.
+  sql(`insert into "Setting"(key,value,"updatedAt") values ('publisher-lease','{"owner":"other-tick"}',now() at time zone 'utc') on conflict (key) do update set value=excluded.value,"updatedAt"=excluded."updatedAt"`)
+  let id = ''
+  try {
+    id = addPost('Lease test', { mediaIds: [addImage()], status: 'SCHEDULED', scheduledAt: ago(60_000) })
+    expect((await tick(page)).published).toBe(0)
+    expect(status(id)).toBe('SCHEDULED')
+  } finally {
+    sql(`delete from "Setting" where key='publisher-lease'`)
+  }
+  await tick(page)
+  await expect.poll(() => status(id)).toBe('PUBLISHED')
+})
+
+test('a post being published can not be deleted', async () => {
+  const id = addPost('Mid-flight', { status: 'PUBLISHING' })
+  await page.goto(`/app/posts/${id}`)
+  onceAppDialog(page, (d) => d.accept())
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect(page.getByText('This post is being published right now')).toBeVisible()
+  expect(status(id)).toBe('PUBLISHING')
+  sql(`update "Post" set status='FAILED' where id='${id}'`)
 })
 
 test('insights are read back and shown on the post', async () => {
@@ -171,6 +230,15 @@ test('insights are read back and shown on the post', async () => {
   expect(fb).toMatchObject({ reach: 1200, views: 1500, likes: 25, comments: 4, shares: 3 })
   await page.goto(`/app/posts/${id}`)
   await expect(page.getByText('1,200')).toBeVisible()
+})
+
+test('a missing insights permission is noted, the account stays connected', async () => {
+  sql(`update "PostDelivery" set "metricsAt"=null where "postId" in (select id from "Post" where "workspaceId"='${workspaceId}')`)
+  meta.failNext(/^\/igmedia-\d+\/insights$/, 10, '(#10) Application does not have permission for this action')
+  await tick(page, true)
+  expect(sql(`select status||'|'||coalesce("lastError",'') from "SocialAccount" where "workspaceId"='${workspaceId}' and network='INSTAGRAM'`)).toBe(
+    'ACTIVE|(#10) Application does not have permission for this action',
+  )
 })
 
 // A text post published to Facebook (Instagram fails without an image).
