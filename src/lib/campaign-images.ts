@@ -10,7 +10,7 @@ import { saveMedia } from './storage'
 export type CampaignImagePlan = { prompt: string | null; style: string }
 
 // AI images for a campaign's posts that have none, three at a time, in the
-// background. Each image is charged once it exists; out of credits stops.
+// background. Each image is charged once it is on its post; out of credits stops.
 export async function generateCampaignImages(campaignId: string, plan: CampaignImagePlan) {
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
@@ -31,14 +31,18 @@ export async function generateCampaignImages(campaignId: string, plan: CampaignI
       const brief = plan.prompt ? plan.prompt : [post.title, post.content.slice(0, 300)].filter(Boolean).join(': ')
       const img = await generateImage(ws.name, known, brief, post.content.slice(0, 1500), plan.prompt ? i : 0, [], '1:1', style)
       const media = await saveMedia(ws.id, img.data, img.mime, `Campaign image: ${brief.slice(0, 200)}`)
-      const ok = await charge(accountId, ws.id, [{ amount: COST.image, reason: 'AI_IMAGE', note: `Campaign image: ${campaign.name}`.slice(0, 200), action: 'image', units: 1 }])
+      // Attached and charged together, only if the post still has no picture
+      // (someone may have added one): no charge for an image nobody gets.
+      let bare = false
+      const ok = await charge(accountId, ws.id, [{ amount: COST.image, reason: 'AI_IMAGE', note: `Campaign image: ${campaign.name}`.slice(0, 200), action: 'image', units: 1 }], async (tx) => {
+        bare = (await tx.post.updateMany({ where: { id: post.id, mediaIds: { isEmpty: true } }, data: { mediaIds: [media.id] } })).count === 1
+        return bare
+      })
       if (!ok) {
-        stop = true
+        // The post was free, so the credits ran out.
+        if (bare) stop = true
         await prisma.media.delete({ where: { id: media.id } })
-        return
       }
-      // Only if the post still has no picture (someone may have added one).
-      await prisma.post.updateMany({ where: { id: post.id, mediaIds: { isEmpty: true } }, data: { mediaIds: [media.id] } })
     } catch (e) {
       noteAiFailure(e)
       console.error('campaign image failed', post.id, e instanceof Error ? e.message : e)

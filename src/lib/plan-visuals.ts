@@ -13,8 +13,9 @@ import { enqueueRender, waitForRender } from './video-render'
 
 // Pictures and videos for a plan's posts, made before they go out: a photo
 // post gets one AI image, a Reel / video post a short vertical video (AI
-// images with motion, rendered to MP4). Runs in the background; each image
-// is charged once it exists and running out of credits stops the rest.
+// images with motion, rendered to MP4). Runs in the background, one run per
+// plan at a time; each image is charged once it exists and running out of
+// credits stops the rest.
 
 export const isVideoFormat = (format: string) => /reel|video|story|tiktok|short/i.test(format)
 export const VIDEO_SCENES = 3
@@ -64,15 +65,24 @@ export async function generatePlanVisuals(planId: string, price: number) {
   const bg = ws.brandKit?.colors.find((c) => /^#[0-9a-fA-F]{6}$/.test(c)) ?? '#111827'
   let stop = false
 
-  // One AI image, charged once it exists; null when it failed or credits ran out.
-  const image = async (p: PlanPost, i: number, aspect: '1:1' | '9:16' | '4:5') => {
+  // One AI image, charged once it exists and only while the post still has
+  // nothing (someone may have added a picture meanwhile); a photo post gets
+  // it attached in the same transaction (`onPost`). Null when it failed, the
+  // post has a picture or credits ran out.
+  const image = async (p: PlanPost & { postId: string }, i: number, aspect: '1:1' | '9:16' | '4:5', onPost = false) => {
     if (stop) return null
     try {
       const img = await generateImage(ws.name, known, p.visual || p.caption.slice(0, 300), p.caption.slice(0, 1500), i, [], aspect)
       const media = await saveMedia(ws.id, img.data, img.mime, `Plan image: ${(p.visual || p.pillar).slice(0, 200)}`)
-      const ok = await charge(accountId, ws.id, [{ amount: price, reason: 'AI_IMAGE', note: `Plan image: ${plan.title}`.slice(0, 200), action: 'image', units: 1 }])
+      const where = { id: p.postId, mediaIds: { isEmpty: true } }
+      let bare = false
+      const ok = await charge(accountId, ws.id, [{ amount: price, reason: 'AI_IMAGE', note: `Plan image: ${plan.title}`.slice(0, 200), action: 'image', units: 1 }], async (tx) => {
+        bare = onPost ? (await tx.post.updateMany({ where, data: { mediaIds: [media.id] } })).count === 1 : (await tx.post.count({ where })) === 1
+        return bare
+      })
       if (!ok) {
-        stop = true
+        // The post was free, so the credits ran out.
+        if (bare) stop = true
         await prisma.media.delete({ where: { id: media.id } })
         return null
       }
@@ -90,16 +100,16 @@ export async function generatePlanVisuals(planId: string, price: number) {
 
   const one = async (p: PlanPost) => {
     if (stop || !p.postId) return
+    const post = { ...p, postId: p.postId }
     if (!isVideoFormat(p.format)) {
-      const m = await image(p, 0, p.network === 'INSTAGRAM' ? '4:5' : '1:1')
-      if (m) await attach(p.postId, m.id)
+      await image(post, 0, p.network === 'INSTAGRAM' ? '4:5' : '1:1', true)
       return
     }
     // A short Reel: a few AI images with motion, no on-screen text (open it in
     // Studio → Video to add text or voice and render again).
     const shots = []
     for (let i = 0; i < VIDEO_SCENES; i++) {
-      const m = await image(p, i, '9:16')
+      const m = await image(post, i, '9:16')
       if (m) shots.push(m)
     }
     if (shots.length === 0) return
@@ -132,6 +142,17 @@ export async function generatePlanVisuals(planId: string, price: number) {
   }
 }
 
+// Claims the run: false when one is already running. Under a per-plan lock,
+// so two clicks can't start two runs that make (and charge) the same posts.
 export async function startPlanVisuals(planId: string, total: number) {
-  await setStatus(planId, { status: 'RUNNING', total, startedAt: new Date().toISOString(), outOfCredits: false })
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'visuals:' + planId}))`
+    const plan = await tx.strategyPlan.findUnique({ where: { id: planId } })
+    if (!plan) return false
+    const data = plan.data as unknown as PlanData
+    if (visualsRunning(data.visuals)) return false
+    const visuals = { status: 'RUNNING' as const, total, startedAt: new Date().toISOString(), outOfCredits: false }
+    await tx.strategyPlan.update({ where: { id: planId }, data: { data: { ...data, visuals } as unknown as Prisma.InputJsonValue } })
+    return true
+  })
 }

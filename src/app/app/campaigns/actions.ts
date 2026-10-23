@@ -288,11 +288,15 @@ export async function addCampaignImages(campaignId: string, raw: z.input<typeof 
   }
 
   if (!aiEnabled()) return { error: 'AI generation is not connected yet.' }
-  if (campaign.imageStatus === 'GENERATING' && Date.now() - campaign.updatedAt.getTime() < 30 * 60_000) return { error: 'Images are already being made' }
   const COST = await prices()
   const need = posts.length * COST.image
   if (account.creditBalance < need) return { error: notEnough(need, account.creditBalance) }
-  await prisma.campaign.update({ where: { id: campaign.id }, data: { imageStatus: 'GENERATING', imagesDone: 0, imagesTotal: posts.length } })
+  // One run at a time (claimed atomically): two would draw, and charge, the same posts.
+  const claim = await prisma.campaign.updateMany({
+    where: { id: campaign.id, OR: [{ imageStatus: null }, { imageStatus: { not: 'GENERATING' } }, { updatedAt: { lt: new Date(Date.now() - 30 * 60_000) } }] },
+    data: { imageStatus: 'GENERATING', imagesDone: 0, imagesTotal: posts.length },
+  })
+  if (claim.count === 0) return { error: 'Images are already being made' }
   after(() => generateCampaignImages(campaign.id, { prompt: opt.prompt || null, style: opt.style }).catch((e) => console.error('campaign images failed', e)))
   revalidatePath(`/app/campaigns/${campaign.id}`)
   return { started: posts.length }

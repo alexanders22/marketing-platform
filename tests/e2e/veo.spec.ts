@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
+import { createHmac } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import ffmpegPath from 'ffmpeg-static'
 import { spawnSync } from 'node:child_process'
@@ -14,6 +16,14 @@ const FF = ffmpegPath as unknown as string
 let page: Page
 let videoId = ''
 let accountId = ''
+
+const env = Object.fromEntries(
+  readFileSync('.env', 'utf8')
+    .split('\n')
+    .filter((l) => l.includes('='))
+    .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).replace(/^"|"$/g, '')]),
+)
+const cron = createHmac('sha256', `cron:${env.KHMA_ENCRYPTION_KEY}`).update('tick').digest('hex')
 
 const balance = () => Number(sql(`select "creditBalance" from "Account" where id='${accountId}'`))
 
@@ -101,6 +111,29 @@ test('monthly Veo limit: the meter, refunds give seconds back, over the limit is
   await page.reload()
   await page.getByRole('button', { name: 'Generate clip with AI' }).click()
   await expect(page.getByText('4 / 10s')).toBeVisible()
+})
+
+test('a paid clip that never started (restart before Veo answered) is refunded by the ticker', async () => {
+  const ws = sql(`select "workspaceId" from "Video" where id='${videoId}'`)
+  const sceneId = sql(`select data->'scenes'->0->>'id' from "Video" where id='${videoId}'`)
+  const job = `cjstuck${Date.now()}`
+  const start = balance()
+  // Charged and waiting on the scene, but no Veo operation: 10 minutes old.
+  sql(
+    `insert into "ClipJob"(id,"workspaceId","accountId","videoId","sceneId",prompt,quality,aspect,seconds,credits,status,"createdAt","updatedAt") values ('${job}','${ws}','${accountId}','${videoId}','${sceneId}','[test] stuck','quick','9:16',4,12,'PENDING',now() - interval '10 minutes',now())`,
+  )
+  sql(`insert into "CreditEntry"(id,"accountId","workspaceId",amount,reason,note,action,units) values ('ce${Date.now()}','${accountId}','${ws}',-12,'AI_VIDEO','stuck clip','clipQuick',4)`)
+  sql(`update "Account" set "creditBalance"="creditBalance"-12 where id='${accountId}'`)
+  sql(`update "Video" set data=jsonb_set(data, '{scenes,0,clipJobId}', '"${job}"') where id='${videoId}'`)
+  await page.request.post('/api/cron/tick', { headers: { 'x-khma-cron': cron } })
+  await expect.poll(() => sql(`select status from "ClipJob" where id='${job}'`)).toBe('FAILED')
+  expect(balance()).toBe(start)
+  expect(sql(`select count(*)||':'||sum(amount) from "CreditEntry" where "idempotencyKey"='clip-refund:${job}'`)).toBe('1:12')
+  // The scene no longer waits for it: the video can be rendered.
+  expect(sql(`select coalesce(data->'scenes'->0->>'clipJobId', '') from "Video" where id='${videoId}'`)).toBe('')
+  // A second tick changes nothing.
+  await page.request.post('/api/cron/tick', { headers: { 'x-khma-cron': cron } })
+  expect(balance()).toBe(start)
 })
 
 test('trial accounts see Veo locked and cannot start a clip', async ({ browser }) => {

@@ -255,6 +255,8 @@ test('the demo shop shows the chat before it is switched on, as a test', async (
   await page.getByRole('dialog', { name: 'Bloom helper' }).getByRole('textbox').press('Enter')
   await expect(page.getByRole('dialog', { name: 'Bloom helper' })).toContainText('We deliver across Tbilisi')
   expect(sql(`select test from "ChatConversation" where "workspaceId"='${ws}' order by "createdAt" desc limit 1`)).toBe('t')
+  // The owner's test chats are free.
+  expect(sql(`select "chargedAt" is null from "ChatConversation" where "workspaceId"='${ws}' order by "createdAt" desc limit 1`)).toBe('t')
   // The public site does not get the chat while it is off.
   const cfg = await (await page.request.get(`/api/tag/config?s=${key}`)).json()
   expect(cfg.chat).toBeNull()
