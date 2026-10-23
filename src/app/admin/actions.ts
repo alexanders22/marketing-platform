@@ -11,7 +11,7 @@ import { PLAN_IDS, yearlyTotal } from '@/lib/plans'
 import { vatParts } from '@/lib/tax'
 import { WORKSPACE_COOKIE } from '@/lib/context'
 import { forgetPricing, getPlans } from '@/lib/credits'
-import { cancelAutoRenew, RECURRING_KEY, type RecurringRefs } from '@/lib/payments'
+import { cancelAutoRenew, cancelOtherRenewals, RECURRING_KEY, type RecurringRefs } from '@/lib/payments'
 import { prisma } from '@/lib/prisma'
 import { ACTION_KEYS, VEO_PLANS, type Pricing } from '@/lib/pricing'
 import type { Economics } from '@/lib/economics'
@@ -49,6 +49,9 @@ export async function updateAccount(accountId: string, _: AdminState, f: FormDat
   const d = parsed.data
   const trialEndsAt = d.trialEndsAt ? new Date(`${d.trialEndsAt}T23:59:59Z`) : null
   if (trialEndsAt && Number.isNaN(trialEndsAt.getTime())) return { error: 'Trial end is not a valid date' }
+  // Auto-renewal of another plan or cycle would switch the account back at its next charge.
+  const stopped = await cancelOtherRenewals(accountId, d.plan, d.billingCycle)
+  if (stopped.error) return { error: `Auto-renewal could not be cancelled at Monrem: ${stopped.error}` }
   await prisma.account.update({
     where: { id: accountId },
     data: { name: d.name, email: d.email, country: d.country || null, currency: d.currency, plan: d.plan, billingCycle: d.billingCycle, trialEndsAt, alertEmails: d.alertEmails },
@@ -114,20 +117,26 @@ export async function recordPayment(accountId: string, _: AdminState, f: FormDat
   const account = await prisma.account.findUnique({ where: { id: accountId }, select: { plan: true } })
   if (!account) return { error: 'Account not found' }
   if (account.plan === 'NONE') return { error: 'Pick a plan for this account first' }
-  const booked = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'payment:' + key}))`
-    return tx.adminLog.findFirst({ where: { action: 'payment.record', details: { path: ['key'], equals: key } }, select: { id: true } })
-  })
-  if (booked) return { ok: 'Already booked' }
   // The list price plus 18% VAT: what the customer paid and what goes to the state.
   const monthly = (await getPlans()).find((p) => p.id === account.plan)?.monthly ?? 0
   const money = vatParts((cycle === 'YEARLY' ? yearlyTotal(monthly) : monthly) * periods)
-  const { paidUntil, granted } = await bookPayment(accountId, periods, cycle)
-  await logAdmin(admin, 'payment.record', 'account', accountId, { key, periods, cycle, note, plan: account.plan, ...money, paidUntil: paidUntil.toISOString(), granted })
+  // The key's lock, the booking and its log (the marker of the key) commit together.
+  const booked = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'payment:' + key}))`
+    if (await tx.adminLog.findFirst({ where: { action: 'payment.record', details: { path: ['key'], equals: key } }, select: { id: true } })) return null
+    const { paidUntil, granted } = await bookPayment(tx, accountId, periods, cycle)
+    const details = { key, periods, cycle, note, plan: account.plan, ...money, paidUntil: paidUntil.toISOString(), granted }
+    await tx.adminLog.create({ data: { adminId: admin.id, adminEmail: admin.email, action: 'payment.record', targetType: 'account', targetId: accountId, details } })
+    return { paidUntil, granted }
+  })
+  if (!booked) return { ok: 'Already booked' }
+  const { paidUntil, granted } = booked
+  // A monthly auto-renewal would keep charging next to a year booked here.
+  const stopped = await cancelOtherRenewals(accountId, account.plan, cycle)
   revalidatePath(`/admin/companies/${accountId}`)
   revalidatePath('/admin/payments')
   return {
-    ok: `Paid until ${paidUntil.toISOString().slice(0, 10)} · $${money.gross} incl. $${money.vat} VAT${granted ? ` · +${granted} credits` : ''}`,
+    ok: `Paid until ${paidUntil.toISOString().slice(0, 10)} · $${money.gross} incl. $${money.vat} VAT${granted ? ` · +${granted} credits` : ''}${stopped.error ? ' · auto-renewal could not be cancelled at Monrem — cancel it there' : ''}`,
   }
 }
 

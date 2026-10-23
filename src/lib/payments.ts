@@ -1,6 +1,6 @@
 import 'server-only'
-import { Prisma, type BillingCycle, type Payment } from '@prisma/client'
-import { convertRemaining, extendPaidUntil, grantPlanCredits } from './billing'
+import { Prisma, type BillingCycle, type Payment, type Plan } from '@prisma/client'
+import { convertRemaining, extendPaidUntil, grantPlanCredits, lockAccount } from './billing'
 import { phoneParts, type BillingAddress } from './billing-address'
 import { getPlans, getPricing } from './credits'
 import { siteUrl, terminalUrl } from './hosts'
@@ -201,19 +201,27 @@ async function paymentFor(tx: MonremTx, subscriptionId?: string): Promise<Paymen
 }
 
 // Monrem's view of a payment (callback, status check or a subscription's
-// charges) applied to ours. An approved payment never goes back; a first
-// payment must be for what we asked.
+// charges) applied to ours. An approved payment never goes back (one whose
+// booking failed half-way is booked now); a first payment must be for what
+// we asked.
 export async function applyStatus(tx: MonremTx, subscriptionId?: string): Promise<Payment | null> {
   const payment = await paymentFor(tx, subscriptionId)
   if (!payment) return null
   const status = String(tx.status).toUpperCase()
-  if (payment.status === 'APPROVED' || !['APPROVED', 'DECLINED', 'PENDING'].includes(status)) return payment
+  if (payment.status === 'APPROVED') {
+    if (payment.fulfilledAt) return payment
+    await fulfil(payment.id)
+    if (payment.recurringRef && !payment.subscriptionId) await linkSubscription(payment.id, tx.subscription?.id != null ? String(tx.subscription.id) : null)
+    return prisma.payment.findUnique({ where: { id: payment.id } })
+  }
+  if (!['APPROVED', 'DECLINED', 'PENDING'].includes(status)) return payment
   if (status === 'APPROVED' && (Number(tx.amount) !== payment.amount || String(tx.currency).toUpperCase() !== payment.currency)) {
     console.error('monrem amount mismatch', payment.id, tx.amount, tx.currency)
     return prisma.payment.update({ where: { id: payment.id }, data: { statusDescription: `Amount mismatch: ${tx.amount} ${tx.currency}` } })
   }
-  await prisma.payment.update({
-    where: { id: payment.id },
+  // A stale read (PENDING, DECLINED) never overwrites an approval made meanwhile.
+  await prisma.payment.updateMany({
+    where: { id: payment.id, status: { not: 'APPROVED' } },
     data: { status: status as Payment['status'], statusDescription: tx.status_description?.slice(0, 300) ?? null },
   })
   if (tx.transaction_id && tx.transaction_id !== payment.transactionId) {
@@ -249,6 +257,7 @@ async function fulfil(id: string) {
       })
       await tx.account.update({ where: { id: p.accountId }, data: { creditBalance: { increment: p.credits } } })
     } else if (p.kind === 'PLAN' && p.plan && p.cycle) {
+      await lockAccount(tx, p.accountId)
       const a = await tx.account.findUniqueOrThrow({ where: { id: p.accountId }, select: { paidUntil: true, plan: true } })
       const now = new Date()
       // Another plan: the rest of the old one's paid time is converted first.
@@ -261,11 +270,15 @@ async function fulfil(id: string) {
         where: { id: p.accountId },
         data: { plan: p.plan, billingCycle: p.cycle, paidUntil: extendPaidUntil(from, p.periods ?? 1, p.cycle, now), trialEndsAt: now },
       })
+      // This month's plan credits, or an upgrade's top-up.
+      await grantPlanCredits(p.accountId, now, tx)
     }
     return p
   })
-  // This month's plan credits (idempotent per period).
-  if (done?.kind === 'PLAN') await grantPlanCredits(done.accountId)
+  // Auto-renewal of another plan or cycle would book that one back at its
+  // next charge. (A renewal's own payment leaves its subscription alone.)
+  if (done?.kind === 'PLAN' && done.plan && done.cycle && !done.subscriptionId)
+    await cancelOtherRenewals(done.accountId, done.plan, done.cycle).catch((e) => console.error('AUTO-RENEWAL NOT CANCELLED after a plan change', done.accountId, e instanceof Error ? e.message : e))
 }
 
 // The subscription a first auto-renewal payment started: from its callback,
@@ -305,6 +318,20 @@ export async function cancelAutoRenew(accountId: string): Promise<{ error?: stri
   return {}
 }
 
+// Another plan or cycle was booked (an upgrade paid once, a super admin's
+// change): auto-renewal of any other stops. A failure is logged loudly — it
+// must then be cancelled in Monrem's portal by hand.
+export async function cancelOtherRenewals(accountId: string, plan: Plan, cycle: BillingCycle): Promise<{ error?: string }> {
+  const others = await prisma.subscription.findMany({ where: { accountId, status: 'ACTIVE', NOT: { plan, cycle } }, select: { id: true } })
+  let error: string | undefined
+  for (const s of others)
+    if (!(await stopSubscription(s.id, 'plan changed'))) {
+      console.error('AUTO-RENEWAL NOT CANCELLED after a plan change — cancel it in Monrem', { accountId, subscription: s.id, plan, cycle })
+      error = 'Monrem did not answer — please try again in a minute.'
+    }
+  return error ? { error } : {}
+}
+
 // A callback is only a hint: what it says is confirmed with Monrem's API
 // before anything is booked, so a leaked API password can't fake a payment.
 // A renewal (an order id we don't know) must also be one of the
@@ -336,17 +363,30 @@ export async function syncPayment(id: string) {
   }
 }
 
-// Pending payments from the last two days, a few per tick.
+// Approved payments whose booking failed half-way are booked; then pending
+// ones from the last two days are asked about, a few per tick, the least
+// recently checked first. Renewals are left to the subscription check: their
+// id is ours, Monrem knows them by its own order id.
 export async function syncPendingPayments(now = new Date()) {
-  if (!monremEnabled()) return 0
+  const touch = (id: string) => prisma.payment.updateMany({ where: { id }, data: { updatedAt: new Date() } })
+  const unbooked = await prisma.payment.findMany({ where: { status: 'APPROVED', fulfilledAt: null }, orderBy: { updatedAt: 'asc' }, take: 20, select: { id: true } })
+  for (const p of unbooked)
+    await fulfil(p.id).catch(async (e) => {
+      console.error('payment fulfil failed', p.id, e instanceof Error ? e.message : e)
+      await touch(p.id)
+    })
+  if (!monremEnabled()) return unbooked.length
   const due = await prisma.payment.findMany({
-    where: { status: 'PENDING', createdAt: { lt: new Date(now.getTime() - 60_000), gt: new Date(now.getTime() - 2 * 86_400_000) } },
-    orderBy: { createdAt: 'asc' },
+    where: { status: 'PENDING', subscriptionId: null, createdAt: { lt: new Date(now.getTime() - 60_000), gt: new Date(now.getTime() - 2 * 86_400_000) } },
+    orderBy: { updatedAt: 'asc' },
     take: 20,
     select: { id: true },
   })
-  for (const p of due) await syncPayment(p.id)
-  return due.length
+  for (const p of due) {
+    await syncPayment(p.id)
+    await touch(p.id)
+  }
+  return unbooked.length + due.length
 }
 
 // Hourly: link first payments to their subscriptions, then read each active

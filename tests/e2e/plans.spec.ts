@@ -91,6 +91,36 @@ test('a trial is not a payment; a recorded payment unlocks paid features and gra
   await expect(page.getByRole('link', { name: /Start plan/ }).first()).toBeAttached()
 })
 
+test('a plan smaller than the account is refused; a cheaper plan converts paid time; a dearer one is paid for even after the end', async ({ page }) => {
+  const { email } = await newAccount(page, 'fit')
+  const id = acct(email)
+  // A trial on Agency with three companies: Start (1 company) is refused.
+  sql(`update "Account" set plan='AGENCY' where id='${id}'`)
+  for (const n of [1, 2]) sql(`insert into "Workspace"(id, name, "accountId", "updatedAt") values ('fit-${n}-${Date.now()}', 'Extra ${n}', '${id}', now())`)
+  await page.goto('/app/plan')
+  await page.getByRole('button', { name: 'Choose Start' }).click()
+  await expect(page.getByText('You have 3 companies; Start includes 1. Remove 2 to switch.')).toBeVisible()
+  expect(sql(`select plan from "Account" where id='${id}'`)).toBe('AGENCY')
+
+  // Paid Agency, 30 days left: Business (3 companies) applies at once, the days converted at $75.
+  sql(`update "Account" set "paidUntil"=now() + interval '30 days' where id='${id}'`)
+  await page.reload()
+  await page.getByRole('button', { name: 'Switch to Business' }).click()
+  await page.waitForURL(/\/app\/credits$/)
+  expect(sql(`select plan from "Account" where id='${id}'`)).toBe('TEAM')
+  const days = Number(sql(`select extract(epoch from "paidUntil" - now()) / 86400 from "Account" where id='${id}'`))
+  expect(days).toBeGreaterThan(78)
+  expect(days).toBeLessThan(81)
+
+  // Ended two days ago (the grace days): Agency is still bought, not picked.
+  sql(`update "Account" set "paidUntil"=now() - interval '2 days' where id='${id}'`)
+  await page.goto('/app/plan')
+  await page.getByRole('button', { name: 'Choose Agency' }).click()
+  await page.waitForURL(/\/app\/credits\?upgrade=AGENCY/)
+  expect(sql(`select plan from "Account" where id='${id}'`)).toBe('TEAM')
+  await expect(page.getByRole('region', { name: 'Upgrade your plan' }).getByText('Your Business plan has ended — a month of Agency starts today.')).toBeVisible()
+})
+
 test('Agency API: own keys, own companies, closed when the plan ends', async ({ page, request }) => {
   const { email } = await newAccount(page, 'api')
   const id = acct(email)

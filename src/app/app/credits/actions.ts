@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { z } from 'zod'
+import { outgrows } from '@/lib/billing'
 import { addressDraft, BillingAddress, savedAddress, type AddressForm } from '@/lib/billing-address'
 import { requireContext } from '@/lib/context'
 import { monremEnabled } from '@/lib/monrem'
@@ -28,6 +29,11 @@ export async function checkout(
   if (!parsed.success) return { error: 'Unknown purchase' }
   // ₾1 test payments: super admins, in an account of their own (not one they're viewing).
   if (parsed.data.test && (user.role !== 'SUPER_ADMIN' || asAdmin)) return { error: 'Unknown purchase' }
+  // Another plan must fit what the account already has (renewing its own plan always works).
+  if (parsed.data.kind === 'PLAN' && parsed.data.plan !== account.plan) {
+    const tooSmall = await outgrows(account.id, parsed.data.plan)
+    if (tooSmall) return { error: tooSmall }
+  }
   let billing = savedAddress(account.billingAddress)
   if (address) {
     const a = BillingAddress.safeParse(address)
