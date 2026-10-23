@@ -1,25 +1,63 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { ACTIONS, ACTION_KEYS, type Action, type Pricing } from '@/lib/pricing'
+import type { FixedCost } from '@/lib/economics'
+import { ACTIONS, ACTION_KEYS, type Action, type Currency, type Pricing } from '@/lib/pricing'
+import { VAT } from '@/lib/tax'
 import { savePricing } from '../actions'
 
 type Plan = { id: string; name: string; monthly: number; monthlyGel: number; credits: number }
 type Used = Record<string, { credits: number; units: number; count: number }>
+// Card fee, taxes, partner share and fixed costs from Admin → Economics.
+type Costs = { paymentFeePct: number; paymentFeeUsd: number; turnoverTaxPct: number; partnerSharePct: number; fixed: FixedCost[] }
 
 const usd = (n: number) => (Math.abs(n) >= 100 ? `$${n.toFixed(0)}` : Math.abs(n) >= 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(3)}`)
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`
 const marginTone = (m: number) => (m < 0 ? 'text-red-600 font-semibold' : m < 0.5 ? 'text-amber-700' : 'text-emerald-700')
 const input = 'w-24 rounded-lg border border-zinc-200 px-2 py-1 text-right text-sm tabular-nums outline-none focus:border-zinc-400'
+const gel = (n: number) => `${n < -0.004 ? '−' : ''}₾${Math.abs(n) >= 100 ? Math.round(Math.abs(n)).toLocaleString('en-US') : Math.abs(n).toFixed(2)}`
 
-export function PricingEditor({ initial, plans: planNames, used }: { initial: Pricing; plans: Plan[]; used: Used }) {
+export function PricingEditor({ initial, plans: planNames, used, nbgRate, costs, currency }: { initial: Pricing; plans: Plan[]; used: Used; nbgRate: number; costs: Costs; currency: Currency }) {
   const [p, setP] = useState<Pricing>(initial)
+  // Lari per dollar: the one set here, else the National Bank's.
+  const rate = p.gelPerUsd ?? nbgRate
+  const toGel = (usdPrice: number) => Math.round(usdPrice * rate)
   // Price and credits as being edited.
   const plans = planNames.map((pl) => ({ ...pl, ...p.plans[pl.id as keyof Pricing['plans']] }))
+  // A new dollar price fills in the lari price at the rate; the lari price
+  // can still be typed on its own (e.g. a round ₾79).
   const setPlan = (id: string, field: 'monthly' | 'monthlyGel' | 'credits', v: string) =>
-    setP((cur) => ({ ...cur, plans: { ...cur.plans, [id]: { ...cur.plans[id as keyof Pricing['plans']], [field]: Math.max(0, field === 'credits' ? Math.round(Number(v) || 0) : Number(v) || 0) } } }))
+    setP((cur) => {
+      const n = Math.max(0, field === 'credits' ? Math.round(Number(v) || 0) : Number(v) || 0)
+      const plan = { ...cur.plans[id as keyof Pricing['plans']], [field]: n, ...(field === 'monthly' && { monthlyGel: toGel(n) }) }
+      return { ...cur, plans: { ...cur.plans, [id]: plan } }
+    })
   const setPack = (i: number, field: 'credits' | 'priceUsd' | 'priceGel', v: string) =>
-    setP((cur) => ({ ...cur, packs: cur.packs.map((pk, j) => (j === i ? { ...pk, [field]: Math.max(0, field === 'credits' ? Math.round(Number(v) || 0) : Number(v) || 0) } : pk)) }))
+    setP((cur) => {
+      const n = Math.max(0, field === 'credits' ? Math.round(Number(v) || 0) : Number(v) || 0)
+      return { ...cur, packs: cur.packs.map((pk, j) => (j === i ? { ...pk, [field]: n, ...(field === 'priceUsd' && { priceGel: toGel(n) }) } : pk)) }
+    })
+  // Every lari price again from its dollar price at the current rate.
+  const relari = () =>
+    setP((cur) => ({
+      ...cur,
+      plans: Object.fromEntries(Object.entries(cur.plans).map(([id, pl]) => [id, { ...pl, monthlyGel: toGel(pl.monthly) }])) as Pricing['plans'],
+      packs: cur.packs.map((pk) => ({ ...pk, priceGel: toGel(pk.priceUsd) })),
+    }))
+  // Fixed costs of a month in lari (Admin → Economics).
+  const fixedGel = costs.fixed.reduce((s, f) => s + (f.currency === 'GEL' ? f.amount : f.amount * rate), 0)
+  // One sale in lari: what the customer pays, what goes to the state, the
+  // card and partners, the AI it may use, and what is left for us. The price
+  // is the one the card is charged: lari when the terminal takes lari.
+  const money = (priceUsd: number, priceGel: number, aiUsd: number | null, worstUsd: number) => {
+    const base = currency === 'GEL' ? priceGel : priceUsd * rate
+    const vat = base * VAT.rate
+    const fee = base > 0 ? ((base + vat) * costs.paymentFeePct) / 100 + costs.paymentFeeUsd * rate : 0
+    const taxes = (base * costs.turnoverTaxPct) / 100
+    const partner = (base * costs.partnerSharePct) / 100
+    const kept = base - fee - taxes - partner
+    return { base, vat, pays: base + vat, fee, taxes, partner, kept, ai: aiUsd === null ? null : aiUsd * rate, worst: worstUsd * rate }
+  }
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>()
   const [pending, start] = useTransition()
 
@@ -75,6 +113,36 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
         <p className="mt-1 text-sm text-zinc-500">
           Price a month (without VAT — 18% is added at checkout) and the credits each plan refills every month. The lari price is fixed, not converted: cards are charged it when the Monrem terminal takes lari. The landing page, the plan picker and new payments use them.
         </p>
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm ring-1 ring-amber-200">
+          <label className="flex items-center gap-2 font-medium text-zinc-800">
+            Exchange rate · $1 = ₾
+            <input
+              type="number"
+              min="1"
+              step="0.01"
+              value={p.gelPerUsd ?? ''}
+              placeholder={nbgRate.toFixed(4)}
+              onChange={(e) => setP({ ...p, gelPerUsd: e.target.value === '' ? null : Math.max(0, Number(e.target.value) || 0) })}
+              aria-label="Lari per dollar"
+              className={input}
+            />
+          </label>
+          <span className="text-zinc-600">
+            {p.gelPerUsd === null ? 'National Bank rate today' : `National Bank today: ₾${nbgRate.toFixed(4)}`}
+          </span>
+          {p.gelPerUsd !== null && (
+            <button onClick={() => setP({ ...p, gelPerUsd: null })} className="text-sm font-medium text-indigo-600 hover:underline">
+              Use the National Bank rate
+            </button>
+          )}
+          <button onClick={relari} className="ml-auto rounded-lg border border-amber-300 bg-white px-3 py-1 text-sm font-medium hover:bg-amber-100">
+            Recalculate all lari prices at ₾{rate.toFixed(2)}
+          </button>
+          <p className="w-full text-xs text-zinc-600">
+            A new dollar price fills in its lari price at this rate (you can still type your own). Earnings are in lari, from the {currency === 'GEL' ? 'lari price (cards are charged in lari)' : 'dollar price at this rate (cards are charged in dollars)'}, after{' '}
+            {Math.round(VAT.rate * 100)}% VAT, a {costs.paymentFeePct}% card fee, {costs.turnoverTaxPct}% tax{costs.partnerSharePct > 0 ? ` and ${costs.partnerSharePct}% to partners` : ''} (Admin → Economics). Fixed costs: <b>{gel(fixedGel)}</b> a month.
+          </p>
+        </div>
         <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {plans.map((pl) => (
             <li key={pl.id} className="rounded-xl bg-zinc-50 p-3 text-sm ring-1 ring-zinc-200">
@@ -97,11 +165,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
                 Credits / month
                 <input type="number" min="1" step="10" value={pl.credits} onChange={(e) => setPlan(pl.id, 'credits', e.target.value)} aria-label={`Credits of ${pl.name}`} className={input} />
               </label>
-              {mixCost !== null && (
-                <p className="mt-2 text-xs text-zinc-500">
-                  All credits used at last month&apos;s mix: {usd(pl.credits * mixCost)} AI cost of {usd(pl.monthly)} net
-                </p>
-              )}
+              <Breakdown m={money(pl.monthly, pl.monthlyGel, mixCost === null ? null : pl.credits * mixCost, worstFor(pl).cost)} fixedGel={fixedGel} label={pl.name} />
             </li>
           ))}
         </ul>
@@ -118,15 +182,18 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
               <th className="py-1.5 font-medium">In lari</th>
               <th className="py-1.5 text-right font-medium">Per credit (net)</th>
               <th className="py-1.5 text-right font-medium">Discount</th>
-              <th className="py-1.5 text-right font-medium">Margin if all used{mixCost === null ? ' (worst case)' : ''}</th>
+              <th className="py-1.5 text-right font-medium">Customer pays</th>
+              <th className="py-1.5 text-right font-medium">You earn{mixCost === null ? ' (worst case)' : ''}</th>
+              <th className="py-1.5 text-right font-medium">Margin if all used</th>
               <th />
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {p.packs.map((pk, i) => {
               const net = pk.priceUsd
-              const cost = pk.credits * (mixCost ?? costPerCredit)
-              const m = net > 0 ? (net - cost) / net : 0
+              const b = money(pk.priceUsd, pk.priceGel, mixCost === null ? null : pk.credits * mixCost, pk.credits * costPerCredit)
+              const earn = b.kept - (b.ai ?? b.worst)
+              const m = b.base > 0 ? earn / b.base : 0
               return (
                 <tr key={i}>
                   <td className="py-2">
@@ -146,6 +213,11 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
                   </td>
                   <td className="py-2 text-right tabular-nums">{usd(net / Math.max(1, pk.credits))}</td>
                   <td className="py-2 text-right tabular-nums">{pct(1 - pk.priceUsd / Math.max(0.0001, pk.credits * p.creditPriceUsd))}</td>
+                  <td className="py-2 text-right tabular-nums">{gel(b.pays)}</td>
+                  <td className={`py-2 text-right font-medium tabular-nums ${marginTone(m)}`}>
+                    {gel(earn)}
+                    {b.ai !== null && <span className="block text-[11px] font-normal text-zinc-500">worst {gel(b.kept - b.worst)}</span>}
+                  </td>
                   <td className={`py-2 text-right tabular-nums ${marginTone(m)}`}>{pct(m)}</td>
                   <td className="py-2 text-right">
                     <button onClick={() => setP((cur) => ({ ...cur, packs: cur.packs.filter((_, j) => j !== i) }))} className="text-xs text-zinc-500 hover:text-red-600" aria-label={`Remove pack ${i + 1}`}>
@@ -374,5 +446,35 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
         </table>
       </section>
     </div>
+  )
+}
+
+// What one plan payment (a month) leaves, line by line, in lari.
+function Breakdown({ m, fixedGel, label }: { m: { base: number; vat: number; pays: number; fee: number; taxes: number; partner: number; kept: number; ai: number | null; worst: number }; fixedGel: number; label: string }) {
+  const earn = m.kept - (m.ai ?? m.worst)
+  const worst = m.kept - m.worst
+  const cover = earn > 0 ? Math.ceil(fixedGel / earn) : null
+  const row = (name: string, value: string, tone = 'text-zinc-700') => (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-zinc-500">{name}</dt>
+      <dd className={`tabular-nums ${tone}`}>{value}</dd>
+    </div>
+  )
+  return (
+    <dl className="mt-3 space-y-1 border-t border-zinc-200 pt-2.5 text-xs" aria-label={`${label}: what a month earns`}>
+      {row('Customer pays', gel(m.pays))}
+      {row(`VAT ${Math.round(VAT.rate * 100)}% to the state`, gel(-m.vat))}
+      {row('Card fee and tax', gel(-(m.fee + m.taxes)))}
+      {m.partner > 0 && row('Partner share', gel(-m.partner))}
+      {row(m.ai === null ? 'AI, all credits on the costliest' : "AI, all credits (last month's mix)", gel(-(m.ai ?? m.worst)))}
+      <div className="flex items-baseline justify-between gap-2 border-t border-zinc-200 pt-1.5 text-sm font-semibold">
+        <dt>You earn</dt>
+        <dd className={`tabular-nums ${marginTone(m.base > 0 ? earn / m.base : 0)}`}>
+          {gel(earn)} <span className="text-xs font-normal text-zinc-500">· {pct(m.base > 0 ? earn / m.base : 0)}</span>
+        </dd>
+      </div>
+      {m.ai !== null && row('Worst case (costliest use)', gel(worst), marginTone(m.base > 0 ? worst / m.base : 0))}
+      {cover !== null && fixedGel > 0 && <p className="pt-1 text-zinc-500">{cover} such customer{cover === 1 ? '' : 's'} cover the fixed costs ({gel(fixedGel)} a month).</p>}
+    </dl>
   )
 }

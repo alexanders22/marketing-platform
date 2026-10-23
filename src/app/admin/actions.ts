@@ -340,7 +340,9 @@ export async function savePricing(input: Pricing): Promise<AdminState> {
     packs.push({ credits, priceUsd: Math.round(priceUsd * 100) / 100, priceGel: Math.round(priceGel * 100) / 100 })
   }
   packs.sort((a, b) => a.credits - b.credits)
-  const value: Pricing = { creditPriceUsd: price, actions, veoSecondsPerMonth, plans, packs }
+  const rate = input.gelPerUsd == null ? null : Number(input.gelPerUsd)
+  if (rate !== null && (!Number.isFinite(rate) || rate <= 1 || rate >= 10)) return { error: 'The exchange rate must be between ₾1 and ₾10 per dollar' }
+  const value: Pricing = { creditPriceUsd: price, gelPerUsd: rate === null ? null : Math.round(rate * 10_000) / 10_000, actions, veoSecondsPerMonth, plans, packs }
   await prisma.setting.upsert({
     where: { key: 'pricing' },
     create: { key: 'pricing', value, updatedBy: admin.email },

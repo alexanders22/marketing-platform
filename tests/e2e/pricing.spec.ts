@@ -68,3 +68,39 @@ test('admin pricing: margins per plan, validation, saved prices reach the app', 
   await page.getByRole('button', { name: 'Generate clip with AI' }).click()
   await expect(page.getByRole('radiogroup', { name: 'Clip quality' }).getByRole('radio', { name: /Cinema/ })).toContainText('12 cr/s')
 })
+
+test('admin pricing: an exchange rate fills in lari prices; each plan shows what it earns', async () => {
+  sql(`delete from "Setting" where key in ('pricing','economics')`)
+  await page.goto('/admin/pricing')
+  await page.getByLabel('Lari per dollar').fill('2.8')
+  // A dollar price fills in the lari price at the rate; a round lari price can still be typed.
+  await page.getByLabel('Price of Start').fill('30')
+  await expect(page.getByLabel('Start lari price')).toHaveValue('84')
+  await page.getByLabel('Start lari price').fill('79')
+  await page.getByLabel('Price of pack 1').fill('20')
+  await expect(page.getByLabel('Pack 1 lari price')).toHaveValue('56')
+  // Recalculating brings every lari price back to its dollar price × rate.
+  await page.getByRole('button', { name: 'Recalculate all lari prices at ₾2.80' }).click()
+  await expect(page.getByLabel('Start lari price')).toHaveValue('84')
+  await expect(page.getByLabel('Business lari price')).toHaveValue('210')
+
+  // Start, charged in dollars ($30 = ₾84): the customer pays ₾99.12, ₾15.12
+  // of it VAT; 2.5% card fee on the payment and 1% tax = ₾3.32; then AI.
+  const start = page.getByLabel('Start: what a month earns')
+  await expect(start).toContainText('Customer pays₾99.12')
+  await expect(start).toContainText('VAT 18% to the state−₾15.12')
+  await expect(start).toContainText('Card fee and tax−₾3.32')
+  await expect(start).toContainText(/You earn₾\d+\.\d\d · \d+%/)
+  await expect(start).toContainText(/cover the fixed costs/)
+
+  await page.getByRole('button', { name: 'Save prices' }).click()
+  await expect(page.getByText('Saved — new prices apply to the next charge')).toBeVisible()
+  expect(sql(`select (value->>'gelPerUsd')||'|'||(value->'plans'->'STARTER'->>'monthlyGel') from "Setting" where key='pricing'`)).toBe('2.8|84')
+  // Back to the National Bank's rate.
+  await page.getByRole('button', { name: 'Use the National Bank rate' }).click()
+  await expect(page.getByLabel('Lari per dollar')).toHaveValue('')
+  await page.getByRole('button', { name: 'Save prices' }).click()
+  await expect(page.getByText('Saved — new prices apply to the next charge')).toBeVisible()
+  expect(sql(`select coalesce(value->>'gelPerUsd','null') from "Setting" where key='pricing'`)).toBe('null')
+})
+
