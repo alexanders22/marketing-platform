@@ -33,8 +33,21 @@ export async function raiseAlert(a: NewAlert) {
   }
 }
 
+const PROFILE: Record<string, string> = {
+  FACEBOOK: 'Facebook Page',
+  INSTAGRAM: 'Instagram account',
+  TIKTOK: 'TikTok account',
+  LINKEDIN: 'LinkedIn profile',
+  YOUTUBE: 'YouTube channel',
+  X: 'X account',
+  THREADS: 'Threads profile',
+  TELEGRAM: 'Telegram channel',
+  PINTEREST: 'Pinterest account',
+}
+
 // A connected account stopped working (token expired or access removed).
-export function accountExpiredAlert(a: { id: string; workspaceId: string; name: string; network: string }, reason: string) {
+export function accountExpiredAlert(a: { id: string; workspaceId: string; name: string; network: string; externalId?: string }, reason: string) {
+  const what = a.externalId?.startsWith('urn:li:organization:') ? 'LinkedIn Page' : (PROFILE[a.network] ?? 'account')
   return raiseAlert({
     workspaceId: a.workspaceId,
     kind: 'account_disconnected',
@@ -43,7 +56,7 @@ export function accountExpiredAlert(a: { id: string; workspaceId: string; name: 
     body:
       a.network === 'META_ADS'
         ? `Loudpilot lost access to this ad account: ${reason} Ad results, goals and alerts stop updating until it is reconnected.`
-        : `Loudpilot lost access to this ${a.network === 'INSTAGRAM' ? 'Instagram account' : 'Facebook Page'}: ${reason} Posts will not publish and results will not update until it is reconnected.`,
+        : `Loudpilot lost access to this ${what}: ${reason} Posts will not publish and results will not update until it is reconnected.`,
     href: '/app/channels',
     dedupeKey: `account:${a.id}:expired:${new Date().toISOString().slice(0, 10)}`,
   })

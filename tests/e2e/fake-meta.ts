@@ -99,6 +99,8 @@ export function startFakeMeta() {
       const r = await fetch(imageUrl)
       fetchedImages.push({ url: imageUrl, status: r.status, type: r.headers.get('content-type') })
       if (!r.ok) return json(400, { error: { message: 'Image could not be fetched', code: 9004 } })
+      // Instagram's Content Publishing API takes JPEG images only.
+      if (params.image_url && r.headers.get('content-type') !== 'image/jpeg') return json(400, { error: { message: 'Only photo or video can be accepted as media type.', code: 9004 } })
     }
 
     if (path === '/oauth/access_token') {

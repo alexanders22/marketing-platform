@@ -88,7 +88,7 @@ async function* fbPosts(pageId: string, token: string) {
   try {
     yield* pages<FbPost>(`${pageId}/published_posts`, token, { fields: `${base},insights.metric(post_total_media_view_unique,post_media_view)`, since: since(), limit: 50 }, MAX_POSTS)
   } catch (e) {
-    if (e instanceof MetaError && e.needsReconnect) throw e
+    if (e instanceof MetaError && e.tokenDead) throw e
     yield* pages<FbPost>(`${pageId}/published_posts`, token, { fields: base, since: since(), limit: 50 }, MAX_POSTS)
   }
 }
@@ -98,7 +98,7 @@ async function* igMedia(igId: string, token: string) {
   try {
     yield* pages<IgMedia>(`${igId}/media`, token, { fields: `${base},insights.metric(reach,views,saved,shares,total_interactions)`, limit: 50 }, MAX_POSTS)
   } catch (e) {
-    if (e instanceof MetaError && e.needsReconnect) throw e
+    if (e instanceof MetaError && e.tokenDead) throw e
     yield* pages<IgMedia>(`${igId}/media`, token, { fields: base, limit: 50 }, MAX_POSTS)
   }
 }
@@ -167,11 +167,11 @@ export async function importPostHistory(account: SocialAccount) {
       }
     }
   } catch (e) {
-    if (e instanceof MetaError && e.needsReconnect) {
-      const message = e.message.slice(0, 500)
-      await prisma.socialAccount.update({ where: { id: account.id }, data: { status: 'EXPIRED', lastError: message } })
-      await accountExpiredAlert(account, message)
-    }
+    // Only a dead token needs reconnecting; a missing permission is noted.
+    const message = (e instanceof Error ? e.message : String(e)).slice(0, 500)
+    const dead = e instanceof MetaError && e.tokenDead
+    await prisma.socialAccount.update({ where: { id: account.id }, data: { lastError: message, ...(dead ? { status: 'EXPIRED' as const } : {}) } })
+    if (dead) await accountExpiredAlert(account, message)
     throw e
   }
   await prisma.socialAccount.update({ where: { id: account.id }, data: { historyAt: new Date() } })

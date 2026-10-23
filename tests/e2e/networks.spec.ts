@@ -216,6 +216,16 @@ test('networks that need media say so; TikTok needs the visibility chosen in the
   expect(social.calls.filter((c) => c.path.startsWith('/tiktok/upload/')).at(-1)!.headers['content-range']).toBe('bytes 0-299999/300000')
 })
 
+test('scheduling refuses what the network would refuse at the hour', async () => {
+  // Publishing says the same (above); scheduling says it now, not at the hour.
+  const id = addPost('Words for TikTok', ['TIKTOK'])
+  await page.goto(`/app/posts/${id}`)
+  await page.locator('input[type="datetime-local"]').fill('2099-01-01T10:00')
+  await page.getByRole('button', { name: 'Schedule' }).click()
+  await expect(page.getByText(/TikTok needs a video/)).toBeVisible()
+  expect(sql(`select status from "Post" where id='${id}'`)).toBe('DRAFT')
+})
+
 test('numbers are read back from every network', async () => {
   sql(`update "PostDelivery" set "metricsAt"=null where "postId" in (select id from "Post" where "workspaceId"='${workspaceId}')`)
   const r = await page.request.post('/api/cron/tick?insights=1', { headers: { 'x-khma-cron': cron } }).then((x) => x.json())
