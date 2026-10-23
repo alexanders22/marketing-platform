@@ -71,6 +71,24 @@ export type DashCopy = {
     costPerCustomer: string
     roas: string
   }
+  board: {
+    title: string
+    tip: string
+    place: (n: number, of: number) => string
+    you: string
+    followersTip: string
+    postsTip: string
+    reactionsTip: string
+    connect: string
+    connectCta: string
+    competitors: string
+    competitorsCta: string
+    pending: string
+    refresh: string
+    updated: (date: string) => string
+    all: string
+    noNumbers: string
+  }
 }
 
 const en: DashCopy = {
@@ -140,6 +158,24 @@ const en: DashCopy = {
     costPerLead: 'Ad money divided by the number of leads. The lower, the better.',
     costPerCustomer: 'Ad money divided by the number of purchases.',
     roas: 'How much came back for every 1 spent on ads. 2× means ₾2 of sales for every ₾1 of ads.',
+  },
+  board: {
+    title: 'You vs competitors',
+    tip: 'Public Instagram numbers of your account and your competitors’, updated every day. Instagram does not share reach, so we compare reactions — likes and comments — per post.',
+    place: (n, of) => `You are #${n} of ${of} by reactions per post.`,
+    you: 'you',
+    followersTip: 'People who follow the account. The small number is how many joined in the last week.',
+    postsTip: 'How many posts the account published in the last 30 days.',
+    reactionsTip: 'Likes and comments an average post gets. The more people react, the more Instagram shows the account.',
+    connect: 'Connect your Instagram business account to compare yourself with competitors.',
+    connectCta: 'Connect Instagram',
+    competitors: 'Add your competitors’ Instagram to see who gets more reactions.',
+    competitorsCta: 'Add competitors',
+    pending: 'The first numbers arrive within an hour.',
+    refresh: 'Refresh',
+    updated: (d) => `Updated ${d}`,
+    all: 'All competitors',
+    noNumbers: 'no numbers',
   },
 }
 
@@ -229,6 +265,24 @@ const ka: DashCopy = {
     costPerCustomer: 'რეკლამის თანხა გაყოფილი შესყიდვების რაოდენობაზე.',
     roas: 'რამდენი დაბრუნდა რეკლამაზე დახარჯულ ყოველ 1-ზე. 2× ნიშნავს ₾2 გაყიდვას ყოველ ₾1 რეკლამაზე.',
   },
+  board: {
+    title: 'თქვენ და კონკურენტები',
+    tip: 'თქვენი და კონკურენტების Instagram-ის საჯარო მონაცემები, ახლდება ყოველდღე. Instagram არ აჩვენებს მიღწევას (reach), ამიტომ ვადარებთ რეაქციებს — მოწონებებს და კომენტარებს — თითო პოსტზე.',
+    place: (n, of) => `თქვენი ადგილი: ${n} / ${of} — რეაქციებით თითო პოსტზე.`,
+    you: 'თქვენ',
+    followersTip: 'ადამიანები, რომლებიც ანგარიშს გამოიწერენ. პატარა რიცხვი — რამდენი დაემატა ბოლო კვირაში.',
+    postsTip: 'რამდენი პოსტი გამოაქვეყნა ანგარიშმა ბოლო 30 დღეში.',
+    reactionsTip: 'მოწონებები და კომენტარები, რომლებსაც საშუალოდ ერთი პოსტი იღებს. რაც მეტი რეაქციაა, მით მეტს აჩვენებს Instagram ანგარიშს.',
+    connect: 'დააკავშირეთ თქვენი Instagram ბიზნეს ანგარიში, რომ შეედაროთ კონკურენტებს.',
+    connectCta: 'Instagram-ის დაკავშირება',
+    competitors: 'დაამატეთ კონკურენტების Instagram, რომ ნახოთ, ვინ იღებს მეტ რეაქციას.',
+    competitorsCta: 'კონკურენტების დამატება',
+    pending: 'პირველი მონაცემები ერთ საათში მოვა.',
+    refresh: 'განახლება',
+    updated: (d) => `განახლდა ${d}`,
+    all: 'ყველა კონკურენტი',
+    noNumbers: 'მონაცემები არ არის',
+  },
 }
 
 const ru: DashCopy = {
@@ -316,6 +370,24 @@ const ru: DashCopy = {
     costPerLead: 'Деньги на рекламу, делённые на число заявок. Чем меньше, тем лучше.',
     costPerCustomer: 'Деньги на рекламу, делённые на число покупок.',
     roas: 'Сколько вернулось на каждую 1, потраченную на рекламу. 2× — это ₾2 продаж на каждый ₾1 рекламы.',
+  },
+  board: {
+    title: 'Вы и конкуренты',
+    tip: 'Открытые данные Instagram — ваши и конкурентов, обновляются каждый день. Охват Instagram не показывает, поэтому сравниваем реакции — лайки и комментарии — на один пост.',
+    place: (n, of) => `Вы на ${n}-м месте из ${of} по реакциям на пост.`,
+    you: 'вы',
+    followersTip: 'Люди, которые подписаны на аккаунт. Маленькое число — сколько добавилось за последнюю неделю.',
+    postsTip: 'Сколько постов аккаунт опубликовал за последние 30 дней.',
+    reactionsTip: 'Сколько лайков и комментариев в среднем получает один пост. Чем больше реакций, тем чаще Instagram показывает аккаунт.',
+    connect: 'Подключите бизнес-аккаунт Instagram, чтобы сравнить себя с конкурентами.',
+    connectCta: 'Подключить Instagram',
+    competitors: 'Добавьте Instagram конкурентов, чтобы увидеть, у кого больше реакций.',
+    competitorsCta: 'Добавить конкурентов',
+    pending: 'Первые данные появятся в течение часа.',
+    refresh: 'Обновить',
+    updated: (d) => `Обновлено ${d}`,
+    all: 'Все конкуренты',
+    noNumbers: 'нет данных',
   },
 }
 

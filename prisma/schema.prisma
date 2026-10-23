@@ -253,6 +253,7 @@ model Workspace {
   competitors      Competitor[]
   brandbook        Brandbook?
   competitorReports CompetitorReport[]
+  instagramBenchmarks InstagramBenchmark[]
   bioPages         BioPage[]
   adCampaigns      AdCampaign[]
   websiteDays      WebsiteDay[]
@@ -1339,7 +1340,40 @@ model Competitor {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  benchmarks  InstagramBenchmark[]
+
   @@index([workspaceId])
+}
+
+// Public Instagram numbers of the company (competitorId null) and of its
+// competitors, one row a day — what Instagram shows of business and creator
+// accounts (business discovery): followers, posts, likes and comments.
+// Reach is private, so the leaderboard compares reactions.
+model InstagramBenchmark {
+  id           String      @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  competitorId String?
+  competitor   Competitor? @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  username     String
+  // YYYY-MM-DD (UTC).
+  date         String
+  name         String?
+  avatarUrl    String?
+  followers    Int?
+  mediaCount   Int?
+  // Posts in the 30 days before, and the average reactions on them (or on
+  // the latest posts when there were none).
+  posts30      Int?
+  avgLikes     Float?
+  avgComments  Float?
+  // Why there are no numbers (not a business account, no such account…).
+  error        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([workspaceId, username, date])
+  @@index([workspaceId, date])
 }
 
 // "Us vs them": the comparison table, where the company wins, gaps and

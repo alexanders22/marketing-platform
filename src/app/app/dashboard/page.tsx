@@ -14,6 +14,8 @@ import { metricDef } from '@/lib/goal-metrics'
 import { prisma } from '@/lib/prisma'
 import { readinessOf } from '@/lib/readiness'
 import { resultsOf } from '@/lib/results'
+import { leaderboard } from '@/lib/benchmarks'
+import { Leaderboard } from '../competitors/Leaderboard'
 import { goalName } from '../goals/GoalList'
 import { ProfileReadiness } from './ProfileReadiness'
 
@@ -43,12 +45,13 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
   const t = DASH[await appLang()]
   const q = await searchParams
   const days = (PERIODS.find((p) => String(p) === q.days) ?? 30) as Period
-  const [r, goals, alerts, recs, ready, pilot] = await Promise.all([
+  const [r, goals, alerts, recs, ready, board, pilot] = await Promise.all([
     resultsOf(workspace.id, days),
     prisma.goal.findMany({ where: { workspaceId: workspace.id, active: true }, include: { adCampaign: { select: { name: true } } }, orderBy: { createdAt: 'desc' } }),
     prisma.alert.count({ where: { workspaceId: workspace.id, readAt: null, severity: { in: ['CRITICAL', 'WARNING'] } } }),
     prisma.recommendation.findMany({ where: { workspaceId: workspace.id, status: 'OPEN' }, orderBy: { createdAt: 'desc' }, take: 3, select: { id: true, title: true } }),
     readinessOf(workspace.id, brand),
+    leaderboard(workspace.id),
     role === 'EDITOR' ? null : interviewState(workspace.id),
   ])
   const step = Object.fromEntries(r.steps.map((s) => [s.key, s])) as Record<(typeof r.steps)[number]['key'], (typeof r.steps)[number]>
@@ -218,6 +221,8 @@ export default async function DashboardPage({ searchParams }: PageProps<'/app/da
           )}
         </Panel>
       </div>
+
+      <Leaderboard board={board} t={t.board} whatIs={t.whatIs} />
 
       <ProfileReadiness r={ready} t={t.readiness} />
 

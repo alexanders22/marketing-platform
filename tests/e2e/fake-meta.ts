@@ -17,6 +17,13 @@ export function startFakeMeta() {
   let failPath: { re: RegExp; code: number; message: string } | null = null
   let leadsStatus = 'ACTIVE'
   let canManageAds = true
+  // Business discovery: public numbers of Instagram business accounts
+  // (posts: in the last 30 days, each with likes and comments).
+  const discovery: Record<string, { name: string; followers: number; posts: number; likes: number; comments: number }> = {
+    bloombakery: { name: 'Bloom Bakery', followers: 1200, posts: 8, likes: 40, comments: 5 },
+    'rival.one': { name: 'Rival One', followers: 3400, posts: 12, likes: 100, comments: 20 },
+    rival_two: { name: 'Rival Two', followers: 800, posts: 4, likes: 20, comments: 2 },
+  }
   // Pixel 1234567890123456: browser events, and server events when on.
   let serverEvents = false
   const hooks: { headers: Record<string, string | string[] | undefined>; body: string }[] = []
@@ -192,6 +199,18 @@ export function startFakeMeta() {
       })
       return json(200, { data })
     }
+    if (req.method === 'GET' && path === '/ig-1' && params.fields?.startsWith('business_discovery')) {
+      const u = params.fields.match(/^business_discovery\.username\(([^)]+)\)/)?.[1] ?? ''
+      const d = discovery[u]
+      if (!d) return json(400, { error: { message: 'Invalid user id', code: 110, error_subcode: 2207013 } })
+      const media = Array.from({ length: d.posts }, (_, i) => ({
+        id: `bd-${u}-${i}`,
+        timestamp: new Date(Date.now() - (1 + i * 2) * 86_400_000).toISOString().replace('Z', '+0000'),
+        like_count: d.likes,
+        comments_count: d.comments,
+      }))
+      return json(200, { business_discovery: { username: u, name: d.name, followers_count: d.followers, media_count: 100 + d.posts, media: { data: media } }, id: 'ig-1' })
+    }
     if (req.method === 'GET' && path === '/ig-1/media') {
       const kinds = [
         { media_type: 'VIDEO', media_product_type: 'REELS', reach: 3000, eng: 300 },
@@ -295,6 +314,7 @@ export function startFakeMeta() {
     failNextPublish: (code: number, message: string) => (failNextPublish = { code, message }),
     failNext: (re: RegExp, code: number, message: string) => (failPath = { re, code, message }),
     setLeadsStatus: (s: string) => (leadsStatus = s),
+    setFollowers: (username: string, n: number) => (discovery[username].followers = n),
     setCanManageAds: (v: boolean) => (canManageAds = v),
     setServerEvents: (v: boolean) => (serverEvents = v),
     hooks,
