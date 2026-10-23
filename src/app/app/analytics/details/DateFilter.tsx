@@ -54,7 +54,7 @@ export function DateFilter({ period, range }: { period: number; range: { from: s
 
   const go = (r: { from: string; to: string }) => {
     setOpen(false)
-    router.push(`/app/dashboard?from=${r.from}&to=${r.to}`)
+    router.push(`/app/analytics/details?from=${r.from}&to=${r.to}`)
   }
   const valid = from && to && from <= to
 
@@ -64,7 +64,7 @@ export function DateFilter({ period, range }: { period: number; range: { from: s
         {[7, 30, 90].map((n) => (
           <Link
             key={n}
-            href={`/app/dashboard?days=${n}`}
+            href={`/app/analytics/details?days=${n}`}
             aria-current={!range && n === period ? 'page' : undefined}
             className={`rounded-md px-3 py-1.5 font-medium ${!range && n === period ? 'bg-white shadow-sm' : 'text-zinc-500 hover:text-zinc-800'}`}
           >

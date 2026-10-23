@@ -36,7 +36,7 @@ test('connect one property: read right away, numbers on the dashboard', async ()
   expect(enc).not.toContain('fake-refresh')
   expect(google.reports.map((r) => r.dimensions.join('+')).sort()).toEqual(['date', 'date+eventName', 'date+sessionCampaignName', 'date+sessionDefaultChannelGroup'])
 
-  await page.goto('/app/dashboard?days=30')
+  await page.goto('/app/analytics/details?days=30')
   const site = page.getByRole('region', { name: 'Website' })
   await expect(site).toBeVisible()
   // 14 days of 100…113 visits, 3 key events a day (2 sign-ups, 1 lead).
@@ -101,12 +101,13 @@ test('a website goal: sign-ups a week, checked against Google Analytics, shown o
 
   await page.goto('/app/dashboard')
   const card = page.getByRole('region', { name: 'Goals' })
-  await expect(card.getByText(/1 active · 1 need attention/)).toBeVisible()
-  await expect(card.getByText('Key events (sign-ups, leads, sales) — Website · sign_up')).toBeVisible()
+  await expect(card.getByText('0 of 1 on track')).toBeVisible()
+  await expect(card.getByText('Behind')).toBeVisible()
+  await expect(card).toContainText('Key events (sign-ups, leads, sales) · Website · sign_up')
 })
 
 test('dashboard date filter: presets and a custom range compared with the days before', async () => {
-  await page.goto('/app/dashboard')
+  await page.goto('/app/analytics/details')
   await page.getByRole('button', { name: 'Dates' }).click()
   const dlg = page.getByRole('dialog', { name: 'Choose dates' })
   const day = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
@@ -114,7 +115,7 @@ test('dashboard date filter: presets and a custom range compared with the days b
   await dlg.getByLabel('To').fill(day(2))
   await dlg.getByRole('button', { name: 'Apply' }).click()
   await page.waitForURL(new RegExp(`from=${day(6)}&to=${day(2)}`))
-  await expect(page.getByText(`${day(6)} – ${day(2)} · ads, posts and website in one place`)).toBeVisible()
+  await expect(page.getByText(`${day(6)} – ${day(2)} · every number of your ads, posts and website (Google Analytics)`)).toBeVisible()
   await expect(page.getByRole('button', { name: `${day(6)} – ${day(2)}`, exact: true })).toBeVisible()
   // Five days of the fake: 107…111 visits = 545 per property, two properties.
   await expect(page.getByRole('region', { name: 'Website' }).getByRole('group', { name: 'Visits', exact: true }).getByText('1,090')).toBeVisible()

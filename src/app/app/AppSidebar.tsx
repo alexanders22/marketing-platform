@@ -13,6 +13,7 @@ import {
   FilePen,
   FileText,
   Headphones,
+  Languages,
   Loader2,
   LogOut,
   Menu,
@@ -30,6 +31,8 @@ import { switchCompany } from './companies/actions'
 import { CreditsBadge } from './CreditsBadge'
 import { MAIN, SETUP, sectionOf, type Section } from './nav'
 import type { PilotState } from '@/lib/business'
+import type { AppLang } from '@/lib/app-lang'
+import { LanguageSwitch } from '@/components/LanguageSwitch'
 
 export type SidebarProps = {
   workspace: string
@@ -50,6 +53,8 @@ export type SidebarProps = {
   superAdmin: boolean
   // The strategy interview (null for editors, who can't plan).
   pilot: PilotState | null
+  // Language of the plain-words parts (Dashboard, explanations).
+  lang: AppLang
 }
 
 export function AppSidebar(props: SidebarProps) {
@@ -307,7 +312,8 @@ function WorkspaceMenu({
   currentId,
   canAddCompany,
   superAdmin,
-}: Pick<SidebarProps, 'workspace' | 'logoUrl' | 'user' | 'companies' | 'currentId' | 'canAddCompany' | 'superAdmin'>) {
+  lang,
+}: Pick<SidebarProps, 'workspace' | 'logoUrl' | 'user' | 'companies' | 'currentId' | 'canAddCompany' | 'superAdmin' | 'lang'>) {
   const [open, setOpen] = useState(false)
   const [switching, startSwitch] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
@@ -365,6 +371,10 @@ function WorkspaceMenu({
               Admin panel
             </MenuLink>
           )}
+          <div className="flex items-center gap-2 px-2.5 py-1.5 text-sm text-zinc-700">
+            <Languages size={16} /> <span className="mr-auto">Language</span>
+            <LanguageSwitch lang={lang} />
+          </div>
           <MenuLink href="/app/brand" icon={Palette} onClick={() => setOpen(false)}>
             Brand kit
           </MenuLink>

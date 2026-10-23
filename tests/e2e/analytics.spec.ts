@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { startFakeMeta } from './fake-meta'
 import { newAccount, sql } from './helpers'
 
-// Results: one funnel from the first view of an ad or post to the sale —
+// Analytics → Overview: one funnel from the first view of an ad or post to the sale —
 // Meta ads and posts (fake Meta), then the website through the Loudpilot
 // Tag — with cost per lead, per customer and the return on ad spend.
 
@@ -29,11 +29,14 @@ test.afterAll(async () => {
 
 test('nothing connected: every step says how to start measuring it', async () => {
   await page.goto('/app/dashboard')
-  await page.getByRole('link', { name: 'From view to sale' }).click()
-  await expect(page).toHaveURL(/\/app\/results\?days=30$/)
-  await expect(page.getByRole('heading', { name: 'Results', exact: true })).toBeVisible()
-  // Results is the section; Overview its first tab.
-  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Results' })).toHaveAttribute('aria-current', 'page')
+  await page.getByRole('link', { name: 'Detailed analytics' }).click()
+  await expect(page).toHaveURL(/\/app\/analytics\?days=30$/)
+  await expect(page.getByRole('heading', { name: 'Analytics', exact: true })).toBeVisible()
+  // Analytics is the section; Overview its first tab.
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Analytics' })).toHaveAttribute('aria-current', 'page')
+  // Old links still work.
+  await page.goto('/app/results?days=7')
+  await expect(page).toHaveURL(/\/app\/analytics\?days=7$/)
   const funnel = page.getByRole('list', { name: 'From view to sale' })
   await expect(funnel.getByRole('listitem')).toHaveCount(5)
   await expect(funnel.getByRole('listitem', { name: 'Saw your ads and posts' })).toContainText('Connect Meta Ads or your pages')
@@ -46,7 +49,7 @@ test('with Meta ads: views and clicks, spend, the campaigns', async () => {
   await page.locator('a[href="/auth/meta"]').click()
   await page.waitForURL(/connected=3/)
   await expect.poll(() => sql(`select count(*) from "AdInsightDay" i join "AdCampaign" c on c.id=i."campaignId" where c."workspaceId"='${ws}'`), { timeout: 20_000 }).toBe('730')
-  await page.goto('/app/results')
+  await page.goto('/app/analytics')
   const seen = await num('seen')
   const clicked = await num('clicked')
   expect(seen).toBeGreaterThan(0)
@@ -56,7 +59,7 @@ test('with Meta ads: views and clicks, spend, the campaigns', async () => {
   await expect(page.getByRole('table', { name: 'Ad campaigns' })).toContainText('Lead Gen — Tbilisi')
   // No website numbers yet.
   await expect(page.getByRole('listitem', { name: 'Visited the website' })).toContainText('Install the Loudpilot Tag')
-  await expect(page.getByText('Ad spend', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'What is this? Ad spend' })).toBeVisible()
 })
 
 test('with the Loudpilot Tag: visits, leads and a sale by source; cost per lead and return on ad spend', async () => {
@@ -72,7 +75,7 @@ test('with the Loudpilot Tag: visits, leads and a sale by source; cost per lead 
   sql(`insert into "Visit"(id, "siteId", "visitorId", sid, "landingUrl", source, medium, "startedAt") values ('rs4${t}', '${site}', 'rv4${t}', 's4${t}', 'https://bloom.ge/', 'google', 'organic', now() - interval '10 days')`)
   sql(`update "Site" set "lastEventAt"=now() where id='${site}'`)
 
-  await page.goto('/app/results?days=7')
+  await page.goto('/app/analytics?days=7')
   await expect(step('visited')).toHaveText('3')
   await expect(step('leads')).toHaveText('2')
   await expect(step('customers')).toHaveText('1')
@@ -100,7 +103,7 @@ test('with the Loudpilot Tag: visits, leads and a sale by source; cost per lead 
 test('another workspace never sees these numbers', async ({ browser }) => {
   const other = await browser.newPage()
   await newAccount(other, 'results-other')
-  await other.goto('/app/results')
+  await other.goto('/app/analytics')
   await expect(other.getByRole('listitem', { name: 'Visited the website' })).toContainText('Install the Loudpilot Tag')
   await expect(other.getByRole('listitem', { name: 'Saw your ads and posts' })).toContainText('Connect')
   await other.close()

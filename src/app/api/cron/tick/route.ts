@@ -15,6 +15,7 @@ import { resumeRenders } from '@/lib/video-render'
 import { syncAdsDue } from '@/lib/meta-ads'
 import { reviewsDue } from '@/lib/weekly'
 import { publishDue, refreshInsights } from '@/lib/publisher'
+import { refreshBenchmarksDue } from '@/lib/benchmarks'
 
 // Background work, called every minute by src/instrumentation.ts (or any
 // external cron with the header). Post insights run every 30 minutes; each
@@ -28,6 +29,7 @@ let lastHolidays = 0
 let lastPayments = 0
 let lastSubscriptions = 0
 let lastReminders = 0
+let lastBenchmarks = 0
 
 export async function POST(req: Request) {
   const given = Buffer.from(req.headers.get('x-khma-cron') ?? '')
@@ -99,8 +101,15 @@ export async function POST(req: Request) {
     lastReminders = Date.now()
     reminders = await renewalRemindersDue().catch((e) => (console.error('renewal reminders failed', e), 0))
   }
+  // Competitors' public Instagram numbers: a row a day per company, after the response.
+  let benchmarks = false
+  if (q.get('benchmarks') === '1' || Date.now() - lastBenchmarks > 60 * 60 * 1000) {
+    lastBenchmarks = Date.now()
+    benchmarks = true
+    after(() => refreshBenchmarksDue().then(() => undefined, (e) => console.error('benchmarks failed', e)))
+  }
   // Website conversions from the Loudpilot Tag → Meta Conversions API.
   const conversions = await forwardConversionsDue().catch((e) => (console.error('conversions api failed', e), 0))
   const alerts = await dispatchAlerts()
-  return Response.json({ published, insights, ads, website, inbox, clips, goals, dossiers, planCredits, holidays, payments, subscriptions, reminders, conversions, alerts })
+  return Response.json({ published, insights, ads, website, inbox, clips, goals, dossiers, planCredits, holidays, payments, subscriptions, reminders, conversions, alerts, benchmarks })
 }

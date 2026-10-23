@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowRight, BarChart3, BookOpen, Building2, Check, ChevronDown, Globe, Map as MapIcon, Megaphone, MessagesSquare, Palette, PenLine, Rocket, Search, Share2, Sparkles, Swords, Target, Bot, Radar, Tag } from 'lucide-react'
 import { Ring } from '@/components/viz'
+import type { DashCopy } from '@/lib/dash-copy'
 import type { Readiness, StepGroup } from '@/lib/readiness'
 
 const ICON = {
@@ -30,12 +31,14 @@ const GROUP: Record<StepGroup, { bar: string; chip: string }> = {
   Growth: { bar: 'bg-orange-500', chip: 'bg-orange-50 text-orange-600' },
 }
 
-const stage = (p: number) => (p < 35 ? 'Getting started' : p < 70 ? 'Taking shape' : 'Almost ready')
 
 // "How ready is the profile": a score, the steps left in order of impact and
 // the full checklist by group. Hidden once everything is done.
-export function ProfileReadiness({ r }: { r: Readiness }) {
-  if (r.percent >= 100) return null
+export function ProfileReadiness({ r: raw, t }: { r: Readiness; t: DashCopy['readiness'] }) {
+  if (raw.percent >= 100) return null
+  // The steps in the chosen language (English is what readiness.ts writes).
+  const r = { ...raw, steps: raw.steps.map((s) => ({ ...s, ...t.steps[s.key] })) }
+  const stage = (p: number) => t.stages[p < 35 ? 0 : p < 70 ? 1 : 2]
   const groups = [...new Set(r.steps.map((s) => s.group))]
   const next = r.steps
     .filter((s) => !s.done)
@@ -51,18 +54,18 @@ export function ProfileReadiness({ r }: { r: Readiness }) {
         {/* Score */}
         <div className="flex flex-col">
           <div className="flex items-center gap-4">
-            <Ring value={r.percent / 100} size={92} stroke={9} label="Profile readiness">
+            <Ring value={r.percent / 100} size={92} stroke={9} label={t.title}>
               <span className="text-center leading-none">
                 <span className="block text-2xl font-bold tracking-tight text-zinc-900 tabular-nums">{r.percent}%</span>
               </span>
             </Ring>
             <div className="min-w-0">
-              <p className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">Profile readiness</p>
+              <p className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">{t.title}</p>
               <h2 id="readiness-heading" className="text-lg font-bold tracking-tight text-zinc-900">
                 {stage(r.percent)}
               </h2>
               <p className="text-xs text-zinc-500 tabular-nums">
-                {r.done} of {r.steps.length} steps done
+                {t.stepsDone(r.done, r.steps.length)}
               </p>
             </div>
           </div>
@@ -73,7 +76,7 @@ export function ProfileReadiness({ r }: { r: Readiness }) {
               const steps = r.steps.filter((s) => s.group === g)
               return (
                 <div key={g} className="grid grid-cols-[64px_1fr_auto] items-center gap-2 text-xs">
-                  <span className="text-zinc-500">{g}</span>
+                  <span className="text-zinc-500">{t.groups[g]}</span>
                   <span className="flex gap-1">
                     {steps.map((s) => (
                       <span key={s.key} className={`h-2 flex-1 rounded-full ${s.done ? GROUP[g].bar : 'bg-zinc-100'}`} />
@@ -88,13 +91,13 @@ export function ProfileReadiness({ r }: { r: Readiness }) {
           </div>
           <p className="mt-4 flex items-start gap-2 rounded-xl bg-violet-50 px-3 py-2 text-xs text-violet-900">
             <Sparkles size={14} className="mt-px shrink-0 text-violet-500" />
-            <span>The more Loudpilot knows, the better its posts, ads and plans fit your business.</span>
+            <span>{t.moreKnows}</span>
           </p>
         </div>
 
         {/* Next steps */}
         <div className="min-w-0">
-          <p className="mb-2 text-sm font-semibold text-zinc-800">Do next</p>
+          <p className="mb-2 text-sm font-semibold text-zinc-800">{t.doNext}</p>
           <ol className="space-y-2">
             {next.map((s, i) => {
               const Icon = ICON[s.key as keyof typeof ICON] ?? Sparkles
@@ -121,12 +124,12 @@ export function ProfileReadiness({ r }: { r: Readiness }) {
 
           <details className="group/all mt-3">
             <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-violet-700 select-none [&::-webkit-details-marker]:hidden">
-              All {r.steps.length} steps <ChevronDown size={14} className="transition group-open/all:rotate-180" />
+              {t.allSteps(r.steps.length)} <ChevronDown size={14} className="transition group-open/all:rotate-180" />
             </summary>
             <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {groups.map((g) => (
                 <div key={g}>
-                  <p className="mb-1.5 text-xs font-semibold tracking-wider text-zinc-400 uppercase">{g}</p>
+                  <p className="mb-1.5 text-xs font-semibold tracking-wider text-zinc-400 uppercase">{t.groups[g]}</p>
                   <ul className="space-y-1">
                     {r.steps
                       .filter((s) => s.group === g)
@@ -135,7 +138,7 @@ export function ProfileReadiness({ r }: { r: Readiness }) {
                           <Link href={s.href} className={`flex items-center gap-2 rounded-lg px-1.5 py-1 text-sm transition hover:bg-zinc-50 ${s.done ? 'text-zinc-400' : 'text-zinc-800'}`}>
                             <span className={`grid h-4.5 w-4.5 shrink-0 place-items-center rounded-full ${s.done ? 'bg-emerald-500 text-white' : 'ring-1 ring-zinc-300 ring-inset'}`}>{s.done && <Check size={11} strokeWidth={3} />}</span>
                             <span className={`truncate ${s.done ? 'line-through decoration-zinc-300' : ''}`}>{s.label}</span>
-                            <span className="sr-only">{s.done ? '(done)' : '(to do)'}</span>
+                            <span className="sr-only">{s.done ? t.done : t.todo}</span>
                           </Link>
                         </li>
                       ))}

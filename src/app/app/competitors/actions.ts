@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { aiEnabled, buildCompanyProfile, compareCompetitors, findCompetitors, LANGUAGES, type CompanyProfile, type FoundCompetitor } from '@/lib/ai'
@@ -9,6 +10,7 @@ import { requireContext } from '@/lib/context'
 import { balanceOf, charge, notEnough, prices } from '@/lib/credits'
 import { crawlSite, withDossier } from '@/lib/dossier'
 import { prisma } from '@/lib/prisma'
+import { igUsername, refreshBenchmarks } from '@/lib/benchmarks'
 
 const MAX = 10
 
@@ -35,6 +37,8 @@ export async function addCompetitor(raw: z.input<typeof Input>): Promise<{ id?: 
   const row = await prisma.competitor.create({
     data: { workspaceId: workspace.id, name: c.name, website: c.website || null, facebook: c.facebook || null, instagram: c.instagram || null, notes: c.notes },
   })
+  // Their Instagram numbers for the leaderboard, right away.
+  if (igUsername(row.instagram)) after(() => refreshBenchmarks(workspace.id).then(() => undefined, (e) => console.error('benchmarks failed', e)))
   revalidatePath('/app/competitors')
   return { id: row.id }
 }
@@ -58,6 +62,7 @@ export async function updateCompetitor(id: string, raw: z.input<typeof Input>): 
       ...(old.website !== (c.website || null) ? { profile: Prisma.DbNull, analyzedAt: null, error: null } : {}),
     },
   })
+  if (igUsername(c.instagram) && old.instagram !== (c.instagram || null)) after(() => refreshBenchmarks(workspace.id).then(() => undefined, (e) => console.error('benchmarks failed', e)))
   revalidatePath('/app/competitors')
   return {}
 }
@@ -155,6 +160,20 @@ export async function compareNow(input: { language: string; refresh?: boolean })
     return { error: notEnough(COST.compare, await balanceOf(account.id)) }
   }
   await prisma.competitorReport.create({ data: { workspaceId: workspace.id, language, data: data as unknown as Prisma.InputJsonValue } })
+  revalidatePath('/app', 'layout')
+  return {}
+}
+
+// "Refresh" on the leaderboard: today's numbers now, at most every 10 minutes.
+export async function refreshLeaderboard(): Promise<{ error?: string }> {
+  const { workspace } = await requireContext()
+  const today = new Date().toISOString().slice(0, 10)
+  const last = await prisma.instagramBenchmark.findFirst({ where: { workspaceId: workspace.id, date: today }, orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } })
+  if (last && Date.now() - last.updatedAt.getTime() < 10 * 60_000) {
+    revalidatePath('/app', 'layout')
+    return {}
+  }
+  if (!(await refreshBenchmarks(workspace.id))) return { error: 'Connect your Instagram business account first.' }
   revalidatePath('/app', 'layout')
   return {}
 }
