@@ -38,7 +38,7 @@ export const POST = handler(async (req) => {
     if (partner.ownerAccountId) {
       // The same lock as adding a company in the app, so the two can't race past the limit.
       await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'companies:' + partner.ownerAccountId}))`
-      const owner = await tx.account.findUniqueOrThrow({ where: { id: partner.ownerAccountId }, select: { plan: true, partnerId: true } })
+      const owner = await tx.account.findUniqueOrThrow({ where: { id: partner.ownerAccountId }, select: { plan: true, partnerId: true, trialEndsAt: true, paidUntil: true } })
       const limit = limitsFor(owner).companies
       if ((await tx.workspace.count({ where: { accountId: partner.ownerAccountId } })) >= limit) {
         throw new ApiError(409, 'company_limit', `Your plan includes ${limit} companies`)

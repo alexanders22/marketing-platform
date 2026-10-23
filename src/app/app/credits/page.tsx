@@ -59,7 +59,7 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
   const active = billingState(account) === 'active'
   const upgradeTo = plans.find((p) => p.id === q.upgrade && p.id !== account.plan)
   const upgrade =
-    upgradeTo && plan && active && account.paidUntil
+    upgradeTo && plan && account.paidUntil
       ? (() => {
           const now = new Date()
           const converted = convertRemaining(account.paidUntil, cur === 'GEL' ? plan.monthlyGel : plan.monthly, cur === 'GEL' ? upgradeTo.monthlyGel : upgradeTo.monthly, now)!
@@ -76,12 +76,14 @@ export default async function CreditsPage({ searchParams }: PageProps<'/app/cred
 
       {paid && <EscapeFrame />}
       {paid && <PaymentResult p={paid} paidUntil={account.paidUntil} />}
-      {/* A dearer plan picked during a paid period: bought, with the rest of the old plan converted. */}
+      {/* A dearer plan picked once the account has paid: bought, with the rest of the old plan converted. */}
       {upgrade && plan && (
         <section aria-label="Upgrade your plan" className="mb-4 rounded-xl bg-indigo-50 p-4 ring-1 ring-indigo-200">
           <p className="font-semibold text-indigo-950">Upgrade to {upgrade.plan.name}</p>
           <p className="mt-0.5 text-sm text-indigo-900">
-            The {upgrade.daysLeft} days left of {plan.name} become {upgrade.daysConverted} days of {upgrade.plan.name}, and a {upgrade.cycle === 'YEARLY' ? 'year' : 'month'} is added on top.
+            {active
+              ? `The ${upgrade.daysLeft} days left of ${plan.name} become ${upgrade.daysConverted} days of ${upgrade.plan.name}, and a ${upgrade.cycle === 'YEARLY' ? 'year' : 'month'} is added on top.`
+              : `Your ${plan.name} plan has ended — a ${upgrade.cycle === 'YEARLY' ? 'year' : 'month'} of ${upgrade.plan.name} starts today.`}
           </p>
           <div className="mt-3">
             <BuyButton
