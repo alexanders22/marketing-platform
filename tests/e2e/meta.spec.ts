@@ -156,6 +156,8 @@ test('scheduled post is sent by the ticker; planner drafts are not', async () =>
 test('schedule button needs a future time, a connected network and what each network needs', async () => {
   const id = addPost('Schedule me')
   await page.goto(`/app/posts/${id}`)
+  // Controlled input: wait for hydration, or it resets what was typed.
+  await page.waitForLoadState('networkidle')
   await page.locator('input[type="datetime-local"]').fill('2020-01-01T10:00')
   await page.getByRole('button', { name: 'Schedule' }).click()
   await expect(page.getByText('Pick a time in the future')).toBeVisible()
@@ -166,6 +168,7 @@ test('schedule button needs a future time, a connected network and what each net
   expect(status(id)).toBe('DRAFT')
   sql(`update "Post" set channels='{FACEBOOK}' where id='${id}'`)
   await page.goto(`/app/posts/${id}`)
+  await page.waitForLoadState('networkidle')
   await page.locator('input[type="datetime-local"]').fill('2099-01-01T10:00')
   await page.getByRole('button', { name: 'Schedule' }).click()
   await expect(page.getByText('Scheduled', { exact: true })).toBeVisible()

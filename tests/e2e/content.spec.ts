@@ -356,8 +356,8 @@ test('Post editor: images via MediaPicker (upload + pick from library), plan, sa
   const src = await page.locator('main img[src^="/media/"]').first().getAttribute('src')
   expect((await page.request.get(src!)).status()).toBe(200)
 
-  // Plan for Oct 15, 14:30 local.
-  await page.locator('input[type=datetime-local]').fill('2026-10-15T14:30')
+  // Plan for Oct 15, 14:30 local (far ahead, so it stays upcoming).
+  await page.locator('input[type=datetime-local]').fill('2099-10-15T14:30')
   await expect(page.getByRole('button', { name: 'Save to planner' })).toBeVisible()
   await page.getByRole('button', { name: 'Save to planner' }).click()
   await expect(page).toHaveURL(/\/app\/posts\/c[a-z0-9]+$/)
@@ -366,17 +366,17 @@ test('Post editor: images via MediaPicker (upload + pick from library), plan, sa
   const row = sql(
     `select content, array_to_string(hashtags,' '), cardinality("mediaIds"), array_to_string(channels,' '), to_char("scheduledAt",'YYYY-MM-DD"T"HH24:MI') from "Post" where id='${id}'`,
   )
-  const offsetMin = await page.evaluate(() => new Date('2026-10-15T14:30').getTimezoneOffset())
-  const utc = new Date(Date.UTC(2026, 9, 15, 14, 30) + offsetMin * 60_000).toISOString().slice(0, 16)
+  const offsetMin = await page.evaluate(() => new Date('2099-10-15T14:30').getTimezoneOffset())
+  const utc = new Date(Date.UTC(2099, 9, 15, 14, 30) + offsetMin * 60_000).toISOString().slice(0, 16)
   expect(row).toBe(`QA planned post with images|qa Planner|2|FACEBOOK INSTAGRAM|${utc}`)
-  await expect(page.locator('input[type=datetime-local]')).toHaveValue('2026-10-15T14:30')
+  await expect(page.locator('input[type=datetime-local]')).toHaveValue('2099-10-15T14:30')
 
   // Calendar: right local day with time and text.
-  await page.goto('/app/planner?m=2026-10')
-  const cell = page.locator('div.group').filter({ has: page.getByLabel('New post on 2026-10-15', { exact: true }) })
+  await page.goto('/app/planner?m=2099-10')
+  const cell = page.locator('div.group').filter({ has: page.getByLabel('New post on 2099-10-15', { exact: true }) })
   await expect(cell.getByRole('link', { name: /14:30\s*QA planned post/ })).toBeVisible()
   // Not on neighbouring days.
-  for (const d of ['2026-10-14', '2026-10-16'])
+  for (const d of ['2099-10-14', '2099-10-16'])
     await expect(page.locator('div.group').filter({ has: page.getByLabel(`New post on ${d}`, { exact: true }) }).getByText('QA planned post')).toHaveCount(0)
 
   // Also a draft and a past post for list groups.
