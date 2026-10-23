@@ -130,6 +130,22 @@ export function Pricing({ lang = "en", plans }: { lang?: Lang; plans: PickerPric
         )}
       </div>
 
+      <section className="mt-12 rounded-2xl border border-white/10 bg-zinc-900/60 p-6" aria-labelledby="every-plan-title">
+        <h3 id="every-plan-title" className="text-lg font-semibold">
+          {t.everyTitle}
+        </h3>
+        <p className="mt-1 text-sm text-zinc-400">{t.everySub}</p>
+        <ul className="mt-5 grid gap-x-6 gap-y-2 text-sm text-zinc-300 sm:grid-cols-2">
+          {t.everyItems.map((x) => (
+            <li key={x} className="flex items-start gap-2">
+              <Check size={15} className="mt-0.5 shrink-0 text-emerald-400" />
+              {x}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-xs text-zinc-500">{t.everyNote}</p>
+      </section>
+
       <Rivals t={t.rivals} />
 
       <div className="mt-8 flex flex-col items-start justify-between gap-4 rounded-2xl border border-white/10 bg-zinc-900/60 p-6 sm:flex-row sm:items-center">

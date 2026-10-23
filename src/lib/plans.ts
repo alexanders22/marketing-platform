@@ -39,7 +39,7 @@ export const PLANS: {
   {
     id: 'TEAM',
     name: 'Business',
-    blurb: 'For growing businesses with a few brands, ads and a team.',
+    blurb: 'For a growing business with a few brands or locations.',
     monthly: 75,
     monthlyGel: 199,
     profiles: 5,
