@@ -29,7 +29,8 @@ export type Section = {
 }
 
 export const MAIN: Section[] = [
-  { label: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
+  // Ad campaign pages live under /app/dashboard/ads but belong to Analytics.
+  { label: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard, not: ['/app/dashboard/ads'] },
   { label: 'Planner', href: '/app/planner', icon: CalendarDays, also: ['/app/posts', '/app/blog', '/app/create'] },
   { label: 'Content series', href: '/app/campaigns', icon: Target },
   {
@@ -55,12 +56,14 @@ export const MAIN: Section[] = [
     ],
   },
   {
-    label: 'Results',
-    href: '/app/results',
+    label: 'Analytics',
+    href: '/app/analytics',
     icon: LineChart,
     badge: 'insights',
+    also: ['/app/dashboard/ads'],
     tabs: [
-      { label: 'Overview', href: '/app/results' },
+      { label: 'Overview', href: '/app/analytics' },
+      { label: 'Ads & posts', href: '/app/analytics/details' },
       { label: 'This week', href: '/app/weekly', badge: 'recommendations' },
       { label: 'Goals', href: '/app/goals' },
       { label: 'Alerts', href: '/app/alerts', badge: 'alerts' },

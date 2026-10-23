@@ -5,6 +5,8 @@ import { requireContext } from '@/lib/context'
 import { GRACE_MS, PLANS, billingState, serviceOn } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { AppSidebar } from './AppSidebar'
+import { LanguageSwitch } from '@/components/LanguageSwitch'
+import { appLang } from '@/lib/app-lang-server'
 import { CreditsBadge } from './CreditsBadge'
 import { SectionTabs } from './SectionTabs'
 import { creditValue, prices } from '@/lib/credits'
@@ -44,6 +46,7 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
     role === 'EDITOR' ? null : interviewState(workspace.id),
     creditValue(),
   ])
+  const lang = await appLang()
   return (
     <PricesProvider prices={creditPrices} value={value}>
     <div className="min-h-screen bg-[#f4f3f1] text-zinc-900 lg:flex [color-scheme:light]">
@@ -61,9 +64,11 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
         canAddCompany={asAdmin || role !== 'EDITOR'}
         superAdmin={user.role === 'SUPER_ADMIN'}
         pilot={pilot}
+        lang={lang}
       />
       <main className="min-w-0 flex-1 p-2 lg:py-3 lg:pr-3 lg:pl-0">
         <header className="mb-2 hidden items-center justify-end gap-2 lg:flex">
+          <LanguageSwitch lang={lang} />
           <CreditsBadge credits={account.creditBalance} planLabel={planLabel(account)} />
         </header>
         <div className="min-h-[calc(100vh-1.5rem)] rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 sm:p-8 lg:min-h-[calc(100vh-4.5rem)]">

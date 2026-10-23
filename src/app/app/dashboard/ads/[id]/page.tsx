@@ -52,7 +52,7 @@ export default async function AdCampaignPage({ params, searchParams }: PageProps
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <Link href={`/app/dashboard?days=${period}`} className="grid h-10 w-10 place-items-center rounded-lg bg-zinc-100 hover:bg-zinc-200" aria-label="Back to dashboard">
+        <Link href={`/app/analytics/details?days=${period}`} className="grid h-10 w-10 place-items-center rounded-lg bg-zinc-100 hover:bg-zinc-200" aria-label="Back to analytics">
           <ArrowLeft size={18} />
         </Link>
         <div className="mr-auto min-w-0">

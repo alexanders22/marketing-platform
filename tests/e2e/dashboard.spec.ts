@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { startFakeMeta } from './fake-meta'
 import { newAccount, sql } from './helpers'
 
-// Dashboard over the fake ad account (see fake-meta.ts: 2 campaigns, daily
+// Analytics → Ads & posts over the fake ad account (see fake-meta.ts: 2 campaigns, daily
 // rows) — sync on connect, KPIs, deltas, campaign table and detail page.
 
 test.describe.configure({ mode: 'serial' })
@@ -21,8 +21,8 @@ test.afterAll(async () => {
   await meta.close()
 })
 
-test('empty dashboard points to Channels', async () => {
-  await page.goto('/app/dashboard')
+test('empty Ads & posts page points to Channels', async () => {
+  await page.goto('/app/analytics/details')
   await expect(page.getByRole('heading', { name: 'Connect your accounts to see results' })).toBeVisible()
   await page.getByRole('link', { name: 'Connect channels' }).click()
   await expect(page).toHaveURL(/\/app\/channels/)
@@ -46,7 +46,7 @@ test('connecting an ad account reads its campaigns and 12 months of results', as
 })
 
 test('30-day KPIs: leads only from lead campaigns, deltas vs previous 30 days', async () => {
-  await page.goto('/app/dashboard?days=30')
+  await page.goto('/app/analytics/details?days=30')
   const kpi = (label: string) => page.getByRole('group', { name: label, exact: true }).first()
   await expect(kpi('Spend')).toContainText('₾900')
   await expect(kpi('Leads')).toContainText('120')
@@ -78,7 +78,7 @@ test('campaign table and detail page', async () => {
 })
 
 test('period switch and sync now', async () => {
-  await page.goto('/app/dashboard?days=7')
+  await page.goto('/app/analytics/details?days=7')
   await expect(page.getByRole('group', { name: 'Spend', exact: true })).toContainText('₾210')
   const before = meta.calls.filter((c) => c.path === '/act_1/insights').length
   await page.getByRole('button', { name: 'Sync now' }).click()
@@ -100,7 +100,7 @@ test('another workspace cannot open the campaign', async ({ browser }) => {
 
 test('summary without AI credits left explains why', async () => {
   sql(`update "Account" set "creditBalance"=0 where id=(select "accountId" from "Workspace" where id='${workspaceId}')`)
-  await page.goto('/app/dashboard')
+  await page.goto('/app/analytics/details')
   await page.getByRole('button', { name: /Summarise last 30 days/ }).click()
   await expect(page.getByText('This needs 1 credit and you have 0')).toBeVisible()
 })

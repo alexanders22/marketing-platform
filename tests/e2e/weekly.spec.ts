@@ -83,7 +83,8 @@ test('review page: summary, numbers, recommendations by impact, badges', async (
   expect(titles.at(-1)).toBe('Answer last week comments')
   await expect(page.getByLabel('4 open recommendations')).toBeVisible()
   await page.goto('/app/dashboard')
-  await expect(page.getByRole('link', { name: /4 recommendations from this week/ })).toBeVisible()
+  // The newest three, under "What to do next".
+  await expect(page.getByRole('region', { name: 'What to do next' }).getByRole('listitem')).toHaveCount(3)
   expect(id).toBeTruthy()
 })
 

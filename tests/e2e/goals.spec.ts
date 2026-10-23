@@ -114,7 +114,7 @@ test('post goals: average Instagram reach and engagement rate', async () => {
 
 test('rejected campaign and lost access raise system alerts', async () => {
   meta.setLeadsStatus('DISAPPROVED')
-  await page.goto('/app/dashboard')
+  await page.goto('/app/analytics/details')
   await page.getByRole('button', { name: 'Sync now' }).click()
   await expect.poll(() => sql(`select count(*) from "Alert" where "workspaceId"='${ws}' and kind='campaign_rejected'`)).toBe('1')
 
@@ -136,10 +136,11 @@ test('alerts page, unread badge, mark read, email switch', async () => {
   await expect.poll(() => sql(`select "alertEmails" from "Account" where id=(select "accountId" from "Workspace" where id='${ws}')`)).toBe('f')
 })
 
-test('dashboard shows goal status per campaign and the alert banner', async () => {
+test('the dashboard shows alerts to look at; analytics the goal status per campaign', async () => {
   sql(`update "Alert" set "readAt"=null where "workspaceId"='${ws}' and kind='campaign_rejected'`)
   await page.goto('/app/dashboard')
-  await expect(page.getByRole('link', { name: /1 alert needs your attention/ })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'What to do next' }).getByRole('link', { name: 'Alerts that need you: 1' })).toHaveAttribute('href', '/app/alerts')
+  await page.goto('/app/analytics/details')
   await expect(page.locator('tr', { hasText: 'Lead Gen — Tbilisi' })).toContainText('Off track')
 })
 

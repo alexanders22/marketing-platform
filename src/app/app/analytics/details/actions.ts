@@ -49,6 +49,6 @@ export async function syncAds(): Promise<{ error?: string }> {
   if (accounts.length === 0) return { error: 'No ad account connected' }
   const failed: string[] = []
   for (const a of accounts) await syncAdAccount(a.id).catch(() => failed.push(a.name))
-  revalidatePath('/app/dashboard')
+  revalidatePath('/app/analytics/details')
   return failed.length ? { error: `Could not read ${failed.join(', ')} — see Channels.` } : {}
 }

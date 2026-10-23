@@ -258,7 +258,7 @@ async function contextName(goal: Goal) {
 
 export function goalHref(goal: Goal) {
   if (goal.scope === 'CAMPAIGN' && goal.adCampaignId) return `/app/dashboard/ads/${goal.adCampaignId}`
-  return goal.scope === 'WEBSITE' ? '/app/dashboard' : '/app/goals'
+  return goal.scope === 'WEBSITE' ? '/app/analytics/details' : '/app/goals'
 }
 
 // Measure, store and alert on status changes. The first check of a new goal
