@@ -23,7 +23,7 @@ test('hovering a credit amount shows its value in lari and dollars', async () =>
   await page.goto('/app/credits')
   const badge = page.getByRole('link', { name: /50 credits left/ }).last()
   await badge.hover()
-  await expect(page.getByRole('tooltip')).toHaveText(/^50 credits ≈ ₾[\d.]+ · \$4\.00$/)
+  await expect(page.getByRole('tooltip')).toHaveText(/^50 credits ≈ ₾[\d.]+ · \$8\.50$/)
   // Right by the pointer, not in the middle of the header.
   const b = (await badge.boundingBox())!
   const t = (await page.getByRole('tooltip').boundingBox())!
@@ -37,21 +37,21 @@ test('hovering a credit amount shows its value in lari and dollars', async () =>
   // A button label deep in the app too.
   await page.goto('/app/strategy/new')
   await page.getByRole('button', { name: /Build my plan · 5 credits/ }).hover()
-  await expect(page.getByRole('tooltip')).toHaveText(/^5 credits ≈ ₾\d+\.\d\d · \$0\.40$/)
+  await expect(page.getByRole('tooltip')).toHaveText(/^5 credits ≈ ₾\d+\.\d\d · \$0\.85$/)
   await page.mouse.move(5, 500)
   await expect(page.getByRole('tooltip')).toHaveCount(0)
 })
 
 test('credits page: what the balance is worth, and packs to buy', async () => {
   await page.goto('/app/credits')
-  await expect(page.getByText(/^worth ≈ ₾[\d.]+ · \$4\.00$/)).toBeVisible()
+  await expect(page.getByText(/^worth ≈ ₾[\d.]+ · \$8\.50$/)).toBeVisible()
   const packs = page.getByRole('list', { name: 'Credit packs' }).getByRole('listitem')
   await expect(packs).toHaveCount(3)
   await expect(packs.nth(0)).toContainText('100 credits')
-  await expect(packs.nth(0)).toContainText('₾22 · $8')
-  await expect(packs.nth(1)).toContainText('Save 13%')
-  await expect(packs.nth(2)).toContainText('Save 25%')
-  await expect(packs.nth(2)).toContainText('₾16.25 per 100 credits')
+  await expect(packs.nth(0)).toContainText('₾45 · $17')
+  await expect(packs.nth(1)).toContainText('Save 15%')
+  await expect(packs.nth(2)).toContainText('Save 21%')
+  await expect(packs.nth(2)).toContainText('₾36.25 per 100 credits')
   await expect(packs.nth(0).getByRole('button', { name: 'Buy' })).toBeDisabled()
 })
 

@@ -158,7 +158,7 @@ export function PricingEditor({ initial, plans: planNames, used }: { initial: Pr
           </tbody>
         </table>
         {p.packs.length < 8 && (
-          <button onClick={() => setP((cur) => ({ ...cur, packs: [...cur.packs, { credits: 1000, priceUsd: 65, priceGel: 175 }] }))} className="mt-2 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
+          <button onClick={() => setP((cur) => ({ ...cur, packs: [...cur.packs, { credits: 1000, priceUsd: 139, priceGel: 375 }] }))} className="mt-2 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50">
             Add a pack
           </button>
         )}

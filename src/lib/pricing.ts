@@ -64,15 +64,18 @@ export type Pricing = {
   packs: CreditPack[]
 }
 
-// Dearer per credit than any plan, so a bigger plan beats topping up.
+// Dearer per credit than any plan (Start is ₾0.40 a credit), so a bigger
+// plan beats topping up every month: Start + 500 credits costs more than
+// Business, Start + 2,000 more than Agency. Even spent on the costliest
+// action (≤ $0.02 a credit) every pack earns over 5× its AI cost.
 export const DEFAULT_PACKS: CreditPack[] = [
-  { credits: 100, priceUsd: 8, priceGel: 22 },
-  { credits: 500, priceUsd: 35, priceGel: 95 },
-  { credits: 2000, priceUsd: 120, priceGel: 325 },
+  { credits: 100, priceUsd: 17, priceGel: 45 },
+  { credits: 500, priceUsd: 72, priceGel: 195 },
+  { credits: 2000, priceUsd: 269, priceGel: 725 },
 ]
 
 export const DEFAULT_PRICING: Pricing = {
-  creditPriceUsd: 0.08,
+  creditPriceUsd: 0.17,
   veoSecondsPerMonth: { STARTER: 10, TEAM: 30, AGENCY: 120 },
   plans: Object.fromEntries(PLANS.map((p) => [p.id, { monthly: p.monthly, monthlyGel: p.monthlyGel, credits: p.credits }])) as Pricing['plans'],
   packs: DEFAULT_PACKS,
