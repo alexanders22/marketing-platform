@@ -2,8 +2,12 @@ import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { getPlans } from '@/lib/credits'
 import { card, daysAgo, fmtDateTime, Stat } from './shared'
+import { requireSuperAdmin } from '@/lib/admin'
 
 export default async function AdminOverview() {
+  // Checked here, not only in the layout: a client navigation can render this
+  // page without running the layout.
+  await requireSuperAdmin()
   const since = daysAgo(30)
   const now = daysAgo(0)
   const [accounts, paused, workspaces, users, newUsers, blocked, plans, purchases, granted, spent, logs, recent] = await Promise.all([

@@ -7,9 +7,13 @@ import { PLANS } from '@/lib/plans'
 import { ACTION_KEYS } from '@/lib/pricing'
 import { card, daysAgo, fmtDateTime } from '../shared'
 import { PricingEditor } from './PricingEditor'
+import { requireSuperAdmin } from '@/lib/admin'
 
 // Unit economics: what each action earns in credits vs what it costs us.
 export default async function AdminPricing() {
+  // Checked here, not only in the layout: a client navigation can render this
+  // page without running the layout.
+  await requireSuperAdmin()
   const [pricing, row, usage, refunded, nbg, econRow] = await Promise.all([
     getPricing(),
     prisma.setting.findUnique({ where: { key: 'pricing' } }),

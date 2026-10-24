@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { Badge, card, fmtDate, planStatus } from '../shared'
+import { requireSuperAdmin } from '@/lib/admin'
 
 const FILTERS = [
   { id: 'all', label: 'All' },
@@ -12,6 +13,9 @@ const FILTERS = [
 ] as const
 
 export default async function AdminCompanies({ searchParams }: PageProps<'/admin/companies'>) {
+  // Checked here, not only in the layout: a client navigation can render this
+  // page without running the layout.
+  await requireSuperAdmin()
   const sp = await searchParams
   const q = typeof sp.q === 'string' ? sp.q.trim() : ''
   const filter = typeof sp.filter === 'string' ? sp.filter : 'all'
