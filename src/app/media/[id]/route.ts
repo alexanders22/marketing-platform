@@ -33,7 +33,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/media/[id]'>) {
   let mime = media.mime
   if (req.nextUrl.searchParams.get('format') === 'jpeg' && media.kind === 'IMAGE' && mime !== 'image/jpeg') {
     try {
-      file = await jpegCopy(file)
+      file = await jpegCopy(file, mime)
       mime = 'image/jpeg'
     } catch (e) {
       console.error('jpeg copy failed', media.id, e instanceof Error ? e.message : e)
@@ -46,6 +46,9 @@ export async function GET(req: NextRequest, ctx: RouteContext<'/media/[id]'>) {
     'accept-ranges': 'bytes',
     'cache-control': signed ? 'public, max-age=300' : 'private, max-age=31536000, immutable',
     'content-disposition': `inline; filename="loudpilot-${media.id}.${file.split('.').pop() ?? 'bin'}"`,
+    // Uploaded bytes are never run as a page or script here.
+    'x-content-type-options': 'nosniff',
+    'content-security-policy': "default-src 'none'; sandbox",
   }
 
   const range = req.headers.get('range')?.match(/^bytes=(\d*)-(\d*)$/)

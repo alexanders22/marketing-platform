@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { connectTelegram, setPinterestBoard } from './network-actions'
+import { connectTelegram, setPinterestBoard, telegramProofLink } from './network-actions'
 
 export function TelegramConnect({ platformBot }: { platformBot: string | null }) {
   const router = useRouter()
@@ -11,9 +11,17 @@ export function TelegramConnect({ platformBot }: { platformBot: string | null })
   const [channel, setChannel] = useState('')
   const [token, setToken] = useState('')
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>()
+  // Start link for Loudpilot's bot: shows who connects (a one-time code).
+  const [link, setLink] = useState<string>()
+  const newLink = async () => {
+    if (!platformBot) return
+    const r = await telegramProofLink()
+    if (r.link) setLink(r.link)
+    else setMsg({ error: r.error })
+  }
   if (!open)
     return (
-      <button onClick={() => setOpen(true)} className="shrink-0 rounded-lg bg-[#26A5E4] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1f95cf]">
+      <button onClick={() => (setOpen(true), start(newLink))} className="shrink-0 rounded-lg bg-[#26A5E4] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1f95cf]">
         Connect
       </button>
     )
@@ -26,9 +34,11 @@ export function TelegramConnect({ platformBot }: { platformBot: string | null })
         start(async () => {
           const r = await connectTelegram({ channel, botToken: token })
           setMsg(r.error ? { error: r.error } : { ok: `Connected ${r.name}.` })
+          if (r.link) setLink(r.link)
           if (!r.error) {
             setChannel('')
             setToken('')
+            await newLink()
             router.refresh()
           }
         })
@@ -36,9 +46,22 @@ export function TelegramConnect({ platformBot }: { platformBot: string | null })
     >
       <ol className="list-decimal space-y-1 pl-5 text-zinc-600">
         {platformBot ? (
-          <li>
-            In your channel → Administrators → Add admin: <b>@{platformBot}</b>, with &ldquo;Post messages&rdquo;.
-          </li>
+          <>
+            <li>
+              In your channel → Administrators → Add admin: <b>@{platformBot}</b>, with &ldquo;Post messages&rdquo;.
+            </li>
+            <li>
+              From the Telegram account that runs the channel,{' '}
+              {link ? (
+                <a href={link} target="_blank" rel="noreferrer" className="font-medium text-indigo-600 hover:underline">
+                  open @{platformBot}
+                </a>
+              ) : (
+                <>open @{platformBot}</>
+              )}{' '}
+              and press Start (not needed with your own bot).
+            </li>
+          </>
         ) : (
           <li>
             Create a bot with <b>@BotFather</b> (/newbot) and copy its token.

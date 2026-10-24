@@ -16,10 +16,25 @@ const BOTS: Record<string, { id: number; username: string }> = {
   '111:platform-token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa': { id: 111, username: 'LoudpilotTestBot' },
   '222:own-token-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb': { id: 222, username: 'BloomOwnBot' },
 }
-const CHANNELS: Record<string, { id: number; title: string; username: string; admins: number[]; canPost: boolean }> = {
+// People on Telegram: the one who runs the channels, an admin who may not
+// post, and a stranger. Their messages to the bot come from tgStart().
+export const TG_OWNER = 7001
+export const TG_NO_POST_ADMIN = 7002
+export const TG_STRANGER = 7003
+type Channel = { id: number; title: string; username: string; admins: number[]; canPost: boolean }
+const CHANNELS: Record<string, Channel> = {
   '@bloomnews': { id: -1001234567890, title: 'Bloom News', username: 'bloomnews', admins: [111, 222], canPost: true },
   '@readonlychan': { id: -1009999, title: 'Read Only', username: 'readonlychan', admins: [111], canPost: false },
   '@nobot': { id: -1008888, title: 'No Bot', username: 'nobot', admins: [], canPost: false },
+}
+// "@bloomnews_<anything>": a fresh copy of Bloom News, so each run (and each
+// spec) connects a channel no other account has.
+function channelNamed(name: string) {
+  const m = name.match(/^@(bloomnews_\w+)$/)
+  if (!m || CHANNELS[name]) return CHANNELS[name]
+  let id = 0
+  for (const ch of m[1]) id = (id * 31 + ch.charCodeAt(0)) % 1_000_000_000
+  return (CHANNELS[name] = { id: -1002000000000 - id, title: 'Bloom News', username: m[1], admins: [111, 222], canPost: true })
 }
 
 export function startFakeSocial() {
@@ -29,6 +44,8 @@ export function startFakeSocial() {
   let failNext: { re: RegExp; status: number; body: unknown } | null = null
   // Threads containers become FINISHED on the second status check.
   const checks: Record<string, number> = {}
+  // Messages people sent to the bot (getUpdates).
+  const updates: { update_id: number; message: { message_id: number; text: string; chat: { id: number; type: string; first_name: string }; from: { id: number; is_bot: false; first_name: string } } }[] = []
 
   const server: Server = createServer(async (req, res) => {
     const url = new URL(req.url!, BASE)
@@ -82,13 +99,25 @@ export function startFakeSocial() {
       const bot = BOTS[tg[1]]
       if (!bot) return json(401, { ok: false, error_code: 401, description: 'Unauthorized' })
       const ok = (result: unknown) => json(200, { ok: true, result })
-      const chatOf = (id: unknown) => Object.values(CHANNELS).find((c) => String(c.id) === String(id)) ?? CHANNELS[String(id)]
+      const chatOf = (id: unknown) => Object.values(CHANNELS).find((c) => String(c.id) === String(id)) ?? channelNamed(String(id))
       const m = tg[2]
       if (m === 'getMe') return ok({ id: bot.id, is_bot: true, first_name: 'Bot', username: bot.username })
+      if (m === 'getUpdates') {
+        const offset = Number((b as Record<string, unknown>).offset ?? 0)
+        return ok(offset < 0 ? updates.slice(offset) : updates.filter((u) => u.update_id >= offset))
+      }
+      // A person's own chat with the bot.
+      if (m === 'sendMessage' && [TG_OWNER, TG_NO_POST_ADMIN, TG_STRANGER].includes(Number(b.chat_id))) return ok({ message_id: ++n, chat: { id: Number(b.chat_id) } })
       const chat = chatOf(b.chat_id)
       if (!chat || !chat.admins.includes(bot.id)) return json(400, { ok: false, error_code: 400, description: 'Bad Request: chat not found' })
       if (m === 'getChat') return ok({ id: chat.id, type: 'channel', title: chat.title, username: chat.username })
       if (m === 'getChatMember') return ok({ status: 'administrator', can_post_messages: chat.canPost, user: { id: bot.id } })
+      if (m === 'getChatAdministrators')
+        return ok([
+          { status: 'creator', user: { id: TG_OWNER, is_bot: false, first_name: 'Nino' } },
+          { status: 'administrator', can_post_messages: false, user: { id: TG_NO_POST_ADMIN, is_bot: false, first_name: 'Giorgi' } },
+          ...chat.admins.map((id) => ({ status: 'administrator', can_post_messages: chat.canPost, user: { id, is_bot: true, first_name: 'Bot' } })),
+        ])
       if (!chat.canPost) return json(403, { ok: false, error_code: 403, description: 'Forbidden: need administrator rights in the channel chat' })
       if (m === 'sendPhoto' && !(await fetchIt(b.photo))) return json(400, { ok: false, error_code: 400, description: 'Bad Request: wrong file identifier/HTTP URL specified' })
       if (m === 'sendVideo' && typeof b.video === 'string' && b.video.startsWith('http') && !(await fetchIt(b.video)))
@@ -191,6 +220,11 @@ export function startFakeSocial() {
     calls,
     fetched,
     failNext: (re: RegExp, status: number, body: unknown) => (failNext = { re, status, body }),
+    // A person sends the bot a message from their own private chat (e.g. "/start <code>").
+    tgSay: (userId: number, text: string) => {
+      const id = updates.length + 1
+      updates.push({ update_id: id, message: { message_id: id, text, chat: { id: userId, type: 'private', first_name: `User ${userId}` }, from: { id: userId, is_bot: false, first_name: `User ${userId}` } } })
+    },
     listen: async () => {
       for (let i = 0; i < 300; i++) {
         const ok = await new Promise<boolean>((resolve) => {

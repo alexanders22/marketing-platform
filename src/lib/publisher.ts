@@ -70,7 +70,7 @@ async function outgoingMedia(workspaceId: string, mediaIds: string[]): Promise<P
     read: () => readMedia(m.path),
     jpegUrl: async () => {
       if (m.mime === 'image/jpeg') return signedMediaUrl(m.id, 3600)
-      await jpegCopy(mediaFile(m.path)).catch(() => {
+      await jpegCopy(mediaFile(m.path), m.mime).catch(() => {
         throw new NetworkError('Instagram takes JPEG images only, and this image could not be converted')
       })
       return `${signedMediaUrl(m.id, 3600)}&format=jpeg`

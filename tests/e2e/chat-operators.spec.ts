@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { startFakeSocial, TG_OWNER, TG_STRANGER } from './fake-social'
 import { latestMail, newAccount, sql, uniqueEmail } from './helpers'
 
 // Website chat operators: hand-overs go to a free operator in turn, a busy
@@ -119,4 +120,35 @@ test('one IP can start only a few new chats an hour on a site', async () => {
   for (let n = 1; n <= 5; n++) expect((await start(n)).status()).toBe(200)
   expect((await start(6)).status()).toBe(429)
   expect(sql(`select count(*) from "ChatMessage" m join "ChatConversation" c on c.id=m."conversationId" where c."workspaceId"='${ws}' and m.text like 'I want a refund, flood %'`)).toBe('5')
+})
+
+test('Telegram alerts: the link has a random code that works once, and not from two chats', async () => {
+  const social = startFakeSocial()
+  await social.listen()
+  try {
+    await page.goto('/app/chat/settings')
+    const box = page.getByRole('group', { name: /^(Shared Telegram \(every hand-over\)|Telegram alerts)$/ })
+    const code = async () => {
+      await box.getByRole('button', { name: 'Connect Telegram' }).click()
+      return new URL((await box.getByRole('link', { name: 'the Loudpilot bot' }).getAttribute('href'))!).searchParams.get('start')!
+    }
+    const first = await code()
+    expect(first).toMatch(/^[\w-]{20,}$/)
+    // Someone else who saw the link sends it too: it stops working.
+    social.tgSay(TG_STRANGER, `/start ${first}`)
+    social.tgSay(TG_OWNER, `/start ${first}`)
+    await box.getByRole('button', { name: /Start was pressed/ }).click()
+    await expect(box.getByText(/more than one Telegram chat/)).toBeVisible()
+
+    await page.reload()
+    const second = await code()
+    expect(second).not.toBe(first)
+    social.tgSay(TG_OWNER, `/start ${second}`)
+    await box.getByRole('button', { name: /Start was pressed/ }).click()
+    await expect(page.getByText(`User ${TG_OWNER}`)).toBeVisible()
+    expect(sql(`select "telegramChatId" from "ChatBot" where "workspaceId"='${ws}'`)).toBe(String(TG_OWNER))
+    expect(sql(`select count(*) from "TelegramCode" where "workspaceId"='${ws}' and "usedAt" is not null`)).toBe('2')
+  } finally {
+    await social.close()
+  }
 })

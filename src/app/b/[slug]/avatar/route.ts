@@ -10,6 +10,12 @@ export async function GET(_req: Request, ctx: RouteContext<'/b/[slug]/avatar'>) 
   if (!media) return new Response('Not found', { status: 404 })
   const data = await readMedia(media.path)
   return new Response(new Uint8Array(data), {
-    headers: { 'content-type': media.mime, 'cache-control': 'public, max-age=300' },
+    headers: {
+      'content-type': media.mime,
+      'cache-control': 'public, max-age=300',
+      // Uploaded bytes are never run as a page or script here.
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'none'; sandbox",
+    },
   })
 }

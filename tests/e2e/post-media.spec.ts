@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import path from 'node:path'
 import { newAccount, sql } from './helpers'
 
 // Post images: upload, design in the Studio and edit an image in the Studio,
@@ -66,6 +68,29 @@ test('edit an uploaded image in Studio replaces it in place', async () => {
   expect(ids).toHaveLength(2)
   expect(ids[0]).toBe(before)
   expect(ids).not.toContain(replaced)
+})
+
+test('media files are served inert; JPEG copies only of pictures of a sane size', async () => {
+  const ws = sql(`select "workspaceId" from "Post" where id='${postId}'`)
+  const add = (bytes: Buffer) => {
+    const id = `pm${Date.now()}${Math.floor(Math.random() * 1e4)}`
+    const rel = `${ws}/${id}.png`
+    mkdirSync(path.join('storage', ws), { recursive: true })
+    writeFileSync(path.join('storage', rel), bytes)
+    sql(`insert into "Media"(id,"workspaceId",kind,mime,path,bytes) values ('${id}','${ws}','IMAGE','image/png','${rel}',${bytes.length})`)
+    return id
+  }
+  const ok = add(PNG)
+  const res = await page.request.get(`/media/${ok}`)
+  expect(res.headers()['x-content-type-options']).toBe('nosniff')
+  expect(res.headers()['content-security-policy']).toBe("default-src 'none'; sandbox")
+  const jpeg = await page.request.get(`/media/${ok}?format=jpeg`)
+  expect(jpeg.status()).toBe(200)
+  expect(jpeg.headers()['content-type']).toBe('image/jpeg')
+  // A picture whose header says 9000 pixels wide never reaches ffmpeg.
+  const big = Buffer.from(PNG)
+  big.writeUInt32BE(9000, 16)
+  expect((await page.request.get(`/media/${add(big)}?format=jpeg`)).status()).toBe(500)
 })
 
 test('AI image is added to the post and charged', async () => {

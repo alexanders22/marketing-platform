@@ -14,10 +14,10 @@ import { prisma } from '@/lib/prisma'
 import { TEMPLATE_PHOTO } from '@/lib/design'
 import { templatePhotos } from '@/lib/template-photos'
 import { VIDEO_TEMPLATES } from '@/lib/video-templates'
-import { mediaFile, mediaUrl, saveMedia, tempDir } from '@/lib/storage'
+import { deleteMedia, mediaFile, mediaUrl, saveMedia, tempDir } from '@/lib/storage'
 import { emptyDoc, FORMATS, isFormat, MAX_SCENES, MOTIONS, newScene, POSITIONS, SUB_STYLES, TEXT_STYLES, timeline, VOICES, type Cue, type Format, type SceneMedia, type VideoDoc } from '@/lib/video'
 import { enqueueRender, stopRender, type SubtitleStrip } from '@/lib/video-render'
-import { ffmpeg, probe } from '@/lib/ffmpeg'
+import { ffmpeg, input as mediaInput, probe } from '@/lib/ffmpeg'
 import { advanceClip, CLIP_QUALITIES, CLIP_SECONDS, failClip, startVeo, veoAspect, veoEnabled, type ClipQuality } from '@/lib/veo'
 import { isPaid, PAID_ONLY } from '@/lib/plans'
 import { veoAllowance, veoLimitMessage } from '@/lib/credits'
@@ -159,7 +159,7 @@ export async function generateVoices(id: string): Promise<{ doc?: VideoDoc; erro
   }
   const ok = await charge(account.id, workspace.id, [{ amount: COST.voice, reason: 'AI_VIDEO', note: 'Video voice-over', action: 'voice', units: 1 }])
   if (!ok) {
-    await prisma.media.deleteMany({ where: { id: { in: made } } })
+    await deleteMedia(made)
     return { error: notEnough(COST.voice, 0) }
   }
   await prisma.video.update({ where: { id }, data: { data: doc as unknown as Prisma.InputJsonValue } })
@@ -226,13 +226,13 @@ export async function transcribeScene(id: string, sceneId: string): Promise<{ su
   if (!aiEnabled()) return { error: 'AI is not connected yet.' }
   if (account.creditBalance < COST.subtitles) return { error: notEnough(COST.subtitles, account.creditBalance) }
   const file = mediaFile(media.path)
-  if (!(await probe(file)).audio) return { error: 'This clip has no sound to turn into subtitles.' }
+  if (!(await probe(file, media.mime)).audio) return { error: 'This clip has no sound to turn into subtitles.' }
   const seconds = scene.duration
   const dir = await tempDir('subs')
   let lines
   try {
     const mp3 = path.join(dir, 'speech.mp3')
-    await ffmpeg(['-y', '-ss', String(Math.max(0, scene.clipStart)), '-t', String(seconds), '-i', file, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '48k', mp3], 120_000)
+    await ffmpeg(['-y', '-ss', String(Math.max(0, scene.clipStart)), '-t', String(seconds), ...mediaInput(file, media.mime), '-vn', '-ac', '1', '-ar', '16000', '-b:a', '48k', mp3], 120_000)
     lines = await transcribe(await readFile(mp3), 'audio/mp3', seconds)
   } catch (e) {
     console.error('transcription failed', e)
@@ -361,7 +361,7 @@ export async function generateTrack(raw: string): Promise<{ item?: MusicItem; er
   }
   const ok = await charge(account.id, workspace.id, [{ amount: COST.music, reason: 'AI_VIDEO', note: `AI music: ${prompt.slice(0, 120)}`, action: 'music', units: 1 }])
   if (!ok) {
-    await prisma.media.delete({ where: { id: media.id } })
+    await deleteMedia([media.id])
     return { error: notEnough(COST.music, (await prisma.account.findUniqueOrThrow({ where: { id: account.id } })).creditBalance) }
   }
   return { item: { id: media.id, kind: 'audio', url: mediaUrl(media.id), posterUrl: null, durationMs: media.durationMs, name: `AI: ${prompt.slice(0, 80)}` } }
@@ -576,7 +576,7 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
   ])
   if (!ok) {
     const made = [...images.map((m) => m?.id), ...doc.scenes.map((s) => s.voiceMediaId), doc.music?.mediaId].filter((x): x is string => Boolean(x))
-    await prisma.media.deleteMany({ where: { id: { in: made } } })
+    await deleteMedia(made)
     return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
   }
 

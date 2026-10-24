@@ -5,7 +5,7 @@ import { charge, prices } from './credits'
 import { withDossier } from './dossier'
 import { resolveImageStyle } from './style-ref'
 import { prisma } from './prisma'
-import { saveMedia } from './storage'
+import { deleteMedia, saveMedia } from './storage'
 
 export type CampaignImagePlan = { prompt: string | null; style: string }
 
@@ -41,7 +41,7 @@ export async function generateCampaignImages(campaignId: string, plan: CampaignI
       if (!ok) {
         // The post was free, so the credits ran out.
         if (bare) stop = true
-        await prisma.media.delete({ where: { id: media.id } })
+        await deleteMedia([media.id])
       }
     } catch (e) {
       noteAiFailure(e)

@@ -1,5 +1,5 @@
 import 'server-only'
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { prisma } from './prisma'
@@ -11,11 +11,13 @@ const EXT: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
+  'image/gif': 'gif',
   'video/mp4': 'mp4',
   'video/quicktime': 'mov',
   'video/webm': 'webm',
   'audio/mpeg': 'mp3',
   'audio/mp4': 'm4a',
+  'audio/aac': 'aac',
   'audio/wav': 'wav',
   'audio/x-wav': 'wav',
   'audio/ogg': 'ogg',
@@ -53,6 +55,39 @@ export function mediaFile(rel: string) {
   const full = path.resolve(ROOT, rel)
   if (!full.startsWith(ROOT + path.sep)) throw new Error('Bad media path')
   return full
+}
+
+// Where jpegCopy keeps the JPEG version of a PNG/WebP image.
+export const jpegCopyPath = (file: string) => `${file.replace(/\.[^./]+$/, '')}.jpeg.jpg`
+
+// Deletes Media rows and their files (and any JPEG copy). Every row has its
+// own file; one that another row still names is kept all the same.
+export async function deleteMedia(ids: string[]) {
+  if (!ids.length) return
+  const rows = await prisma.media.findMany({ where: { id: { in: ids } }, select: { id: true, path: true } })
+  await prisma.media.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } })
+  await removeMediaFiles(rows.map((r) => r.path))
+}
+
+async function removeMediaFiles(paths: string[]) {
+  const kept = new Set((await prisma.media.findMany({ where: { path: { in: paths } }, select: { path: true } })).map((r) => r.path))
+  for (const rel of paths) {
+    if (kept.has(rel)) continue
+    try {
+      const file = mediaFile(rel)
+      await rm(file, { force: true })
+      await rm(jpegCopyPath(file), { force: true })
+    } catch (e) {
+      console.error('media file not removed', rel, e instanceof Error ? e.message : e)
+    }
+  }
+}
+
+// After a workspace is deleted: its whole folder.
+export async function removeWorkspaceFiles(workspaceId: string) {
+  const dir = path.resolve(ROOT, workspaceId)
+  if (!/^[\w-]+$/.test(workspaceId) || path.dirname(dir) !== ROOT) throw new Error('Bad workspace id')
+  await rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true })
 }
 
 // Scratch space on the same disk as storage, so moves are renames.

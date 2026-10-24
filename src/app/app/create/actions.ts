@@ -7,7 +7,7 @@ import { aiEnabled, generateImage, generatePost, LANGUAGES, LENGTHS, TONES } fro
 import { requireContext } from '@/lib/context'
 import { charge, notEnough, prices } from '@/lib/credits'
 import { prisma } from '@/lib/prisma'
-import { mediaUrl, saveMedia } from '@/lib/storage'
+import { deleteMedia, mediaUrl, saveMedia } from '@/lib/storage'
 import { aiError } from '@/lib/ai-health'
 import { IMAGE_STYLE_IDS, isRefStyle, type ImageStyle } from '@/lib/image-styles'
 import { resolveImageStyle } from '@/lib/style-ref'
@@ -95,7 +95,7 @@ export async function createPost(raw: z.input<typeof Input>): Promise<{ post?: C
     { amount: media.length * IMAGE_COST, reason: 'AI_IMAGE', note: `${media.length} post image${media.length > 1 ? 's' : ''}`, action: 'image', units: media.length },
   ])
   if (!charged) {
-    await prisma.media.deleteMany({ where: { id: { in: media.map((m) => m.id) } } })
+    await deleteMedia(media.map((m) => m.id))
     return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
   }
 
