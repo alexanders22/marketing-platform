@@ -31,6 +31,8 @@ model Partner {
   // Share of credit purchases paid out to the partner (0–100).
   revenueSharePct Float         @default(0)
   webhookUrl      String?
+  // Signing secret, stored with encrypt() (rows saved before: plain "whsec_…",
+  // encrypted when the webhook is next saved; see webhookSecret() in alerts.ts).
   webhookSecret   String?
   // Set for an Agency customer's own API access: workspaces it creates belong
   // to this account, and keys work only while the plan allows the API.

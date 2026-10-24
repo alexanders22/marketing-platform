@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { z } from 'zod'
 import { outgrows } from '@/lib/billing'
+import { clientIp } from '@/lib/client-ip'
 import { addressDraft, BillingAddress, savedAddress, type AddressForm } from '@/lib/billing-address'
 import { requireContext } from '@/lib/context'
 import { monremEnabled } from '@/lib/monrem'
@@ -43,7 +44,7 @@ export async function checkout(
   }
   if (!billing) return { needAddress: addressDraft(account.billingAddress, account.country, user) }
   const h = await headers()
-  const ip = (h.get('x-forwarded-for') ?? '').split(',')[0].trim() || h.get('x-real-ip') || '127.0.0.1'
+  const ip = clientIp(h) ?? '127.0.0.1'
   return startCheckout({ accountId: account.id, user, billing, ip, purchase: parsed.data as Purchase })
 }
 

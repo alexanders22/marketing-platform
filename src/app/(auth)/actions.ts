@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { revokeUserTokens } from '@/lib/access-tokens'
 import { sha256 } from '@/lib/crypto'
+import { clientIp as ipOf } from '@/lib/client-ip'
 import { actionEmail, mailEnabled, sendMail } from '@/lib/mail'
 import { terminalUrl } from '@/lib/hosts'
 import { DUMMY_HASH, hashPassword, needsRehash, verifyPassword } from '@/lib/password'
@@ -19,9 +20,10 @@ const Email = z.email('Enter a valid email').transform((e) => e.trim().toLowerCa
 const LINK_TTL_MS = 15 * 60 * 1000
 const RESET_TTL_MS = 30 * 60 * 1000
 // Sign-in and reset emails per IP and hour, so a script can't mail-bomb a
-// list of addresses (each address already gets at most one a minute). Dev
-// and e2e runs sign up hundreds of users from one machine.
-const MAILS_PER_IP_HOUR = process.env.NODE_ENV === 'production' ? 20 : 1000
+// list of addresses (each address already gets at most one a minute).
+// KHMA_MAILS_PER_IP_HOUR raises it for e2e runs, which sign up hundreds of
+// users from one machine.
+const MAILS_PER_IP_HOUR = Number(process.env.KHMA_MAILS_PER_IP_HOUR) || 20
 const TOO_MANY_MAILS = 'Too many emails were requested from your network. Try again in an hour.'
 const mailLimited = async () => overLimit(`auth-mail:${await clientIp()}`, MAILS_PER_IP_HOUR, 3_600_000)
 
@@ -113,7 +115,7 @@ const PasswordLogin = z.object({ email: Email, password: z.string().min(1) })
 const LOGIN_WINDOW = 15 * 60 * 1000
 async function clientIp() {
   const h = await headers()
-  return h.get('x-forwarded-for')?.split(',')[0].trim() || h.get('x-real-ip') || 'unknown'
+  return ipOf(h) ?? 'unknown'
 }
 
 export async function passwordLogin(_: FormState, form: FormData): Promise<FormState> {

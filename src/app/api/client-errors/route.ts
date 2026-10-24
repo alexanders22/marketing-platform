@@ -1,11 +1,20 @@
+import { clientIp } from '@/lib/client-ip'
 import { overLimit } from '@/lib/rate-limit'
+import { readBody, tooLarge } from '@/lib/read-body'
 
 // Errors reported by the browser (src/lib/client-errors.ts), written to the
 // server log so a "page couldn't load" has a cause to look at.
 export async function POST(req: Request) {
-  const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'local'
+  const ip = clientIp(req.headers) ?? 'local'
   if (overLimit(`client-error:${ip}`, 30, 10 * 60_000)) return new Response(null, { status: 204 })
-  const b = (await req.json().catch(() => null)) as Record<string, unknown> | null
+  const raw = await readBody(req, 16 * 1024)
+  if (raw === null) return tooLarge()
+  let b: Record<string, unknown> | null = null
+  try {
+    b = JSON.parse(raw) as Record<string, unknown> | null
+  } catch {
+    // Not JSON: nothing to log.
+  }
   if (!b) return new Response(null, { status: 204 })
   const s = (v: unknown, n: number) => (typeof v === 'string' ? v.slice(0, n) : undefined)
   console.error(

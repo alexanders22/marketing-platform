@@ -120,3 +120,14 @@ test('one IP can start only a few new chats an hour on a site', async () => {
   expect((await start(6)).status()).toBe(429)
   expect(sql(`select count(*) from "ChatMessage" m join "ChatConversation" c on c.id=m."conversationId" where c."workspaceId"='${ws}' and m.text like 'I want a refund, flood %'`)).toBe('5')
 })
+
+test('a made-up X-Forwarded-For does not get around the new-chat limit', async () => {
+  // A proxy appends the real address; whatever the client put first is ignored.
+  const start = (n: number) =>
+    page.request.post('/api/chat/send', {
+      headers: { 'content-type': 'text/plain', 'x-forwarded-for': `10.7.${n}.1, 10.8.8.8` },
+      data: JSON.stringify({ s: key, v: `spoof-${Date.now()}-${n}`, text: `I want a refund, spoof ${n}` }),
+    })
+  for (let n = 1; n <= 5; n++) expect((await start(n)).status()).toBe(200)
+  expect((await start(6)).status()).toBe(429)
+})

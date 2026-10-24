@@ -2,7 +2,9 @@ import { z } from 'zod'
 import { CORS } from '@/lib/mcp/server'
 import { prisma } from '@/lib/prisma'
 import { validRedirect } from '@/lib/oauth'
+import { clientIp } from '@/lib/client-ip'
 import { overLimit } from '@/lib/rate-limit'
+import { readBody } from '@/lib/read-body'
 
 const Input = z.object({
   client_name: z.string().max(100).optional(),
@@ -15,15 +17,17 @@ const Input = z.object({
 // Anyone may register, so the consent page labels these apps unverified and
 // shows where they send the user back to.
 export async function POST(req: Request) {
-  const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown'
+  const ip = clientIp(req.headers) ?? 'unknown'
   if (overLimit(`oauth-register:${ip}`, 20, 3_600_000)) {
     return Response.json({ error: 'invalid_client_metadata', error_description: 'Too many registrations. Try again later.' }, { status: 429, headers: CORS })
   }
   const fail = (description: string) =>
     Response.json({ error: 'invalid_client_metadata', error_description: description }, { status: 400, headers: CORS })
+  const text = await readBody(req)
+  if (text === null) return Response.json({ error: 'invalid_client_metadata', error_description: 'Body too large' }, { status: 413, headers: CORS })
   let raw: unknown
   try {
-    raw = await req.json()
+    raw = JSON.parse(text)
   } catch {
     return fail('Body must be JSON')
   }
