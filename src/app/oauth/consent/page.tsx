@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { Check } from 'lucide-react'
+import { Check, ShieldAlert } from 'lucide-react'
 import { Logo } from '@/components/landing/Logo'
-import { checkAuthorize, type AuthorizeParams } from '@/lib/oauth'
+import { checkAuthorize, redirectTarget, type AuthorizeParams } from '@/lib/oauth'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/session'
 import { ConsentForm } from './ConsentForm'
@@ -21,6 +21,7 @@ export default async function ConsentPage({ searchParams }: PageProps<'/oauth/co
   const user = await getSessionUser()
   if (!user) redirect(`/oauth/authorize?${new URLSearchParams(q as Record<string, string>).toString()}`)
   const check = await checkAuthorize(q)
+  const target = check.client ? redirectTarget(q.redirect_uri!) : null
   const workspaces = await prisma.workspace.findMany({
     where: { account: { members: { some: { userId: user.id } } } },
     select: { id: true, name: true },
@@ -33,7 +34,7 @@ export default async function ConsentPage({ searchParams }: PageProps<'/oauth/co
         <div className="text-zinc-900">
           <Logo />
         </div>
-        {check.error || !check.client ? (
+        {check.error || !check.client || !target ? (
           <p className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{check.error ?? 'Unknown app'}</p>
         ) : workspaces.length === 0 ? (
           <p className="mt-6 text-sm text-zinc-600">
@@ -48,6 +49,20 @@ export default async function ConsentPage({ searchParams }: PageProps<'/oauth/co
               <span className="text-indigo-600">{check.client.name}</span> wants to work in Loudpilot
             </h1>
             <p className="mt-1 text-sm text-zinc-500">Signed in as {user.email}</p>
+            {/* Any app can register itself and pick its name, so the address it
+                returns to is the one fact the user can check. */}
+            <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-900 ring-1 ring-amber-200" data-testid="oauth-target">
+              <p className="flex items-center gap-1.5 font-medium">
+                <ShieldAlert size={15} className="shrink-0" /> Unverified third-party app
+              </p>
+              <p className="mt-1">
+                It will send you back to <strong className="break-all font-semibold">{target.host}</strong>
+                {target.local && ' (an app on this computer)'}.
+              </p>
+              <p className="mt-1 text-xs text-amber-800/80">
+                Loudpilot has not checked who made it; the name &ldquo;{check.client.name}&rdquo; is its own. Allow only if you started this connection and know this address.
+              </p>
+            </div>
             <ul className="mt-5 space-y-2 text-sm text-zinc-700">
               {CAN.map((c) => (
                 <li key={c} className="flex gap-2">

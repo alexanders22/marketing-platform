@@ -29,7 +29,8 @@ export function reportClientError(e: unknown, where: string, reloaded = false) {
     const x = (e ?? {}) as { name?: string; message?: string; stack?: string; digest?: string }
     const body = JSON.stringify({
       where,
-      url: location.href,
+      // No query or hash: they carry one-time tokens (/auth/magic?token=…).
+      url: location.origin + location.pathname,
       name: x.name,
       message: x.message ?? String(e),
       stack: x.stack,

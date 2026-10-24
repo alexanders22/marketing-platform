@@ -231,6 +231,45 @@ test.describe('password', () => {
     await expect(page.locator('p[role=alert]')).toContainText('at least 8 characters')
     expect(sql(`select "passwordHash" is null from "User" where email='${email}'`)).toBe('t')
   })
+
+  test('a password reset cuts off personal MCP tokens', async ({ page, context }) => {
+    const { email } = await newAccount(page, 'qa-auth-resetmcp')
+    const ws = sql(`select w.id from "Workspace" w join "AccountMember" m on m."accountId"=w."accountId" join "User" u on u.id=m."userId" where u.email='${email}'`)
+    const pat = `lp_pat_${randomBytes(30).toString('base64url')}`
+    sql(
+      `insert into "AccessToken"(id,"userId","workspaceId",kind,name,prefix,"tokenHash") values ('qa-pat-${Date.now()}','${userId(email)}','${ws}','PERSONAL','qa','${pat.slice(0, 13)}','${createHash('sha256').update(pat).digest('hex')}')`,
+    )
+    const ping = async () =>
+      (await fetch('http://localhost:3100/api/mcp', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${pat}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }) })).status
+    expect(await ping()).toBe(200)
+
+    await context.clearCookies()
+    await page.goto('/forgot-password')
+    await page.getByPlaceholder('name@company.com').fill(email)
+    await page.getByRole('button', { name: 'Send reset link' }).click()
+    await page.goto(linkFrom((await latestMail(email, 'Reset your Loudpilot password')).Text, '/reset-password?token='))
+    await page.getByPlaceholder('New password (8+ characters)').fill('Correct-Horse-1')
+    await page.getByPlaceholder('Repeat new password').fill('Correct-Horse-1')
+    await page.getByRole('button', { name: 'Save and sign in' }).click()
+    await page.waitForURL(/\/(onboarding|app)/)
+    expect(await ping()).toBe(401)
+  })
+
+  test('an old-format password hash is upgraded on login', async ({ page, context }) => {
+    const email = uniqueEmail('qa-auth-rehash')
+    await magicSignIn(page, email)
+    await context.clearCookies()
+    setPassword(email, 'Right-Password-1')
+    await page.goto('/login')
+    await page.getByRole('button', { name: 'Password', exact: true }).click()
+    await page.getByPlaceholder('name@company.com').fill(email)
+    await page.getByPlaceholder('Password').fill('Right-Password-1')
+    await page.getByRole('button', { name: 'Log in' }).click()
+    await page.waitForURL(/\/(onboarding|app)/)
+    // No shell: the pattern contains "$".
+    const upgraded = execFileSync('psql', ['-h', 'localhost', 'khma', '-Atc', `select "passwordHash" like 'scrypt$ln=17,r=8,p=1$%' from "User" where email='${email}'`], { encoding: 'utf8' })
+    expect(upgraded.trim()).toBe('t')
+  })
 })
 
 test.describe('sessions & protected routes', () => {

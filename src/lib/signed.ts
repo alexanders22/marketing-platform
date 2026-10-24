@@ -1,10 +1,11 @@
 import 'server-only'
 import { createHmac, timingSafeEqual } from 'node:crypto'
+import { purposeKey } from './crypto'
 
 // Small tamper-proof tokens (connect links, OAuth state) signed with the
 // server key. Not encrypted: never put secrets inside.
 
-const mac = (data: string) => createHmac('sha256', `signed:${process.env.KHMA_ENCRYPTION_KEY}`).update(data).digest('base64url')
+const mac = (data: string) => createHmac('sha256', purposeKey('signed')).update(data).digest('base64url')
 
 export function seal(payload: Record<string, unknown>, ttlSeconds: number) {
   const data = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + ttlSeconds })).toString('base64url')

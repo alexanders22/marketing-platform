@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { CORS } from '@/lib/mcp/server'
 import { prisma } from '@/lib/prisma'
 import { validRedirect } from '@/lib/oauth'
+import { overLimit } from '@/lib/rate-limit'
 
 const Input = z.object({
   client_name: z.string().max(100).optional(),
@@ -11,7 +12,13 @@ const Input = z.object({
 
 // RFC 7591 dynamic client registration: AI apps (Claude, ChatGPT, Cursor …)
 // register themselves. Public clients only — PKCE instead of a secret.
+// Anyone may register, so the consent page labels these apps unverified and
+// shows where they send the user back to.
 export async function POST(req: Request) {
+  const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown'
+  if (overLimit(`oauth-register:${ip}`, 20, 3_600_000)) {
+    return Response.json({ error: 'invalid_client_metadata', error_description: 'Too many registrations. Try again later.' }, { status: 429, headers: CORS })
+  }
   const fail = (description: string) =>
     Response.json({ error: 'invalid_client_metadata', error_description: description }, { status: 400, headers: CORS })
   let raw: unknown

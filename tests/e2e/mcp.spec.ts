@@ -107,6 +107,14 @@ test('OAuth: register, sign in, consent, PKCE, refresh, revoke', async ({ browse
   expect(reg.status).toBe(201)
   const { client_id } = await reg.json()
   expect((await fetch(`${BASE}/oauth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ redirect_uris: ['javascript:alert(1)'] }) })).status).toBe(400)
+  // An invalid request is answered here, never bounced to the app's address
+  // (an open redirect, since anyone can register one); PKCE "plain" is refused.
+  for (const bad of [{ code_challenge_method: 'plain', code_challenge: 'x'.repeat(43) }, { code_challenge_method: 'S256', code_challenge: '' }]) {
+    const q = new URLSearchParams({ response_type: 'code', client_id, redirect_uri: redirect, state: 'xyz', ...bad })
+    const r = await fetch(`${BASE}/oauth/authorize?${q}`, { redirect: 'manual' })
+    expect(r.status).toBe(400)
+    expect(r.headers.get('location')).toBeNull()
+  }
 
   const verifier = randomBytes(48).toString('base64url')
   const challenge = createHash('sha256').update(verifier).digest('base64url')
@@ -129,6 +137,9 @@ test('OAuth: register, sign in, consent, PKCE, refresh, revoke', async ({ browse
   await p.getByRole('button', { name: 'Continue' }).click()
   await p.waitForURL(/\/oauth\/consent/)
   await expect(p.getByRole('heading', { name: /Claude wants to work in Loudpilot/ })).toBeVisible()
+  // Anyone can register an app: the page says so and names where it returns to.
+  await expect(p.getByTestId('oauth-target')).toContainText('Unverified third-party app')
+  await expect(p.getByTestId('oauth-target')).toContainText('send you back to localhost:3100')
   await p.getByRole('button', { name: 'Allow' }).click()
   await p.waitForURL((u) => u.pathname === '/oauth-test-callback')
   const back = new URL(p.url())
@@ -166,6 +177,47 @@ test('OAuth: register, sign in, consent, PKCE, refresh, revoke', async ({ browse
   await p.waitForURL((u) => u.pathname === '/oauth-test-callback')
   expect(new URL(p.url()).searchParams.get('error')).toBe('access_denied')
   await ctx.close()
+})
+
+// Refresh tokens rows made directly, so the race and the age limit are cheap to test.
+function oauthRow(name: string, age = '0 days') {
+  const refresh = `lp_ort_${randomBytes(30).toString('base64url')}`
+  const access = `lp_oat_${randomBytes(30).toString('base64url')}`
+  const sha = (v: string) => createHash('sha256').update(v).digest('hex')
+  const userId = sql(`select id from "User" where email='${email}'`)
+  sql(
+    `insert into "AccessToken"(id,"userId","workspaceId",kind,name,prefix,"tokenHash","refreshHash","clientId","expiresAt","createdAt") values ('qa-${randomBytes(6).toString('hex')}','${userId}','${ws}','OAUTH','${name}','${access.slice(0, 13)}','${sha(access)}','${sha(refresh)}','qa-client',(now() at time zone 'utc') + interval '1 day',(now() at time zone 'utc') - interval '${age}')`,
+  )
+  return refresh
+}
+const refreshWith = (refresh_token: string) =>
+  fetch(`${BASE}/oauth/token`, { method: 'POST', body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token, client_id: 'qa-client' }) })
+
+test('a refresh token mints one pair, even when used twice at once', async () => {
+  const refresh = oauthRow('QA race')
+  const statuses = (await Promise.all([refreshWith(refresh), refreshWith(refresh), refreshWith(refresh)])).map((r) => r.status)
+  expect(statuses.sort()).toEqual([200, 400, 400])
+  expect((await refreshWith(refresh)).status).toBe(400)
+})
+
+test('a refresh token older than 90 days is refused', async () => {
+  expect((await refreshWith(oauthRow('QA old', '91 days'))).status).toBe(400)
+  expect((await refreshWith(oauthRow('QA young', '89 days'))).status).toBe(200)
+})
+
+test('a JSON-RPC batch counts every message and is capped', async () => {
+  const batch = (n: number) =>
+    fetch(`${BASE}/api/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify(Array.from({ length: n }, (_, i) => ({ jsonrpc: '2.0', id: i + 1, method: 'ping' }))),
+    })
+  expect((await batch(21)).status).toBe(400)
+  expect((await batch(0)).status).toBe(400)
+  // 120 messages a minute: batches of 20 hit the limit by the 7th.
+  const statuses: number[] = []
+  for (let i = 0; i < 7; i++) statuses.push((await batch(20)).status)
+  expect(statuses).toContain(429)
 })
 
 test('a revoked personal token stops working', async () => {

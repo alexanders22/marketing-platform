@@ -1,5 +1,6 @@
 import 'server-only'
 import { randomBytes } from 'node:crypto'
+import type { Prisma } from '@prisma/client'
 import { sha256 } from './crypto'
 import { serviceOn } from './plans'
 import { prisma } from './prisma'
@@ -9,6 +10,8 @@ import { prisma } from './prisma'
 // are stored.
 
 const OAUTH_TTL_MS = 30 * 86_400_000
+// A refresh token is refused this long after it was issued, used or not.
+const REFRESH_TTL_MS = 90 * 86_400_000
 
 const newSecret = (prefix: string) => `${prefix}${randomBytes(30).toString('base64url')}`
 
@@ -39,13 +42,21 @@ export async function issueOAuthTokens(userId: string, workspaceId: string, clie
   return { access_token: access, refresh_token: refresh, token_type: 'Bearer', expires_in: Math.floor(OAUTH_TTL_MS / 1000), scope: 'loudpilot' }
 }
 
-// Refresh rotates: the old pair stops working.
+// Refresh rotates: the old pair stops working. The claim is one conditional
+// update, so two parallel refreshes with the same token mint one pair.
 export async function refreshOAuthTokens(refreshToken: string, clientId: string) {
-  const old = await prisma.accessToken.findUnique({ where: { refreshHash: sha256(refreshToken) } })
-  if (!old || old.revokedAt || old.clientId !== clientId) return null
-  await prisma.accessToken.update({ where: { id: old.id }, data: { revokedAt: new Date(), refreshHash: null } })
+  const refreshHash = sha256(refreshToken)
+  const old = await prisma.accessToken.findUnique({ where: { refreshHash } })
+  if (!old || old.revokedAt || old.clientId !== clientId || old.createdAt.getTime() + REFRESH_TTL_MS < Date.now()) return null
+  const claimed = await prisma.accessToken.updateMany({ where: { id: old.id, refreshHash, revokedAt: null }, data: { revokedAt: new Date(), refreshHash: null } })
+  if (claimed.count !== 1) return null
   return issueOAuthTokens(old.userId, old.workspaceId, clientId, old.name)
 }
+
+// Account recovery (password reset, first proof of the email): every
+// personal token and AI app connection of the user stops working.
+export const revokeUserTokens = (userId: string, db: Prisma.TransactionClient = prisma) =>
+  db.accessToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date(), refreshHash: null } })
 
 export type Caller = Awaited<ReturnType<typeof authenticate>>
 

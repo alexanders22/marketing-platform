@@ -57,8 +57,9 @@ export async function checkAuthorize(p: Partial<AuthorizeParams>) {
   const client = p.client_id ? await prisma.oAuthClient.findUnique({ where: { id: p.client_id } }) : null
   if (!client) return { error: 'This app is not registered with Loudpilot.' }
   if (!p.redirect_uri || !client.redirectUris.includes(p.redirect_uri)) return { error: 'The return address does not match this app.' }
+  // PKCE with S256 only: "plain" (or no method) is refused.
   if (p.code_challenge_method !== 'S256' || !p.code_challenge || !/^[A-Za-z0-9_-]{43,128}$/.test(p.code_challenge)) {
-    return { error: 'PKCE (S256) is required.', redirect: true }
+    return { error: 'PKCE (S256) is required.' }
   }
   return { client }
 }
@@ -81,6 +82,16 @@ export async function createCode(p: AuthorizeParams, userId: string, workspaceId
 
 export const pkceOk = (verifier: string, challenge: string) =>
   /^[A-Za-z0-9._~-]{43,128}$/.test(verifier) && createHash('sha256').update(verifier).digest('base64url') === challenge
+
+// What the consent page shows as the app's return address: the host for
+// web addresses ("will send you back to example.com"), the scheme for apps.
+export function redirectTarget(uri: string) {
+  const u = new URL(uri)
+  if (u.protocol === 'https:' || u.protocol === 'http:') {
+    return { host: u.host, local: ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname) }
+  }
+  return { host: u.host ? `${u.protocol}//${u.host}` : u.protocol, local: false }
+}
 
 export function withQuery(uri: string, q: Record<string, string | undefined>) {
   const u = new URL(uri)

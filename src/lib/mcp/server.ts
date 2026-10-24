@@ -21,16 +21,17 @@ type Rpc = { jsonrpc: '2.0'; id?: string | number | null; method: string; params
 const rpcError = (id: Rpc['id'], code: number, message: string) => ({ jsonrpc: '2.0' as const, id: id ?? null, error: { code, message } })
 const rpcResult = (id: Rpc['id'], result: unknown) => ({ jsonrpc: '2.0' as const, id: id ?? null, result })
 
-// 120 calls a minute per token.
+// 120 messages a minute per token; every message of a batch counts.
+const MAX_BATCH = 20
 const windowStart = new Map<string, { at: number; n: number }>()
-function limited(tokenId: string) {
+function limited(tokenId: string, n: number) {
   const now = Date.now()
   const w = windowStart.get(tokenId)
   if (!w || now - w.at > 60_000) {
-    windowStart.set(tokenId, { at: now, n: 1 })
-    return false
+    windowStart.set(tokenId, { at: now, n })
+    return n > 120
   }
-  w.n++
+  w.n += n
   return w.n > 120
 }
 
@@ -93,9 +94,6 @@ async function handle(c: NonNullable<Caller>, msg: Rpc) {
 export async function mcpPost(req: Request) {
   const caller = await authenticate(req)
   if (!caller) return unauthorized()
-  if (limited(caller.token.id)) {
-    return Response.json(rpcError(null, -32000, 'Too many requests — slow down a little.'), { status: 429, headers: CORS })
-  }
   let body: unknown
   try {
     body = await req.json()
@@ -103,6 +101,12 @@ export async function mcpPost(req: Request) {
     return Response.json(rpcError(null, -32700, 'Parse error'), { status: 400, headers: CORS })
   }
   const messages = (Array.isArray(body) ? body : [body]) as Rpc[]
+  if (messages.length === 0 || messages.length > MAX_BATCH) {
+    return Response.json(rpcError(null, -32600, `A batch holds 1 to ${MAX_BATCH} messages`), { status: 400, headers: CORS })
+  }
+  if (limited(caller.token.id, messages.length)) {
+    return Response.json(rpcError(null, -32000, 'Too many requests — slow down a little.'), { status: 429, headers: CORS })
+  }
   const out = []
   for (const m of messages) {
     if (!m || m.jsonrpc !== '2.0' || typeof m.method !== 'string') {
