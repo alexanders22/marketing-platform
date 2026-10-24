@@ -114,7 +114,8 @@ test('Telegram: the bot must be an admin that may post, and Start must come from
   // The channel's creator presses Start with the new link.
   social.tgSay(TG_OWNER, `/start ${await startCode(page)}`)
   await connect()
-  await expect(tg.getByText('Bloom News')).toBeVisible()
+  // Not just "Bloom News": the refusal above names the channel too.
+  await expect(tg.getByText('Connected Bloom News.')).toBeVisible()
   const row = sql(`select "externalId"||'|'||handle||'|'||"accessTokenEnc" from "SocialAccount" where "workspaceId"='${workspaceId}' and network='TELEGRAM'`)
   expect(row).toMatch(new RegExp(`^-100\\d+\\|${CHANNEL}\\|`))
   expect(row).not.toContain('platform-token')
@@ -273,6 +274,8 @@ test('scheduling refuses what the network would refuse at the hour', async () =>
   // Publishing says the same (above); scheduling says it now, not at the hour.
   const id = addPost('Words for TikTok', ['TIKTOK'])
   await page.goto(`/app/posts/${id}`)
+  // Controlled input: wait for hydration, or it resets what was typed.
+  await page.waitForLoadState('networkidle')
   await page.locator('input[type="datetime-local"]').fill('2099-01-01T10:00')
   await page.getByRole('button', { name: 'Schedule' }).click()
   await expect(page.getByText(/TikTok needs a video/)).toBeVisible()

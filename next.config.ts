@@ -39,6 +39,12 @@ const nextConfig: NextConfig = {
           { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
         ],
       },
+      // Stored files are inert (their routes set the same; this rule would
+      // otherwise replace it with the frame-ancestors one above).
+      ...['/media/:path*', '/b/:slug/avatar'].map((source) => ({
+        source,
+        headers: [{ key: 'Content-Security-Policy', value: "default-src 'none'; sandbox" }],
+      })),
     ]
   },
   // Landing links to the signed-in product (terminal.loudpilot.app), baked in
