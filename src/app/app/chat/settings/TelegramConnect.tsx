@@ -26,7 +26,7 @@ export function TelegramConnect({ name, canManage, operatorId, label = 'Telegram
       </p>
     )
   return (
-    <div className="space-y-2 text-sm">
+    <div className="space-y-2 text-sm" role="group" aria-label={label}>
       <p className="font-medium">{label}</p>
       {!links ? (
         <button

@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { revokeUserTokens } from '@/lib/access-tokens'
 import { WORKSPACE_COOKIE } from '@/lib/context'
 import { sha256 } from '@/lib/crypto'
 import { prisma } from '@/lib/prisma'
@@ -19,11 +20,16 @@ export async function acceptInvite(form: FormData) {
     const claimed = await tx.invitation.updateMany({ where: { id: invite.id, acceptedAt: null }, data: { acceptedAt: new Date() } })
     if (claimed.count !== 1) return null
     const existing = await tx.user.findUnique({ where: { email: invite.email } })
+    if (existing && !existing.emailVerifiedAt) {
+      // First proof of the address: drop a password nobody verified, and the
+      // sessions and tokens it may have opened.
+      await tx.session.deleteMany({ where: { userId: existing.id } })
+      await revokeUserTokens(existing.id, tx)
+    }
     const user = existing
       ? existing.emailVerifiedAt
         ? existing
-        : // First proof of the address: drop a password nobody verified.
-          await tx.user.update({ where: { id: existing.id }, data: { emailVerifiedAt: new Date(), passwordHash: null } })
+        : await tx.user.update({ where: { id: existing.id }, data: { emailVerifiedAt: new Date(), passwordHash: null } })
       : await tx.user.create({ data: { email: invite.email, name: invite.email.split('@')[0], emailVerifiedAt: new Date() } })
     await tx.accountMember.upsert({
       where: { accountId_userId: { accountId: invite.accountId, userId: user.id } },

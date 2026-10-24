@@ -6,7 +6,7 @@ import { requireContext } from '@/lib/context'
 import { encrypt } from '@/lib/crypto'
 import { tokenFor } from '@/lib/networks'
 import { boardsOf } from '@/lib/networks/pinterest'
-import { findChannel, PLATFORM_BOT, platformBot } from '@/lib/networks/telegram'
+import { chatName, findChannel, newStartCode, PLATFORM_BOT, platformBot, runsChannel, spendStartCode, startedWith, telegramBotName } from '@/lib/networks/telegram'
 import { creatorInfo } from '@/lib/networks/tiktok'
 import { NetworkError } from '@/lib/networks/types'
 import { limitsFor, serviceOff, serviceOn } from '@/lib/plans'
@@ -33,10 +33,29 @@ const TelegramInput = z.object({
     .default(''),
 })
 
+// The Start link that shows who connects a channel through Loudpilot's bot:
+// pressed from the person's own Telegram, it tells the bot their account.
+const proofTarget = (userId: string) => `channel:${userId}`
+async function proofLink(workspaceId: string, userId: string) {
+  const name = await telegramBotName()
+  return name ? `https://t.me/${name}?start=${await newStartCode(workspaceId, proofTarget(userId))}` : undefined
+}
+
+export async function telegramProofLink(): Promise<{ error?: string; link?: string }> {
+  const { workspace, role, user } = await requireContext()
+  if (role === 'EDITOR') return { error: 'Only owners and admins can change channels' }
+  const link = await proofLink(workspace.id, user.id)
+  return link ? { link } : { error: 'Loudpilot’s Telegram bot is not available — use your own bot token.' }
+}
+
 // Connect a Telegram channel: the bot (Loudpilot's or the company's own)
-// must already be an admin with "Post messages".
-export async function connectTelegram(raw: z.input<typeof TelegramInput>): Promise<{ error?: string; name?: string }> {
-  const { workspace, role, account } = await requireContext()
+// must already be an admin with "Post messages". With Loudpilot's bot the
+// person must also have pressed Start in it from a Telegram account that
+// runs the channel, and the channel can't be in another Loudpilot account.
+// (Only a channel's admins can make the company's own bot an admin.)
+// `link`: a fresh Start link when the proof failed.
+export async function connectTelegram(raw: z.input<typeof TelegramInput>): Promise<{ error?: string; name?: string; link?: string }> {
+  const { workspace, role, account, user } = await requireContext()
   if (role === 'EDITOR') return { error: 'Only owners and admins can change channels' }
   const parsed = TelegramInput.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the channel' }
@@ -50,18 +69,49 @@ export async function connectTelegram(raw: z.input<typeof TelegramInput>): Promi
   } catch (e) {
     return { error: e instanceof NetworkError ? e.message : 'Telegram did not answer — try again' }
   }
+
+  let proof: string | null = null
+  if (!botToken) {
+    const refused = async (error: string) => ({ error, link: await proofLink(workspace.id, user.id) })
+    const started = await startedWith(workspace.id, proofTarget(user.id))
+    if (!started) return refused(`Open @${found.bot} from your own Telegram and press Start (step 2), then connect again.`)
+    if ('error' in started) return refused(started.error)
+    if (started.chat.type !== 'private' || !started.from) return refused(`Press Start in a private chat with @${found.bot}, not in a group.`)
+    let runs
+    try {
+      runs = await runsChannel(stored, found.externalId, started.from.id)
+    } catch (e) {
+      return { error: e instanceof NetworkError ? e.message : 'Telegram did not answer — try again' }
+    }
+    if (!runs) {
+      await spendStartCode(started.codeId)
+      return refused(`Your Telegram account (${chatName(started.from)}) is not an admin of ${found.name} who can post. Press Start from the account that runs the channel.`)
+    }
+    proof = started.codeId
+  }
+
   const limit = limitsFor(account).profiles
   const data = { name: found.name, handle: found.handle, meta: { bot: found.bot, ownBot: !!botToken }, accessTokenEnc: encrypt(stored), scopes: ['post'], status: 'ACTIVE' as const, lastError: null }
-  // One connect at a time per company, so two can't both use the last place.
-  const full = await prisma.$transaction(async (tx) => {
+  // One connect at a time per company, so two can't both use the last place;
+  // and per channel, so two accounts can't both take it.
+  const outcome = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'profiles:' + workspace.id}))`
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'telegram:' + found.externalId}))`
+    if (!botToken) {
+      const others = await tx.socialAccount.findMany({ where: { network: 'TELEGRAM', externalId: found.externalId }, select: { meta: true, workspace: { select: { accountId: true } } } })
+      if (others.some((o) => o.workspace.accountId !== account.id && (o.meta as { ownBot?: boolean } | null)?.ownBot !== true)) return 'taken'
+    }
     const where = { workspaceId_network_externalId: { workspaceId: workspace.id, network: 'TELEGRAM' as const, externalId: found.externalId } }
     const existing = await tx.socialAccount.findUnique({ where })
-    if (!existing && (await countProfiles(workspace.id, tx)) >= limit) return true
+    if (!existing && (await countProfiles(workspace.id, tx)) >= limit) return 'full'
+    if (proof && !(await spendStartCode(proof, tx))) return 'spent'
     await tx.socialAccount.upsert({ where, create: { workspaceId: workspace.id, network: 'TELEGRAM', externalId: found.externalId, ...data }, update: data })
-    return false
+    return 'ok'
   })
-  if (full) return { error: `Your plan includes ${limit} social profiles per company. Disconnect one or upgrade to add more.` }
+  if (outcome === 'taken')
+    return { error: `${found.name} is already connected to another Loudpilot account through @${found.bot}. Ask them to disconnect it, or connect it with your own bot token.` }
+  if (outcome === 'full') return { error: `Your plan includes ${limit} social profiles per company. Disconnect one or upgrade to add more.` }
+  if (outcome === 'spent') return { error: 'That Start link was already used. Press Start with the new link, then connect again.', link: await proofLink(workspace.id, user.id) }
   revalidatePath('/app', 'layout')
   return { name: found.name }
 }

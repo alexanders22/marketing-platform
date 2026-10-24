@@ -10,6 +10,7 @@ import { saveRecurringPlans } from '../actions'
 import { ActionForm } from '../ui'
 import { VAT, grossOf } from '@/lib/tax'
 import { card, daysAgo, fmtDateTime, REASON, Stat } from '../shared'
+import { requireSuperAdmin } from '@/lib/admin'
 
 const KINDS: { id: string; label: string; reasons: CreditReason[] }[] = [
   { id: 'money', label: 'Payments & refunds', reasons: ['PURCHASE', 'REFUND'] },
@@ -22,6 +23,9 @@ const KINDS: { id: string; label: string; reasons: CreditReason[] }[] = [
 const withVat = (o: { usd: number; gel: number }) => ({ usd: grossOf(o.usd), gel: grossOf(o.gel) })
 
 export default async function AdminPayments({ searchParams }: PageProps<'/admin/payments'>) {
+  // Checked here, not only in the layout: a client navigation can render this
+  // page without running the layout.
+  await requireSuperAdmin()
   const sp = await searchParams
   const kind = KINDS.find((k) => k.id === sp.kind) ?? KINDS[0]
   const since = daysAgo(30)

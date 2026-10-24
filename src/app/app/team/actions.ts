@@ -9,6 +9,7 @@ import { sha256 } from '@/lib/crypto'
 import { terminalUrl } from '@/lib/hosts'
 import { actionEmail, sendMail } from '@/lib/mail'
 import { prisma } from '@/lib/prisma'
+import { overLimit } from '@/lib/rate-limit'
 import { INVITE_TTL_MS } from '@/lib/team'
 
 export type TeamState = { ok?: string; error?: string } | undefined
@@ -32,6 +33,8 @@ export async function inviteMember(_: TeamState, f: FormData): Promise<TeamState
   const { email, role } = parsed.data
   // Every plan has unlimited users; an account without a plan invites no one.
   if (account.plan === 'NONE' && !asAdmin) return { error: 'Choose a plan to invite teammates.' }
+  // Invitation emails per account and hour: the team page is no mail cannon.
+  if (overLimit(`invite:${account.id}`, 30, 3_600_000)) return { error: 'Too many invitations in the last hour. Try again later.' }
   const token = randomBytes(32).toString('base64url')
 
   const result = await prisma.$transaction(async (tx) => {

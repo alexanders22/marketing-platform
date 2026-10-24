@@ -4,11 +4,11 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireContext } from '@/lib/context'
 import { prisma } from '@/lib/prisma'
-import { publishPostNow, targetsFor } from '@/lib/publisher'
+import { publishPostNow, scheduleProblem, targetsFor } from '@/lib/publisher'
 import { aiEnabled, generateImage } from '@/lib/ai'
 import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
-import { mediaUrl, saveMedia } from '@/lib/storage'
+import { deleteMedia, mediaUrl, saveMedia } from '@/lib/storage'
 import { aiError } from '@/lib/ai-health'
 import { resolveImageStyle } from '@/lib/style-ref'
 import { Prisma } from '@prisma/client'
@@ -70,7 +70,10 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
   if (owned.some((m) => m.kind === 'VIDEO') && p.mediaIds.length > 1) return { error: 'A post can have one video or several images — not both' }
 
   const existing = p.id
-    ? await prisma.post.findFirst({ where: { id: p.id, workspaceId: workspace.id }, select: { status: true } })
+    ? await prisma.post.findFirst({
+        where: { id: p.id, workspaceId: workspace.id },
+        select: { status: true, cta: true, networkOptions: true, campaign: { select: { name: true } } },
+      })
     : null
   if (p.id && !existing) return { error: 'Post not found' }
   if (existing?.status === 'PUBLISHING') return { error: 'This post is being published right now' }
@@ -82,6 +85,23 @@ export async function savePost(raw: PostInput): Promise<{ id?: string; error?: s
     if (new Date(p.scheduledAt).getTime() < Date.now() - 60_000) return { error: 'Pick a time in the future — or publish now' }
     const targets = await targetsFor({ workspaceId: workspace.id, channels: p.channels })
     if (targets.length === 0) return { error: 'Connect an account for the picked networks in Channels to schedule' }
+    // What would fail at the scheduled hour (Instagram without an image,
+    // TikTok without a video, X over 280 characters…) is refused now.
+    const problem = await scheduleProblem(
+      {
+        // A new post has no id yet (it is in the UTM tag): one of the same length.
+        id: p.id ?? 'c'.repeat(25),
+        workspaceId: workspace.id,
+        content: p.content,
+        hashtags: [...new Set(p.hashtags)],
+        mediaIds: p.mediaIds,
+        cta: p.cta !== undefined ? p.cta : existing?.cta,
+        networkOptions: p.networkOptions !== undefined ? p.networkOptions : existing?.networkOptions,
+        campaign: existing?.campaign,
+      },
+      targets,
+    )
+    if (problem) return { error: problem }
   }
 
   const data = {
@@ -128,7 +148,9 @@ async function syncCampaignRange(postId: string, campaignId?: string | null) {
 export async function deletePost(id: string) {
   const { workspace } = await requireContext()
   const post = await prisma.post.findFirst({ where: { id, workspaceId: workspace.id }, select: { campaignId: true } })
-  await prisma.post.deleteMany({ where: { id, workspaceId: workspace.id } })
+  // Mid-publish the post must stay (the publisher writes its results to it).
+  const res = await prisma.post.deleteMany({ where: { id, workspaceId: workspace.id, status: { not: 'PUBLISHING' } } })
+  if (post && res.count === 0) return { error: 'This post is being published right now — delete it once that is done' }
   if (post?.campaignId) await syncCampaignRange(id, post.campaignId)
   revalidatePath('/app', 'layout')
   return {}
@@ -208,7 +230,7 @@ export async function generatePostImages(input: { prompt: string; caption: strin
     { amount: media.length * COST.image, reason: 'AI_IMAGE', note: `${media.length} post image${media.length > 1 ? 's' : ''}`, action: 'image', units: media.length },
   ])
   if (!ok) {
-    await prisma.media.deleteMany({ where: { id: { in: media.map((m) => m.id) } } })
+    await deleteMedia(media.map((m) => m.id))
     return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
   }
   revalidatePath('/app', 'layout')

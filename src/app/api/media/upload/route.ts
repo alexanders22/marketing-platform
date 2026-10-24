@@ -1,10 +1,10 @@
 import { createWriteStream } from 'node:fs'
-import { rm, unlink } from 'node:fs/promises'
+import { open, rm, unlink } from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { requireContext } from '@/lib/context'
-import { posterFrame, probe } from '@/lib/ffmpeg'
+import { posterFrame, probe, sniffType } from '@/lib/ffmpeg'
 import { saveMediaFile, mediaUrl, tempDir } from '@/lib/storage'
 
 // Videos and audio for the Studio and posts, streamed to disk (too big for a
@@ -40,9 +40,20 @@ export async function POST(req: Request) {
     }
     if (bytes === 0) return fail(400, 'Empty upload')
 
-    // Trust what ffmpeg reads, not the declared type.
-    const info = await probe(file)
+    // Trust the bytes, not the declared type: ffmpeg reads the file with the
+    // demuxer of the container it starts with, and only that.
     const video = mime.startsWith('video/')
+    const head = Buffer.alloc(16)
+    await open(file).then(async (h) => {
+      try {
+        await h.read(head, 0, 16, 0)
+      } finally {
+        await h.close()
+      }
+    })
+    const type = sniffType(head, video ? 'video' : 'audio')
+    if (!type) return fail(415, video ? 'Upload MP4, MOV or WebM videos' : 'Upload MP3, M4A, WAV or OGG audio')
+    const info = await probe(file, type)
     if (video ? !info.video : !info.audio) return fail(415, video ? 'This file has no video in it' : 'This file has no audio in it')
     if (!info.durationMs) return fail(415, 'Could not read this file')
     if (info.durationMs > MAX_SECONDS * 1000) return fail(413, `Up to ${MAX_SECONDS / 60} minutes per file`)
@@ -50,11 +61,11 @@ export async function POST(req: Request) {
     let posterId: string | undefined
     if (video) {
       const still = path.join(dir, 'poster.jpg')
-      await posterFrame(file, still, Math.min(1, info.durationMs / 2000))
+      await posterFrame(file, type, still, Math.min(1, info.durationMs / 2000))
       posterId = (await saveMediaFile(workspace.id, still, 'image/jpeg', 'Video poster')).id
     }
     const name = (new URL(req.url).searchParams.get('name') ?? '').slice(0, 200) || undefined
-    const media = await saveMediaFile(workspace.id, file, mime, name, {
+    const media = await saveMediaFile(workspace.id, file, type, name, {
       durationMs: info.durationMs,
       width: info.width ?? undefined,
       height: info.height ?? undefined,

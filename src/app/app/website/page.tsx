@@ -19,6 +19,7 @@ const ERRORS: Record<string, string> = {
   'sc-empty': 'This Google account has no verified site in Search Console. Add and verify your website at search.google.com/search-console first.',
   'ga-off': 'Google sign-in is not configured yet.',
   role: 'Only the owner or an admin can connect Google.',
+  plan: 'Your plan has ended (or none is picked yet). Renew or choose a plan to connect Search Console — your posts, channels and credits are kept.',
 }
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`

@@ -224,7 +224,8 @@ export function PostEditor({
   const remove = async () => {
     if (!initial.id || !(await confirmDialog('Delete this post?', { confirm: 'Delete', danger: true }))) return
     start(async () => {
-      await deletePost(initial.id!)
+      const res = await deletePost(initial.id!)
+      if (res.error) return setError(res.error)
       router.push('/app/planner')
     })
   }

@@ -31,6 +31,8 @@ model Partner {
   // Share of credit purchases paid out to the partner (0–100).
   revenueSharePct Float         @default(0)
   webhookUrl      String?
+  // Signing secret, stored with encrypt() (rows saved before: plain "whsec_…",
+  // encrypted when the webhook is next saved; see webhookSecret() in alerts.ts).
   webhookSecret   String?
   // Set for an Agency customer's own API access: workspaces it creates belong
   // to this account, and keys work only while the plan allows the API.
@@ -279,6 +281,7 @@ model Workspace {
   chatBot          ChatBot?
   chatConversations ChatConversation[]
   chatOperators    ChatOperator[]
+  telegramCodes    TelegramCode[]
 
   @@unique([partnerId, externalId])
   @@index([accountId])
@@ -1693,6 +1696,25 @@ model ChatOperator {
   conversations ChatConversation[]
 
   @@unique([workspaceId, userId])
+}
+
+// A one-time code sent to Loudpilot's Telegram bot as "/start <code>" from
+// someone's own Telegram: links a chat for hand-over alerts (target = the
+// workspace id, or "op:<operatorId>"), or shows who connects a channel
+// through the shared bot ("channel:<userId>"). Only its sha256 is stored;
+// it lives 15 minutes and is used once.
+model TelegramCode {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  target      String
+  codeHash    String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, target])
+  @@index([expiresAt])
 }
 
 model ChatMessage {

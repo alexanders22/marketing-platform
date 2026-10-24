@@ -9,7 +9,7 @@ import { withDossier } from '../dossier'
 import { createGoalFor } from '../goal-input'
 import { METRICS } from '../goal-metrics'
 import { prisma } from '../prisma'
-import { publishPostNow, targetsFor } from '../publisher'
+import { publishPostNow, scheduleProblem, targetsFor } from '../publisher'
 import { OBJECTIVES, applyGoals, applyPosts, buildPlan, type PlanData } from '../strategist'
 import { isValidTimeZone } from '../time'
 import { applyRecommendation, dismissRecommendation, type ReviewData } from '../weekly'
@@ -162,8 +162,14 @@ export const TOOLS = [
     run: async (c, a) => {
       if (a.schedule) {
         if (!a.scheduledAt || Date.parse(a.scheduledAt) < Date.now() - 60_000) throw new ToolError('Scheduling needs a future scheduledAt.')
-        if ((await targetsFor({ workspaceId: c.workspace.id, channels: a.channels })).length === 0)
-          throw new ToolError('No connected Facebook Page or Instagram account for these channels — save it as a draft instead.')
+        const targets = await targetsFor({ workspaceId: c.workspace.id, channels: a.channels })
+        if (targets.length === 0) throw new ToolError('No connected Facebook Page or Instagram account for these channels — save it as a draft instead.')
+        // What would fail at the scheduled hour (Instagram without an image…) is refused now, as in the editor.
+        const problem = await scheduleProblem(
+          { id: 'c'.repeat(25), workspaceId: c.workspace.id, content: a.content, hashtags: [...new Set(a.hashtags)], cta: null, mediaIds: [] },
+          targets,
+        )
+        if (problem) throw new ToolError(`${problem} Save it as a draft instead.`)
       }
       const post = await prisma.post.create({
         data: {

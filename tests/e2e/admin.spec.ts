@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import path from 'node:path'
 import { newAccount, sql, onceAppDialog } from './helpers'
 
 // Several companies per account (switcher, plan limit) and the super admin
@@ -148,6 +150,17 @@ test('block signs the user out; unblock lets them in', async () => {
   await expect(admin.getByText(/Blocked since/)).toHaveCount(0)
 })
 
+// The companies' stored files (pictures, videos), checked after the delete below.
+let folders: string[] = []
+test('the companies have stored files before they are deleted', async () => {
+  folders = sql(`select id from "Workspace" where "accountId"='${accountId}'`).split('\n').filter(Boolean).map((id) => path.join('storage', id))
+  expect(folders.length).toBeGreaterThanOrEqual(2)
+  for (const f of folders) {
+    mkdirSync(f, { recursive: true })
+    writeFileSync(path.join(f, 'e2e-delete-me.png'), 'x')
+  }
+})
+
 test('delete a company, then the account', async () => {
   await admin.goto(`/admin/companies/${accountId}`)
   const rentals = admin.locator('li', { hasText: 'Arca Rentals' })
@@ -164,4 +177,8 @@ test('delete a company, then the account', async () => {
   expect(sql(`select count(*) from "Account" where id='${accountId}'`)).toBe('0')
   expect(sql(`select count(*) from "Workspace" where "accountId"='${accountId}'`)).toBe('0')
   expect(Number(sql(`select count(*) from "AdminLog" where "targetId"='${accountId}'`))).toBeGreaterThan(3)
+})
+
+test('deleting the company and the account removed their stored files', async () => {
+  expect(folders.filter((f) => existsSync(f))).toEqual([])
 })

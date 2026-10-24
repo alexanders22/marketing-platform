@@ -8,7 +8,7 @@ import { requireContext } from '@/lib/context'
 import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
 import { prisma } from '@/lib/prisma'
-import { mediaUrl, saveMedia } from '@/lib/storage'
+import { deleteMedia, mediaUrl, saveMedia } from '@/lib/storage'
 import { copyStyle, listStyles, RefError, resolveImageStyle, type StyleKind, type StyleView } from '@/lib/style-ref'
 
 // Copied styles: read a reference (link or library file), list, delete, and
@@ -91,7 +91,7 @@ export async function imagesInStyle(raw: z.input<typeof ImagesInput>): Promise<{
     { amount: made.length * COST.image, reason: 'AI_IMAGE', note: `${made.length} image${made.length === 1 ? '' : 's'} · ${style.label}`, action: 'image', units: made.length },
   ])
   if (!ok) {
-    await prisma.media.deleteMany({ where: { id: { in: made.map((m) => m.id) } } })
+    await deleteMedia(made.map((m) => m.id))
     return { error: notEnough(made.length * COST.image, 0) }
   }
   revalidatePath('/app', 'layout')

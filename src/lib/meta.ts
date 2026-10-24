@@ -50,6 +50,11 @@ export class MetaError extends Error {
     const c = this.code ?? 0
     return c === 190 || c === 102 || c === 10 || (c >= 200 && c < 300)
   }
+  // Only the token itself is dead (expired, revoked). A missing permission
+  // stops just what needs it — reading numbers must not take publishing down.
+  get tokenDead() {
+    return this.code === 190 || this.code === 102
+  }
 }
 
 const proof = (token: string) => createHmac('sha256', process.env.META_APP_SECRET!).update(token).digest('hex')

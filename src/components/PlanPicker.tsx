@@ -56,7 +56,7 @@ export function PlanPicker({
 
   const points = trialUsed
     ? ['Pay by card, monthly or yearly', 'Your posts, channels and credits are kept', 'Cancel or change your plan anytime']
-    : [`Try every feature free for ${TRIAL_DAYS} days`, 'No charge today', 'Cancel or change your plan anytime']
+    : [`Try Loudpilot free for ${TRIAL_DAYS} days`, 'No charge today', 'Cancel or change your plan anytime']
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
@@ -185,6 +185,14 @@ export function PlanPicker({
             )
           })}
         </div>
+        <p className="mt-5 flex items-start gap-2 text-sm text-zinc-600">
+          <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-500" />
+          <span>
+            <span className="font-medium text-zinc-900">Every plan has the same tools</span> — planner, Design and Video Studio, inbox,
+            Meta ads results, analytics, weekly review, website tag and chat, competitors and SEO. Plans differ in companies, social
+            profiles and AI credits; AI clips (Veo) and the API follow the plan.
+          </span>
+        </p>
       </div>
     </div>
   )

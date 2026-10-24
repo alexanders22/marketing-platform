@@ -1,10 +1,14 @@
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { card, fmtDateTime } from '../shared'
+import { requireSuperAdmin } from '@/lib/admin'
 
 const HREF: Record<string, string> = { account: '/admin/companies/', user: '/admin/users/' }
 
 export default async function AdminActivity() {
+  // Checked here, not only in the layout: a client navigation can render this
+  // page without running the layout.
+  await requireSuperAdmin()
   const logs = await prisma.adminLog.findMany({ orderBy: { createdAt: 'desc' }, take: 300 })
   return (
     <div className="space-y-4">

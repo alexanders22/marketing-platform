@@ -1,12 +1,13 @@
 import 'server-only'
 import { createHmac, timingSafeEqual } from 'node:crypto'
+import { purposeKey } from './crypto'
 import { appUrl } from './mail'
 
 // Short-lived public links to private media, for networks that fetch the
 // image themselves (Facebook, Instagram). The signature covers id + expiry.
 
 const sign = (id: string, exp: number) =>
-  createHmac('sha256', `media:${process.env.KHMA_ENCRYPTION_KEY}`).update(`${id}.${exp}`).digest('base64url')
+  createHmac('sha256', purposeKey('media')).update(`${id}.${exp}`).digest('base64url')
 
 export function signedMediaUrl(id: string, ttlSeconds = 3600) {
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds

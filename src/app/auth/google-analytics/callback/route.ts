@@ -5,6 +5,7 @@ import { encrypt } from '@/lib/crypto'
 import { GA_STATE_COOKIE, SC_SCOPE, exchangeGaCode, gaEnabled, listProperties, syncWebsite } from '@/lib/ga'
 import { bestSite, listSites } from '@/lib/search-console'
 import { terminalUrl } from '@/lib/hosts'
+import { serviceOn } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 import { unseal } from '@/lib/signed'
 
@@ -16,10 +17,12 @@ export async function GET(req: NextRequest) {
     res.cookies.delete({ name: GA_STATE_COOKIE, path: '/auth/google-analytics' })
     return res
   }
-  const { workspace, role, brand } = await requireContext()
+  const { workspace, role, brand, account } = await requireContext()
   const cookie = unseal<{ s: string; ws: string; p?: 'sc' }>(req.cookies.get(GA_STATE_COOKIE)?.value)
-  if (cookie?.p === 'sc') return searchConsole(req, cookie, workspace.id, role, brand?.website ?? null)
+  const served = serviceOn(account)
+  if (cookie?.p === 'sc') return searchConsole(req, cookie, workspace.id, role, brand?.website ?? null, served)
   if (role === 'EDITOR') return back('error=role')
+  if (!served) return back('error=plan')
   if (!gaEnabled()) return back('error=ga-off')
   const q = req.nextUrl.searchParams
   if (q.get('error')) return back('error=ga-denied')
@@ -63,13 +66,14 @@ export async function GET(req: NextRequest) {
 }
 
 // Search Console: keep every readable site, read the one for the brand's website.
-async function searchConsole(req: NextRequest, cookie: { s: string; ws: string }, workspaceId: string, role: string, website: string | null) {
+async function searchConsole(req: NextRequest, cookie: { s: string; ws: string }, workspaceId: string, role: string, website: string | null, served: boolean) {
   const back = (q: string) => {
     const res = NextResponse.redirect(new URL(`/app/website?${q}`, terminalUrl()))
     res.cookies.delete({ name: GA_STATE_COOKIE, path: '/auth/google-analytics' })
     return res
   }
   if (role === 'EDITOR') return back('error=role')
+  if (!served) return back('error=plan')
   if (!gaEnabled()) return back('error=ga-off')
   const q = req.nextUrl.searchParams
   if (q.get('error')) return back('error=sc-denied')

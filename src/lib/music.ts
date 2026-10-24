@@ -1,9 +1,11 @@
 import 'server-only'
 import { rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { probe } from './ffmpeg'
+import { probe, sniffType } from './ffmpeg'
 import { safeFetchBytes } from './safe-fetch'
 import { saveMediaFile, tempDir } from './storage'
+
+const EXT: Record<string, string> = { 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/wav': 'wav', 'audio/mp4': 'm4a', 'audio/aac': 'aac' }
 
 // Free music for videos from Openverse (openverse.org): Creative Commons
 // tracks from Jamendo, Freesound, Wikimedia… Only licences that allow
@@ -86,18 +88,19 @@ export async function importFreeMusic(workspaceId: string, id: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Unknown track')
   const track = toTrack((await getJson(`${API}${id}/`)) as Row)
   if (!track) throw new Error('This track can’t be used in ads')
-  const { bytes, contentType } = await safeFetchBytes(track.previewUrl, { maxBytes: MAX_BYTES, timeoutMs: 60_000, accept: 'audio/*' })
-  const mime = contentType?.split(';')[0].trim() ?? ''
-  const ext = { 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/ogg': 'ogg', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/mp4': 'm4a' }[mime]
-  if (!ext) throw new Error('This track’s file type isn’t supported')
+  const { bytes } = await safeFetchBytes(track.previewUrl, { maxBytes: MAX_BYTES, timeoutMs: 60_000, accept: 'audio/*' })
+  // The type from the bytes, not the server's Content-Type.
+  const mime = sniffType(bytes, 'audio')
+  const ext = mime && EXT[mime]
+  if (!mime || !ext) throw new Error('This track’s file type isn’t supported')
   const dir = await tempDir('music')
   try {
     const file = path.join(dir, `track.${ext}`)
     await writeFile(file, bytes)
-    const info = await probe(file)
+    const info = await probe(file, mime)
     if (!info.durationMs) throw new Error('Could not read this track')
     const name = `${track.title} — ${track.creator}`
-    const media = await saveMediaFile(workspaceId, file, mime === 'audio/mp3' ? 'audio/mpeg' : mime, `Music: ${name} · ${track.license} · ${track.pageUrl ?? 'Openverse'}`, {
+    const media = await saveMediaFile(workspaceId, file, mime, `Music: ${name} · ${track.license} · ${track.pageUrl ?? 'Openverse'}`, {
       durationMs: info.durationMs,
     })
     return { media, name, credit: track.credit }
@@ -107,14 +110,15 @@ export async function importFreeMusic(workspaceId: string, id: string) {
 }
 
 // A generated (Lyria) track into the library.
-export async function saveGeneratedMusic(workspaceId: string, data: Buffer, mime: string, prompt: string) {
-  const ext = mime === 'audio/wav' || mime === 'audio/x-wav' ? 'wav' : 'mp3'
+export async function saveGeneratedMusic(workspaceId: string, data: Buffer, declared: string, prompt: string) {
+  const mime = sniffType(data, 'audio') ?? (declared === 'audio/wav' || declared === 'audio/x-wav' ? 'audio/wav' : 'audio/mpeg')
+  const ext = EXT[mime] ?? 'mp3'
   const dir = await tempDir('music')
   try {
     const file = path.join(dir, `track.${ext}`)
     await writeFile(file, data)
-    const info = await probe(file)
-    return saveMediaFile(workspaceId, file, ext === 'wav' ? 'audio/wav' : 'audio/mpeg', `Music (AI): ${prompt.slice(0, 200)}`, { durationMs: info.durationMs ?? undefined })
+    const info = await probe(file, mime)
+    return saveMediaFile(workspaceId, file, mime, `Music (AI): ${prompt.slice(0, 200)}`, { durationMs: info.durationMs ?? undefined })
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

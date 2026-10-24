@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { startFakeSocial, TG_OWNER, TG_STRANGER } from './fake-social'
 import { latestMail, newAccount, sql, uniqueEmail } from './helpers'
 
 // Website chat operators: hand-overs go to a free operator in turn, a busy
@@ -14,9 +15,10 @@ let owner = ''
 const ana = uniqueEmail('ana-operator')
 
 // A visitor writes a red-flag message: the chat is handed over at once.
+// Each visitor has their own IP (one IP may start only 5 chats an hour).
 async function refund(n: number) {
   const res = await page.request.post('/api/chat/send', {
-    headers: { 'content-type': 'text/plain' },
+    headers: { 'content-type': 'text/plain', 'x-forwarded-for': `10.0.0.${n}` },
     data: JSON.stringify({ s: key, v: `visitor-${Date.now()}-${n}`, text: `I want a refund #${n}` }),
   })
   expect(res.status()).toBe(200)
@@ -107,4 +109,57 @@ test('a reply makes an unassigned chat the replier’s', async () => {
   await page.getByLabel('Your answer').fill('Hi, I can help with that.')
   await page.getByRole('button', { name: 'Send', exact: true }).click()
   await expect.poll(() => chat.operator()).toBe(owner)
+})
+
+test('one IP can start only a few new chats an hour on a site', async () => {
+  const start = (n: number) =>
+    page.request.post('/api/chat/send', {
+      headers: { 'content-type': 'text/plain', 'x-forwarded-for': '10.9.9.9' },
+      data: JSON.stringify({ s: key, v: `flood-${Date.now()}-${n}`, text: `I want a refund, flood ${n}` }),
+    })
+  for (let n = 1; n <= 5; n++) expect((await start(n)).status()).toBe(200)
+  expect((await start(6)).status()).toBe(429)
+  expect(sql(`select count(*) from "ChatMessage" m join "ChatConversation" c on c.id=m."conversationId" where c."workspaceId"='${ws}' and m.text like 'I want a refund, flood %'`)).toBe('5')
+})
+
+test('a made-up X-Forwarded-For does not get around the new-chat limit', async () => {
+  // A proxy appends the real address; whatever the client put first is ignored.
+  const start = (n: number) =>
+    page.request.post('/api/chat/send', {
+      headers: { 'content-type': 'text/plain', 'x-forwarded-for': `10.7.${n}.1, 10.8.8.8` },
+      data: JSON.stringify({ s: key, v: `spoof-${Date.now()}-${n}`, text: `I want a refund, spoof ${n}` }),
+    })
+  for (let n = 1; n <= 5; n++) expect((await start(n)).status()).toBe(200)
+  expect((await start(6)).status()).toBe(429)
+})
+
+test('Telegram alerts: the link has a random code that works once, and not from two chats', async () => {
+  const social = startFakeSocial()
+  await social.listen()
+  try {
+    await page.goto('/app/chat/settings')
+    const box = page.getByRole('group', { name: /^(Shared Telegram \(every hand-over\)|Telegram alerts)$/ })
+    const code = async () => {
+      await box.getByRole('button', { name: 'Connect Telegram' }).click()
+      return new URL((await box.getByRole('link', { name: 'the Loudpilot bot' }).getAttribute('href'))!).searchParams.get('start')!
+    }
+    const first = await code()
+    expect(first).toMatch(/^[\w-]{20,}$/)
+    // Someone else who saw the link sends it too: it stops working.
+    social.tgSay(TG_STRANGER, `/start ${first}`)
+    social.tgSay(TG_OWNER, `/start ${first}`)
+    await box.getByRole('button', { name: /Start was pressed/ }).click()
+    await expect(box.getByText(/more than one Telegram chat/)).toBeVisible()
+
+    await page.reload()
+    const second = await code()
+    expect(second).not.toBe(first)
+    social.tgSay(TG_OWNER, `/start ${second}`)
+    await box.getByRole('button', { name: /Start was pressed/ }).click()
+    await expect(page.getByText(`User ${TG_OWNER}`)).toBeVisible()
+    expect(sql(`select "telegramChatId" from "ChatBot" where "workspaceId"='${ws}'`)).toBe(String(TG_OWNER))
+    expect(sql(`select count(*) from "TelegramCode" where "workspaceId"='${ws}' and "usedAt" is not null`)).toBe('2')
+  } finally {
+    await social.close()
+  }
 })

@@ -1,6 +1,5 @@
 'use server'
 
-import { createHmac } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { aiEnabled, LANGUAGES, writeChatSetup } from '@/lib/ai'
 import { aiError } from '@/lib/ai-health'
@@ -9,7 +8,7 @@ import { actionKey, botActions, callAction, reassign, setConversationStatus, tea
 import { requireContext } from '@/lib/context'
 import { balanceOf, charge, notEnough, prices } from '@/lib/credits'
 import { crawlSite, withDossier } from '@/lib/dossier'
-import { platformBot, telegramBotName, tg } from '@/lib/networks/telegram'
+import { chatName, newStartCode, platformBot, spendStartCode, startedWith, telegramBotName, tg } from '@/lib/networks/telegram'
 import { prisma } from '@/lib/prisma'
 import { ensureSite, normEmail } from '@/lib/tag'
 
@@ -233,44 +232,38 @@ export async function reassignChat(conversationId: string, operatorId: string | 
 
 /* ─── Telegram hand-over alerts ────────────────────────────────────────── */
 
-// Static per target: "/start <code>" sent to Loudpilot's bot links a chat —
-// the company's shared one, or one operator's own.
-const telegramCode = (target: string) => createHmac('sha256', `tg-chat:${process.env.KHMA_ENCRYPTION_KEY}`).update(target).digest('hex').slice(0, 24)
+// "/start <code>" sent to Loudpilot's bot links a chat — the company's shared
+// one, or one operator's own. The code is random, works for 15 minutes and
+// once (src/lib/networks/telegram.ts startedWith).
 const targetOf = (workspaceId: string, operatorId?: string) => (operatorId ? `op:${operatorId}` : workspaceId)
-
-// The person or group that sent "/start <code>" to Loudpilot's bot.
-type Update = { update_id: number; message?: { text?: string; chat: { id: number; title?: string; username?: string; first_name?: string; type: string } } }
-async function startedChat(code: string): Promise<{ id: string; name: string } | { error: string }> {
-  if (!platformBot()) return { error: 'Telegram alerts are not available on this server yet.' }
-  let updates: Update[]
-  try {
-    updates = await tg<Update[]>(platformBot(), 'getUpdates', { allowed_updates: ['message'], limit: 100 })
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Telegram did not answer.' }
-  }
-  const hit = [...updates].reverse().find((u) => new RegExp(`^/start(@\\w+)?\\s+${code}$`).test(u.message?.text?.trim() ?? ''))
-  if (!hit?.message) return { error: 'No message from you yet. Open the link, press Start (or add the bot to your group), then try again.' }
-  const chat = hit.message.chat
-  return { id: String(chat.id), name: chat.title ?? (chat.username ? `@${chat.username}` : chat.first_name ?? 'Telegram chat') }
-}
+const linker = async (operatorId?: string) => (operatorId ? (await ownOrManaged(operatorId)).ctx : await manager())
 
 export async function telegramLinks(operatorId?: string): Promise<{ error?: string; person?: string; group?: string }> {
-  const { workspace } = await requireContext()
+  let ctx
+  try {
+    ctx = await linker(operatorId)
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
   const name = await telegramBotName()
   if (!name) return { error: 'Telegram alerts are not available on this server yet (no Loudpilot bot).' }
-  const code = telegramCode(targetOf(workspace.id, operatorId))
+  const code = await newStartCode(ctx.workspace.id, targetOf(ctx.workspace.id, operatorId))
   return { person: `https://t.me/${name}?start=${code}`, group: `https://t.me/${name}?startgroup=${code}` }
 }
 
 export async function connectTelegram(operatorId?: string): Promise<{ error?: string; name?: string }> {
   let ctx
   try {
-    ctx = operatorId ? (await ownOrManaged(operatorId)).ctx : await manager()
+    ctx = await linker(operatorId)
   } catch (e) {
     return { error: (e as Error).message }
   }
-  const chat = await startedChat(telegramCode(targetOf(ctx.workspace.id, operatorId)))
-  if ('error' in chat) return { error: chat.error }
+  if (!platformBot()) return { error: 'Telegram alerts are not available on this server yet.' }
+  const started = await startedWith(ctx.workspace.id, targetOf(ctx.workspace.id, operatorId))
+  if (!started) return { error: 'No message from you yet. Open the link, press Start (or add the bot to your group), then try again. A link works for 15 minutes.' }
+  if ('error' in started) return { error: started.error }
+  if (!(await spendStartCode(started.codeId))) return { error: 'This link was already used. Get a new one.' }
+  const chat = { id: String(started.chat.id), name: chatName(started.chat) }
   if (operatorId) {
     await prisma.chatOperator.update({ where: { id: operatorId }, data: { telegramChatId: chat.id, telegramName: chat.name } })
   } else {

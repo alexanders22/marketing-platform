@@ -2,6 +2,7 @@ import 'server-only'
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { Prisma, Site, Visitor } from '@prisma/client'
 import { z } from 'zod'
+import { clientIp } from './client-ip'
 import { decrypt, encrypt, sha256 } from './crypto'
 import { siteUrl, terminalUrl } from './hosts'
 import { prisma } from './prisma'
@@ -259,18 +260,27 @@ export function isBot(ua: string) {
   return process.env.NODE_ENV === 'production' && /HeadlessChrome|PhantomJS/i.test(ua)
 }
 
+const hostOf = (origin: string | null) => {
+  try {
+    return origin ? new URL(origin).hostname.toLowerCase() : null
+  } catch {
+    return null
+  }
+}
+
+// A request from Loudpilot's own pages (the demo shop).
+export const fromLoudpilot = (origin: string | null) => {
+  const host = hostOf(origin)
+  return !!host && [siteUrl(), terminalUrl()].some((u) => new URL(u).hostname === host)
+}
+
 // Events are accepted from the site's own domains (and their subdomains),
 // and from Loudpilot itself (the test shop).
 export function hostAllowed(domains: string[], origin: string | null) {
   if (!origin) return domains.length === 0
-  let host: string
-  try {
-    host = new URL(origin).hostname.toLowerCase()
-  } catch {
-    return false
-  }
-  const ours = [siteUrl(), terminalUrl()].map((u) => new URL(u).hostname)
-  if (ours.includes(host)) return true
+  const host = hostOf(origin)
+  if (!host) return false
+  if (fromLoudpilot(origin)) return true
   if (domains.length === 0) return true
   return domains.some((d) => host === d || host.endsWith(`.${d}`))
 }
@@ -289,7 +299,11 @@ export function cleanDomain(raw: string) {
 
 /* ─── Recording ────────────────────────────────────────────────────────── */
 
-const props = z.record(z.string(), z.unknown())
+// Event properties: a small flat-ish object (stored only up to 3000 chars of JSON).
+const props = z.record(z.string().max(100), z.unknown()).refine((p) => Object.keys(p).length <= 50, 'At most 50 properties')
+
+// The company's own user id: up to 200 characters (the first 120 are stored).
+const userId = z.union([z.string().max(200), z.number()]).transform(String)
 
 export const browserEvent = z.object({
   n: z.string().max(60),
@@ -302,7 +316,7 @@ export const browserEvent = z.object({
 })
 
 export const identity = z.object({
-  user_id: z.union([z.string(), z.number()]).transform(String).optional(),
+  user_id: userId.optional(),
   user_hash: z.string().max(128).optional(),
   email: z.string().max(200).optional(),
   phone: z.string().max(40).optional(),
@@ -419,7 +433,7 @@ export const serverEvent = z.object({
   event_id: z.string().min(1).max(64).optional(),
   time: z.number().int().positive().optional(),
   visitor_id: z.string().max(64).optional(),
-  user_id: z.union([z.string(), z.number()]).transform(String).optional(),
+  user_id: userId.optional(),
   email: z.string().max(200).optional(),
   phone: z.string().max(40).optional(),
   name_of_person: z.string().max(120).optional(),
@@ -497,9 +511,8 @@ export async function recordServerEvents(site: Site, events: ServerEvent[], sour
 
 // The client IP and country behind our proxy.
 export function requestMeta(req: Request): RequestMeta {
-  const fwd = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || null
   const country = req.headers.get('cf-ipcountry') || req.headers.get('x-vercel-ip-country') || null
-  return { ip: fwd, ua: req.headers.get('user-agent') ?? '', country: country && /^[A-Z]{2}$/.test(country) ? country : null }
+  return { ip: clientIp(req.headers), ua: req.headers.get('user-agent') ?? '', country: country && /^[A-Z]{2}$/.test(country) ? country : null }
 }
 
 // CORS for the browser endpoints: any site may call them (the key and the
