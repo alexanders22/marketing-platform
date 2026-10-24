@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { after } from 'next/server'
+import { notifyAdmins } from '@/lib/admin-notify'
 import { aiEnabled } from '@/lib/ai'
 import { refreshProfile } from '@/lib/dossier'
 import { prisma } from '@/lib/prisma'
@@ -49,6 +50,7 @@ export async function completeOnboarding(draft: BrandDraft): Promise<{ error?: s
     return ws.id
   })
   if (!created) redirect('/app')
+  notifyAdmins(`New sign-up: ${b.name}`, [`${b.name} signed up (${user.email}).`, b.website ? `Website: ${b.website}` : 'No website given.'], '/admin/companies')
   // Read the whole website in the background: the dossier is ready by the
   // time the owner opens it.
   if (b.website && aiEnabled()) {

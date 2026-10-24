@@ -1,5 +1,6 @@
 import 'server-only'
 import { Prisma, type BillingCycle, type Payment, type Plan } from '@prisma/client'
+import { notifyPayment } from './admin-notify'
 import { convertRemaining, extendPaidUntil, grantPlanCredits, lockAccount } from './billing'
 import { phoneParts, type BillingAddress } from './billing-address'
 import { getPlans, getPricing } from './credits'
@@ -279,6 +280,8 @@ async function fulfil(id: string) {
   // next charge. (A renewal's own payment leaves its subscription alone.)
   if (done?.kind === 'PLAN' && done.plan && done.cycle && !done.subscriptionId)
     await cancelOtherRenewals(done.accountId, done.plan, done.cycle).catch((e) => console.error('AUTO-RENEWAL NOT CANCELLED after a plan change', done.accountId, e instanceof Error ? e.message : e))
+  // The admins hear of every card payment, once (the claim above).
+  if (done) await notifyPayment(done).catch((e) => console.error('payment notification failed', done.id, e instanceof Error ? e.message : e))
 }
 
 // The subscription a first auto-renewal payment started: from its callback,

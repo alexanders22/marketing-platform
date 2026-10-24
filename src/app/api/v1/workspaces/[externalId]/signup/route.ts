@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { notifyAdmins } from '@/lib/admin-notify'
 import { ApiError, body, handler, json, partnerWorkspace, requirePartner } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 import { serializeWorkspace } from '@/lib/workspaces'
@@ -42,5 +43,6 @@ export const POST = handler(async (req, ctx: RouteContext<'/api/v1/workspaces/[e
     return tx.workspace.findUniqueOrThrow({ where: { id: ws.id }, include: { account: true } })
   })
 
+  notifyAdmins(`New sign-up via ${partner.name}: ${input.name}`, [`${input.name} (${input.email}) signed up through ${partner.name}.`], updated.accountId ? `/admin/companies/${updated.accountId}` : '/admin/companies')
   return json({ workspace: serializeWorkspace(updated) }, 201)
 })
