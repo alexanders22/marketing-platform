@@ -177,6 +177,24 @@ test('when Monrem allows framing, the payment page opens in a window on our page
   }
 })
 
+test('an approval whose booking failed half-way is booked on the next word from Monrem, once', async () => {
+  const before = balance()
+  await page.goto('/app/credits')
+  await page.getByRole('list', { name: 'Credit packs' }).getByRole('listitem').first().getByRole('button', { name: 'Buy' }).click()
+  await page.waitForURL(/\/pay\//)
+  const [id] = lastPayment()
+  const order = monrem.orders.get(id)!
+  // Paid at Monrem and marked approved here, then the server stopped before booking it.
+  order.status = 'APPROVED'
+  sql(`update "Payment" set status='APPROVED' where id='${id}'`)
+  expect(balance()).toBe(before)
+  await monrem.callback(order)
+  expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PACK', '2006', 'USD', 'true'])
+  expect(balance()).toBe(before + 100)
+  await monrem.callback(order)
+  expect(balance()).toBe(before + 100)
+})
+
 test('during a paid period a dearer plan is bought, not picked; the unused time is converted', async () => {
   // Paid Start with about 30 days left.
   sql(`update "Account" set plan='STARTER', "billingCycle"='MONTHLY', "paidUntil"=now() + interval '30 days' where id='${accountId}'`)
@@ -198,12 +216,17 @@ test('during a paid period a dearer plan is bought, not picked; the unused time 
   const days = Number(sql(`select extract(epoch from "paidUntil" - now()) / 86400 from "Account" where id='${accountId}'`))
   expect(days).toBeGreaterThan(31)
   expect(days).toBeLessThan(37)
+  // This month's Start credits (from the yearly payment) are topped up to Agency's, once.
+  const planCredits = () => sql(`select sum(amount) from "CreditEntry" where "accountId"='${accountId}' and "idempotencyKey" like 'plan:%'`)
+  expect(planCredits()).toBe('2500')
 
-  // A cheaper plan applies at once, without payment.
+  // A cheaper plan applies at once, without payment; the paid days convert at its price.
   await page.goto('/app/plan')
   await page.getByRole('button', { name: 'Switch to Start' }).click()
   await page.waitForURL(/\/app\/credits$/)
   expect(sql(`select plan from "Account" where id='${accountId}'`)).toBe('STARTER')
+  expect(Number(sql(`select extract(epoch from "paidUntil" - now()) / 86400 from "Account" where id='${accountId}'`))).toBeGreaterThan(200)
+  expect(planCredits()).toBe('2500')
 })
 
 test('super admins get ₾1 test payments for a pack and a plan month; others never see them', async () => {
@@ -295,5 +318,19 @@ test.describe('auto-renewal', () => {
     expect(sql(`select status from "Subscription" where id='${subId}'`)).toBe('CANCELLED')
     expect(monrem.cancelled).toContain(subId)
     expect(paidUntil()).toBe(until)
+  })
+
+  test("an upgrade paid once stops the old plan's auto-renewal, so its next charge can't switch back", async () => {
+    // Start renewing again (the subscription from above, active once more).
+    const subId = sql(`select id from "Subscription" where "accountId"='${accountId}' order by "createdAt" desc limit 1`)
+    sql(`update "Subscription" set status='ACTIVE', "cancelledAt"=null where id='${subId}'`)
+    await page.goto('/app/credits?upgrade=TEAM&cycle=MONTHLY')
+    await page.getByRole('region', { name: 'Upgrade your plan' }).getByRole('button', { name: /^Pay for Business/ }).click()
+    await page.waitForURL(/\/pay\//)
+    await page.getByRole('link', { name: 'Pay now' }).click()
+    await expect(page.getByText(/Payment received — your plan is paid until/)).toBeVisible()
+    expect(sql(`select plan from "Account" where id='${accountId}'`)).toBe('TEAM')
+    expect(sql(`select status from "Subscription" where id='${subId}'`)).toBe('CANCELLED')
+    expect(monrem.cancelled.filter((x) => x === subId)).toHaveLength(2)
   })
 })

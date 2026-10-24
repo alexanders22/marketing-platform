@@ -14,8 +14,39 @@ const deploymentId =
     }
   })();
 
+// On every response. No page may be framed by another site (clickjacking):
+// the website widget (/t.js, /w.js) is a script on the customer's page, not
+// a frame. /pay/done — Monrem's return page — opens inside our own payment
+// frame, so it may be framed by our own pages.
+const security = [
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+  { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+]
+
 const nextConfig: NextConfig = {
   deploymentId,
+  poweredByHeader: false,
+  async headers() {
+    return [
+      { source: '/:path*', headers: security },
+      {
+        source: '/pay/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
+        ],
+      },
+      // Stored files are inert (their routes set the same; this rule would
+      // otherwise replace it with the frame-ancestors one above).
+      ...['/media/:path*', '/b/:slug/avatar'].map((source) => ({
+        source,
+        headers: [{ key: 'Content-Security-Policy', value: "default-src 'none'; sandbox" }],
+      })),
+    ]
+  },
   // Landing links to the signed-in product (terminal.loudpilot.app), baked in
   // at build time from the server's TERMINAL_URL.
   env: { NEXT_PUBLIC_TERMINAL_URL: (process.env.TERMINAL_URL ?? "").replace(/\/$/, "") },

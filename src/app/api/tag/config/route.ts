@@ -1,6 +1,6 @@
 import { chatAvailable } from '@/lib/chatbot'
 import { prisma } from '@/lib/prisma'
-import { CORS, corsJson, isPreview } from '@/lib/tag'
+import { CORS, corsJson, fromLoudpilot, isPreview } from '@/lib/tag'
 
 // What /t.js needs to know about its site: consent mode, automatic forms,
 // pixel mirroring and the chat widget (or null). Cached for a minute.
@@ -10,7 +10,8 @@ export async function GET(req: Request) {
   const site = key ? await prisma.site.findUnique({ where: { key }, include: { workspace: { include: { chatBot: true, account: true } } } }) : null
   if (!site) return corsJson({ error: { code: 'unknown_site', message: 'Unknown site key' } }, 404)
   const bot = site.workspace.chatBot
-  const preview = isPreview(q.get('p'), site.id) && !site.workspace.account?.pausedAt
+  // The owner's preview shows the chat only on Loudpilot's demo shop.
+  const preview = isPreview(q.get('p'), site.id) && !site.workspace.account?.pausedAt && fromLoudpilot(req.headers.get('origin') ?? req.headers.get('referer'))
   return corsJson(
     {
       consent: site.consentRequired,

@@ -1,12 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { startFakeSocial } from './fake-social'
+import { startFakeSocial, TG_OWNER } from './fake-social'
 import { newAccount, onceAppDialog, sql } from './helpers'
 
 // When a plan has ended (after 3 grace days for a paid one): scheduled posts
-// are held back, "Publish now" and connecting channels are refused, and the
-// banner says so. Partner customers pay by credits: always served, with
+// are held back, "Publish now", connecting channels and AI by hand are
+// refused, and the banner says so. Partner customers pay by credits: always served, with
 // Business limits until they pick a plan.
 
 test.describe.configure({ mode: 'serial' })
@@ -43,7 +43,10 @@ test.beforeAll(async ({ browser }) => {
   await page.goto('/app/channels')
   await page.getByRole('region', { name: 'Telegram channel', exact: true }).getByRole('button', { name: 'Connect' }).click()
   const form = page.getByRole('form', { name: 'Connect Telegram' })
-  await form.getByPlaceholder('@yourchannel or t.me/yourchannel').fill('@bloomnews')
+  // Start in Loudpilot's bot from the account that runs the channel.
+  const start = await form.getByRole('link', { name: 'open @LoudpilotTestBot' }).getAttribute('href')
+  social.tgSay(TG_OWNER, `/start ${new URL(start!).searchParams.get('start')}`)
+  await form.getByPlaceholder('@yourchannel or t.me/yourchannel').fill(`@bloomnews_svc${Date.now().toString(36)}`)
   await form.getByRole('button', { name: 'Connect channel' }).click()
   await expect(page.getByText('Bloom News')).toBeVisible()
 })
@@ -87,6 +90,37 @@ test('after the grace days: scheduled posts wait, Publish now and connecting are
   sql(`update "Account" set "paidUntil"=now() + interval '30 days' where id='${accountId}'`)
   await tick()
   await expect.poll(() => status(post)).toBe('PUBLISHED')
+})
+
+test('after the grace days: AI by hand is refused too, and the plan reads as ended', async () => {
+  sql(`update "Account" set "paidUntil"=now() - interval '4 days' where id='${accountId}'`)
+  try {
+    await page.goto('/app/weekly')
+    await page.getByRole('button', { name: /Review the last 7 days|Review now/ }).click()
+    await expect(page.getByText(ENDED)).toBeVisible()
+    await page.goto('/app/dossier')
+    await page.getByRole('button', { name: /Build the dossier|Refresh/ }).click()
+    await expect(page.getByText(ENDED)).toBeVisible()
+    // A paid plan that lapsed is not a trial.
+    await expect(page.getByRole('link', { name: /Start plan · ended/ }).first()).toBeAttached()
+    await expect(page.getByRole('link', { name: /trial ended/ })).toHaveCount(0)
+  } finally {
+    sql(`update "Account" set "paidUntil"=now() + interval '30 days' where id='${accountId}'`)
+  }
+})
+
+test('a partner customer whose picked trial ended sees no paused banner', async () => {
+  const partner = `svc-partner-t-${Date.now()}`
+  sql(`insert into "Partner"(id, name, slug, "updatedAt") values ('${partner}', 'Svc Partner T', '${partner}', now())`)
+  sql(`update "Account" set plan='STARTER', "trialEndsAt"=now() - interval '1 day', "paidUntil"=null, "partnerId"='${partner}' where id='${accountId}'`)
+  try {
+    await page.goto('/app/dashboard')
+    await expect(page.getByRole('heading').first()).toBeVisible()
+    await expect(page.getByText('Your free trial has ended.', { exact: false })).toHaveCount(0)
+    await expect(page.getByText(/connecting channels are paused/)).toHaveCount(0)
+  } finally {
+    sql(`update "Account" set "partnerId"=null, "paidUntil"=now() + interval '30 days' where id='${accountId}'`)
+  }
 })
 
 test('a partner customer without a plan is served, with Business limits', async () => {

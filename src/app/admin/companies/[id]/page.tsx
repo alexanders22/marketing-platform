@@ -19,11 +19,15 @@ import {
 } from '../../actions'
 import { ActionButton, ActionForm, ConfirmDelete, RoleSelect } from '../../ui'
 import { Badge, card, fmtDate, fmtDateTime, planStatus, REASON } from '../../shared'
+import { requireSuperAdmin } from '@/lib/admin'
 
 const input = 'mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400'
 const label = 'block text-sm font-medium text-zinc-700'
 
 export default async function AdminCompany({ params }: PageProps<'/admin/companies/[id]'>) {
+  // Checked here, not only in the layout: a client navigation can render this
+  // page without running the layout.
+  await requireSuperAdmin()
   const { id } = await params
   const a = await prisma.account.findUnique({
     where: { id },

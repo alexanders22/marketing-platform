@@ -29,7 +29,7 @@ function planLabel(a: { plan: string; trialEndsAt: Date | null; paidUntil: Date 
     case 'active':
       return `${name} plan`
     case 'expired':
-      return `${name} · trial ended`
+      return a.paidUntil ? `${name} plan · ended` : `${name} · trial ended`
   }
 }
 
@@ -83,7 +83,8 @@ export default async function AppLayout({ children }: LayoutProps<'/app'>) {
               </a>
             </div>
           )}
-          {billingState(account) === 'expired' && !asAdmin && (
+          {/* A partner's customers are always served: no banner. */}
+          {billingState(account) === 'expired' && !asAdmin && !account.partnerId && (
             <div className="-mt-1 mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-violet-50 px-4 py-2.5 text-sm text-violet-900 ring-1 ring-violet-200">
               {account.paidUntil ? (
                 <>

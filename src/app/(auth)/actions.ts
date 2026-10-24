@@ -5,11 +5,13 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
+import { revokeUserTokens } from '@/lib/access-tokens'
 import { sha256 } from '@/lib/crypto'
+import { clientIp as ipOf } from '@/lib/client-ip'
 import { actionEmail, mailEnabled, sendMail } from '@/lib/mail'
 import { terminalUrl } from '@/lib/hosts'
-import { hashPassword, verifyPassword } from '@/lib/password'
-import { clearFailures, isLimited, recordFailure } from '@/lib/rate-limit'
+import { DUMMY_HASH, hashPassword, needsRehash, verifyPassword } from '@/lib/password'
+import { clearFailures, isLimited, overLimit, recordFailure } from '@/lib/rate-limit'
 import { createSession, destroySession, afterLoginPath } from '@/lib/session'
 
 export type FormState = { error?: string; sent?: string; fields?: Record<string, string> } | undefined
@@ -17,6 +19,13 @@ export type FormState = { error?: string; sent?: string; fields?: Record<string,
 const Email = z.email('Enter a valid email').transform((e) => e.trim().toLowerCase())
 const LINK_TTL_MS = 15 * 60 * 1000
 const RESET_TTL_MS = 30 * 60 * 1000
+// Sign-in and reset emails per IP and hour, so a script can't mail-bomb a
+// list of addresses (each address already gets at most one a minute).
+// KHMA_MAILS_PER_IP_HOUR raises it for e2e runs, which sign up hundreds of
+// users from one machine.
+const MAILS_PER_IP_HOUR = Number(process.env.KHMA_MAILS_PER_IP_HOUR) || 20
+const TOO_MANY_MAILS = 'Too many emails were requested from your network. Try again in an hour.'
+const mailLimited = async () => overLimit(`auth-mail:${await clientIp()}`, MAILS_PER_IP_HOUR, 3_600_000)
 
 // Same answer whether or not the email has an account, so the form cannot be
 // used to find out who is registered. Signing in through the link creates the
@@ -27,6 +36,7 @@ export async function requestMagicLink(_: FormState, form: FormData): Promise<Fo
   const email = parsed.data
 
   if (await recentlySent(email, 'LOGIN')) return { sent: email }
+  if (await mailLimited()) return { error: TOO_MANY_MAILS, fields: { email } }
 
   const link = `${terminalUrl()}/auth/magic?token=${await issueLink(email, 'LOGIN', LINK_TTL_MS)}`
   const footer = 'The link works once and expires in 15 minutes. If you did not ask for it, ignore this email.'
@@ -88,12 +98,13 @@ export async function consumeMagicLink(form: FormData) {
 
 // First proof of email ownership for an account that was created without it
 // (password signup while mail was off): whoever set that password may not be
-// the owner, so drop the password and any sessions it opened.
+// the owner, so drop the password and any sessions and MCP/AI app tokens it opened.
 async function verifyEmailOwner(userId: string, verifiedAt: Date | null) {
   if (verifiedAt) return prisma.user.findUniqueOrThrow({ where: { id: userId } })
   const [user] = await prisma.$transaction([
     prisma.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date(), passwordHash: null } }),
     prisma.session.deleteMany({ where: { userId } }),
+    revokeUserTokens(userId),
   ])
   return user
 }
@@ -104,7 +115,7 @@ const PasswordLogin = z.object({ email: Email, password: z.string().min(1) })
 const LOGIN_WINDOW = 15 * 60 * 1000
 async function clientIp() {
   const h = await headers()
-  return h.get('x-forwarded-for')?.split(',')[0].trim() || h.get('x-real-ip') || 'unknown'
+  return ipOf(h) ?? 'unknown'
 }
 
 export async function passwordLogin(_: FormState, form: FormData): Promise<FormState> {
@@ -121,7 +132,7 @@ export async function passwordLogin(_: FormState, form: FormData): Promise<FormS
 
   const user = await prisma.user.findUnique({ where: { email: parsed.data.email } })
   // Verify even when the user is missing so timing does not reveal which emails exist.
-  const ok = await verifyPassword(parsed.data.password, user?.passwordHash ?? 'scrypt$AAAA$AAAA')
+  const ok = await verifyPassword(parsed.data.password, user?.passwordHash ?? DUMMY_HASH)
   if (!user || !ok) {
     recordFailure(emailKey, LOGIN_WINDOW)
     recordFailure(ipKey, LOGIN_WINDOW)
@@ -129,6 +140,10 @@ export async function passwordLogin(_: FormState, form: FormData): Promise<FormS
   }
 
   clearFailures(emailKey)
+  // Hashes made with older, weaker parameters are upgraded while the password is at hand.
+  if (needsRehash(user.passwordHash!)) {
+    await prisma.user.updateMany({ where: { id: user.id, passwordHash: user.passwordHash }, data: { passwordHash: await hashPassword(parsed.data.password) } })
+  }
   await createSession(user.id)
   redirect(await afterLoginPath())
 }
@@ -163,6 +178,8 @@ export async function requestPasswordReset(_: FormState, form: FormData): Promis
   if (!parsed.success) return { error: parsed.error.issues[0].message, fields: { email: String(form.get('email') ?? '') } }
   const email = parsed.data
   if (!mailEnabled()) return { error: 'Password reset by email is not available yet.' }
+  // Counted for every request, known email or not, so the limit reveals nothing.
+  if (await mailLimited()) return { error: TOO_MANY_MAILS, fields: { email } }
 
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true } })
   if (user && !(await recentlySent(email, 'PASSWORD_RESET'))) {
@@ -196,14 +213,15 @@ export async function resetPassword(_: FormState, form: FormData): Promise<FormS
   const user = await prisma.user.findUnique({ where: { email: link.email } })
   if (!user) return { error: 'This reset link is invalid or has expired. Request a new one.' }
 
-  // New password signs out every other device and voids any other pending
-  // sign-in or reset links for this email.
+  // New password signs out every other device, cuts off personal tokens and
+  // AI apps, and voids any other pending sign-in or reset links for this email.
   await prisma.$transaction([
     prisma.user.update({
       where: { id: user.id },
       data: { passwordHash: await hashPassword(parsed.data.password), emailVerifiedAt: user.emailVerifiedAt ?? new Date() },
     }),
     prisma.session.deleteMany({ where: { userId: user.id } }),
+    revokeUserTokens(user.id),
     prisma.magicLink.updateMany({ where: { email: link.email, usedAt: null }, data: { usedAt: new Date() } }),
   ])
   clearFailures(`login:${link.email}`)

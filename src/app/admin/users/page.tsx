@@ -2,8 +2,12 @@ import Link from 'next/link'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { Badge, card, fmtDate } from '../shared'
+import { requireSuperAdmin } from '@/lib/admin'
 
 export default async function AdminUsers({ searchParams }: PageProps<'/admin/users'>) {
+  // Checked here, not only in the layout: a client navigation can render this
+  // page without running the layout.
+  await requireSuperAdmin()
   const sp = await searchParams
   const q = typeof sp.q === 'string' ? sp.q.trim() : ''
   const where: Prisma.UserWhereInput = q

@@ -7,10 +7,14 @@ import { ACTION_KEYS } from '@/lib/pricing'
 import { prisma } from '@/lib/prisma'
 import { daysAgo, fmtDateTime } from '../shared'
 import { EconomicsEditor } from './EconomicsEditor'
+import { requireSuperAdmin } from '@/lib/admin'
 
 // Is the business making money? Fixed costs, every plan's and pack's margin,
 // and how many customers it takes to break even.
 export default async function AdminEconomics() {
+  // Checked here, not only in the layout: a client navigation can render this
+  // page without running the layout.
+  await requireSuperAdmin()
   const [pricing, plans, rate, row, usage, paying] = await Promise.all([
     getPricing(),
     getPlans(),

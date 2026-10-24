@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { ApiError, handler, json } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 import { overLimit } from '@/lib/rate-limit'
+import { readBody } from '@/lib/read-body'
 import { recordServerEvents, safeEqual, serverEvent, siteSecret, verifySignature } from '@/lib/tag'
 
 // Server-side events: the company's backend (or Zapier / Make) reports what
@@ -10,8 +11,12 @@ import { recordServerEvents, safeEqual, serverEvent, siteSecret, verifySignature
 // signature `X-Loudpilot-Signature: t=…,v1=…` over the raw body.
 const schema = z.object({ site: z.string().max(40), events: z.array(serverEvent).min(1).max(100) })
 
+// Up to 100 events with their properties.
+const MAX_BYTES = 512 * 1024
+
 export const POST = handler(async (req: Request) => {
-  const raw = await req.text()
+  const raw = await readBody(req, MAX_BYTES)
+  if (raw === null) throw new ApiError(413, 'too_large', 'The body is larger than 512 KB; send fewer events per request')
   let parsed: z.infer<typeof schema>
   try {
     parsed = schema.parse(JSON.parse(raw))

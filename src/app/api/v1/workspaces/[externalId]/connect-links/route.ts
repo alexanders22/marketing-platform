@@ -12,8 +12,12 @@ const Input = z.object({
 
 // A one-hour link the partner opens for its customer to connect Facebook,
 // Instagram and Meta ad accounts to this workspace — no Loudpilot login needed.
+// Partners only: a customer's own API key would let anyone send the link to
+// someone else and collect their Pages into their own workspace. Customers
+// connect their accounts in the app.
 export const POST = handler(async (req, ctx: RouteContext<'/api/v1/workspaces/[externalId]/connect-links'>) => {
   const partner = await requirePartner(req)
+  if (partner.ownerAccountId) throw new ApiError(403, 'partner_only', 'Connect links are for Loudpilot partners. Connect your own accounts on the Channels page.')
   const ws = await partnerWorkspace(partner, (await ctx.params).externalId)
   const input = await body(req, Input)
   if (!metaEnabled()) throw new ApiError(503, 'not_configured', 'Meta connections are not available yet')

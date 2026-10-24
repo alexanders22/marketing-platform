@@ -1,11 +1,13 @@
 import 'server-only'
 import { createHmac } from 'node:crypto'
 import type { Alert, AlertSeverity } from '@prisma/client'
+import { decrypt } from './crypto'
 import { terminalUrl } from './hosts'
 import { sendMail } from './mail'
 import { prisma } from './prisma'
 import { holidaysBetween } from './holidays'
 import { ACTIVE_WORKSPACE } from './pause'
+import { safePostJson } from './safe-fetch'
 
 // Alerts are stored first and delivered by dispatchAlerts() on the next
 // tick: an email digest to account owners/admins and, for partner
@@ -33,8 +35,21 @@ export async function raiseAlert(a: NewAlert) {
   }
 }
 
+const PROFILE: Record<string, string> = {
+  FACEBOOK: 'Facebook Page',
+  INSTAGRAM: 'Instagram account',
+  TIKTOK: 'TikTok account',
+  LINKEDIN: 'LinkedIn profile',
+  YOUTUBE: 'YouTube channel',
+  X: 'X account',
+  THREADS: 'Threads profile',
+  TELEGRAM: 'Telegram channel',
+  PINTEREST: 'Pinterest account',
+}
+
 // A connected account stopped working (token expired or access removed).
-export function accountExpiredAlert(a: { id: string; workspaceId: string; name: string; network: string }, reason: string) {
+export function accountExpiredAlert(a: { id: string; workspaceId: string; name: string; network: string; externalId?: string }, reason: string) {
+  const what = a.externalId?.startsWith('urn:li:organization:') ? 'LinkedIn Page' : (PROFILE[a.network] ?? 'account')
   return raiseAlert({
     workspaceId: a.workspaceId,
     kind: 'account_disconnected',
@@ -43,7 +58,7 @@ export function accountExpiredAlert(a: { id: string; workspaceId: string; name: 
     body:
       a.network === 'META_ADS'
         ? `Loudpilot lost access to this ad account: ${reason} Ad results, goals and alerts stop updating until it is reconnected.`
-        : `Loudpilot lost access to this ${a.network === 'INSTAGRAM' ? 'Instagram account' : 'Facebook Page'}: ${reason} Posts will not publish and results will not update until it is reconnected.`,
+        : `Loudpilot lost access to this ${what}: ${reason} Posts will not publish and results will not update until it is reconnected.`,
     href: '/app/channels',
     dedupeKey: `account:${a.id}:expired:${new Date().toISOString().slice(0, 10)}`,
   })
@@ -69,6 +84,11 @@ ${a.href ? `<p style="margin:6px 0 0;font-size:13px"><a href="${terminalUrl()}${
 <p style="font-size:12px;color:#a1a1aa;margin:20px 0 0">You get these because alert emails are on for your account. Turn them off on the Alerts page.</p>
 </div>`
 }
+
+// The partner's signing secret, stored with encrypt(). Secrets saved before
+// that are plain "whsec_…" (never valid base64 ciphertext: "_" is not in
+// the alphabet); they are encrypted when the webhook is next saved.
+export const webhookSecret = (stored: string) => (stored.startsWith('whsec_') ? stored : decrypt(stored))
 
 export function signWebhook(secret: string, timestamp: number, body: string) {
   return createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex')
@@ -130,17 +150,16 @@ export async function dispatchAlerts(limit = 200) {
           const body = JSON.stringify({ type: 'alert.created', workspace: { externalId: ws.externalId }, alert: alertPayload(a) })
           const ts = Math.floor(Date.now() / 1000)
           try {
-            const res = await fetch(p.webhookUrl, {
-              method: 'POST',
+            // The partner's own URL: public addresses only, no redirects.
+            const res = await safePostJson(p.webhookUrl, body, {
               headers: {
-                'content-type': 'application/json',
                 'x-loudpilot-timestamp': String(ts),
-                'x-loudpilot-signature': `sha256=${signWebhook(p.webhookSecret, ts, body)}`,
+                'x-loudpilot-signature': `sha256=${signWebhook(webhookSecret(p.webhookSecret), ts, body)}`,
               },
-              body,
-              signal: AbortSignal.timeout(10_000),
+              timeoutMs: 10_000,
+              maxBytes: 10_000,
             })
-            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+            if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`)
             await prisma.alert.update({ where: { id: a.id }, data: { webhookAt: new Date() } })
             hooked++
           } catch (e) {

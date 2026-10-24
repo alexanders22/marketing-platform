@@ -4,7 +4,7 @@ import { readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import type { Prisma } from '@prisma/client'
+import type { ClipJob, Prisma } from '@prisma/client'
 import { aiEnabled, generateImage, generateMusic, LANGUAGES, speak, transcribe, videoScript } from '@/lib/ai'
 import { importFreeMusic, saveGeneratedMusic, searchFreeMusic, type FreeTrack } from '@/lib/music'
 import { requireContext } from '@/lib/context'
@@ -14,11 +14,11 @@ import { prisma } from '@/lib/prisma'
 import { TEMPLATE_PHOTO } from '@/lib/design'
 import { templatePhotos } from '@/lib/template-photos'
 import { VIDEO_TEMPLATES } from '@/lib/video-templates'
-import { mediaFile, mediaUrl, saveMedia, tempDir } from '@/lib/storage'
+import { deleteMedia, mediaFile, mediaUrl, saveMedia, tempDir } from '@/lib/storage'
 import { emptyDoc, FORMATS, isFormat, MAX_SCENES, MOTIONS, newScene, POSITIONS, SUB_STYLES, TEXT_STYLES, timeline, VOICES, type Cue, type Format, type SceneMedia, type VideoDoc } from '@/lib/video'
 import { enqueueRender, stopRender, type SubtitleStrip } from '@/lib/video-render'
-import { ffmpeg, probe } from '@/lib/ffmpeg'
-import { advanceClip, CLIP_QUALITIES, CLIP_SECONDS, startVeo, veoAspect, veoEnabled, type ClipQuality } from '@/lib/veo'
+import { ffmpeg, input as mediaInput, probe } from '@/lib/ffmpeg'
+import { advanceClip, CLIP_QUALITIES, CLIP_SECONDS, failClip, startVeo, veoAspect, veoEnabled, type ClipQuality } from '@/lib/veo'
 import { isPaid, PAID_ONLY } from '@/lib/plans'
 import { veoAllowance, veoLimitMessage } from '@/lib/credits'
 import { clipAction } from '@/lib/pricing'
@@ -159,7 +159,7 @@ export async function generateVoices(id: string): Promise<{ doc?: VideoDoc; erro
   }
   const ok = await charge(account.id, workspace.id, [{ amount: COST.voice, reason: 'AI_VIDEO', note: 'Video voice-over', action: 'voice', units: 1 }])
   if (!ok) {
-    await prisma.media.deleteMany({ where: { id: { in: made } } })
+    await deleteMedia(made)
     return { error: notEnough(COST.voice, 0) }
   }
   await prisma.video.update({ where: { id }, data: { data: doc as unknown as Prisma.InputJsonValue } })
@@ -226,13 +226,13 @@ export async function transcribeScene(id: string, sceneId: string): Promise<{ su
   if (!aiEnabled()) return { error: 'AI is not connected yet.' }
   if (account.creditBalance < COST.subtitles) return { error: notEnough(COST.subtitles, account.creditBalance) }
   const file = mediaFile(media.path)
-  if (!(await probe(file)).audio) return { error: 'This clip has no sound to turn into subtitles.' }
+  if (!(await probe(file, media.mime)).audio) return { error: 'This clip has no sound to turn into subtitles.' }
   const seconds = scene.duration
   const dir = await tempDir('subs')
   let lines
   try {
     const mp3 = path.join(dir, 'speech.mp3')
-    await ffmpeg(['-y', '-ss', String(Math.max(0, scene.clipStart)), '-t', String(seconds), '-i', file, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '48k', mp3], 120_000)
+    await ffmpeg(['-y', '-ss', String(Math.max(0, scene.clipStart)), '-t', String(seconds), ...mediaInput(file, media.mime), '-vn', '-ac', '1', '-ar', '16000', '-b:a', '48k', mp3], 120_000)
     lines = await transcribe(await readFile(mp3), 'audio/mp3', seconds)
   } catch (e) {
     console.error('transcription failed', e)
@@ -361,7 +361,7 @@ export async function generateTrack(raw: string): Promise<{ item?: MusicItem; er
   }
   const ok = await charge(account.id, workspace.id, [{ amount: COST.music, reason: 'AI_VIDEO', note: `AI music: ${prompt.slice(0, 120)}`, action: 'music', units: 1 }])
   if (!ok) {
-    await prisma.media.delete({ where: { id: media.id } })
+    await deleteMedia([media.id])
     return { error: notEnough(COST.music, (await prisma.account.findUniqueOrThrow({ where: { id: account.id } })).creditBalance) }
   }
   return { item: { id: media.id, kind: 'audio', url: mediaUrl(media.id), posterUrl: null, durationMs: media.durationMs, name: `AI: ${prompt.slice(0, 80)}` } }
@@ -483,6 +483,8 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
     console.error('videoScript failed', e)
     return { error: aiError(e, 'The AI could not write this video. Try again.') }
   }
+  // Never more scenes (images, clips) than asked for and checked above.
+  script.scenes = script.scenes.slice(0, input.scenes)
 
   // Your own photos and clips, in the order picked.
   const library = input.visuals === 'library' && input.mediaIds.length
@@ -574,7 +576,7 @@ export async function createVideoWithAI(raw: z.input<typeof AiInput>): Promise<{
   ])
   if (!ok) {
     const made = [...images.map((m) => m?.id), ...doc.scenes.map((s) => s.voiceMediaId), doc.music?.mediaId].filter((x): x is string => Boolean(x))
-    await prisma.media.deleteMany({ where: { id: { in: made } } })
+    await deleteMedia(made)
     return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
   }
 
@@ -667,62 +669,48 @@ async function beginClip(accountId: string, balance: number, workspaceId: string
   const credits = (await prices())[clipAction(c.quality)] * c.seconds
   if (account.creditBalance < credits) return { error: notEnough(credits, account.creditBalance) }
 
-  const job = await prisma.clipJob.create({
-    data: {
-      workspaceId: workspace.id,
-      accountId: account.id,
-      videoId: c.videoId,
-      sceneId: c.sceneId,
-      prompt: c.prompt,
-      imageId: c.imageId,
-      characterId: c.characterId ?? null,
-      quality: c.quality,
-      aspect: veoAspect(c.format),
-      seconds: c.seconds,
-      credits,
-    },
-  })
   // The allowance is checked again under a per-account lock, in the
   // transaction that writes the charge (whose units count as used seconds),
-  // so parallel starts cannot pass the monthly limit together.
+  // so parallel starts cannot pass the monthly limit together. The job is
+  // created in it too: a job exists only when it was paid for, and the
+  // ticker refunds one that never gets a Veo operation.
   let over = null as { used: number; limit: number } | null
+  let job = null as ClipJob | null
   const ok = await charge(account.id, workspace.id, [{ amount: credits, reason: 'AI_VIDEO', note: `AI clip · ${CLIP_QUALITIES[c.quality].label} · ${c.seconds}s`, action: clipAction(c.quality), units: c.seconds }], async (tx) => {
-    if (plan === null) return true
-    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'veo:' + account.id}))`
-    const allowance = await veoAllowance({ id: account.id, plan }, tx)
-    if (allowance.left >= c.seconds) return true
-    over = allowance
-    return false
+    if (plan !== null) {
+      await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${'veo:' + account.id}))`
+      const allowance = await veoAllowance({ id: account.id, plan }, tx)
+      if (allowance.left < c.seconds) {
+        over = allowance
+        return false
+      }
+    }
+    job = await tx.clipJob.create({
+      data: {
+        workspaceId: workspace.id,
+        accountId: account.id,
+        videoId: c.videoId,
+        sceneId: c.sceneId,
+        prompt: c.prompt,
+        imageId: c.imageId,
+        characterId: c.characterId ?? null,
+        quality: c.quality,
+        aspect: veoAspect(c.format),
+        seconds: c.seconds,
+        credits,
+      },
+    })
+    return true
   })
-  if (!ok) {
-    await prisma.clipJob.delete({ where: { id: job.id } })
-    return { error: over ? veoLimitMessage(over, c.seconds) : notEnough(credits, 0) }
-  }
+  if (!ok || !job) return { error: over ? veoLimitMessage(over, c.seconds) : notEnough(credits, 0) }
   try {
     const operation = await startVeo(job)
-    await prisma.clipJob.update({ where: { id: job.id }, data: { operation } })
+    await prisma.clipJob.updateMany({ where: { id: job.id, status: 'PENDING' }, data: { operation } })
   } catch (e) {
     console.error('veo start failed', e)
     const message = e instanceof Error ? e.message : String(e)
     // Not started: hand the credits back right away.
-    await prisma.$transaction([
-      prisma.account.update({ where: { id: account.id }, data: { creditBalance: { increment: credits } } }),
-      prisma.creditEntry.create({
-        data: {
-          accountId: account.id,
-          workspaceId: workspace.id,
-          amount: credits,
-          reason: 'REFUND',
-          note: 'AI clip could not start',
-          idempotencyKey: `clip-refund:${job.id}`,
-          refType: 'clip',
-          refId: job.id,
-          action: clipAction(c.quality),
-          units: -c.seconds,
-        },
-      }),
-      prisma.clipJob.update({ where: { id: job.id }, data: { status: 'FAILED', error: message.slice(0, 500) } }),
-    ])
+    await failClip(job, message)
     return { error: /safety|policy|blocked/i.test(message) ? 'Google refused this description. Try different words.' : aiError(e, 'Veo could not start the clip. Your credits are back.') }
   }
   return { jobId: job.id }

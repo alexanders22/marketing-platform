@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { requireSuperAdmin } from '@/lib/admin'
 import { prisma } from '@/lib/prisma'
 import { PLANS, PROFILE_NETWORKS } from '@/lib/plans'
 import { card, daysAgo, Stat } from '../shared'
@@ -24,6 +25,7 @@ const BUCKETS = [
 ]
 
 export default async function AdminUsage() {
+  await requireSuperAdmin()
   const since = daysAgo(30)
   const [accounts, companies, profiles, posts, credits, perCompany, networks] = await Promise.all([
     prisma.$queryRaw<{ plan: string; paying: bigint; trial: bigint; lapsed: bigint; total: bigint }[]>`

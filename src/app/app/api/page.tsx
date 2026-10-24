@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { BookOpen, Code2, Lock } from 'lucide-react'
 import { CodeBlock } from '@/app/docs/CodeBlock'
 import { LocalTime } from '@/components/LocalTime'
+import { webhookSecret } from '@/lib/alerts'
 import { requireContext } from '@/lib/context'
 import { appUrl } from '@/lib/mail'
 import { apiAllowed, billingState } from '@/lib/plans'
@@ -103,7 +104,7 @@ export default async function ApiPage() {
           <p className="mt-1 mb-4 text-sm text-zinc-500">
             Loudpilot posts events here (an alert fired, a weekly review is ready), signed with the secret below.
           </p>
-          <WebhookForm url={partner?.webhookUrl ?? ''} secret={partner?.webhookSecret ?? null} />
+          <WebhookForm url={partner?.webhookUrl ?? ''} secret={partner?.webhookSecret ? webhookSecret(partner.webhookSecret) : null} />
         </section>
       )}
 

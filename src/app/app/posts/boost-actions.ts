@@ -4,14 +4,16 @@ import { revalidatePath } from 'next/cache'
 import { createBoost, setBoostStatus } from '@/lib/boost'
 import { BoostInput } from '@/lib/boost-options'
 import { requireContext } from '@/lib/context'
+import { serviceOff, serviceOn } from '@/lib/plans'
 import { prisma } from '@/lib/prisma'
 
 // Boosting spends the company's ad money: owners and admins only.
 const canSpend = (role: string) => role === 'OWNER' || role === 'ADMIN'
 
 export async function boostPost(input: unknown) {
-  const { workspace, user, role } = await requireContext()
+  const { workspace, user, role, account } = await requireContext()
   if (!canSpend(role)) return { error: 'Only the owner or an admin can spend the ad budget.' }
+  if (!serviceOn(account)) return { error: serviceOff(account) }
   const parsed = BoostInput.safeParse(input)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the settings.' }
   const res = await createBoost(workspace.id, user.id, parsed.data)

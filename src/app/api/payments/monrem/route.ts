@@ -1,5 +1,6 @@
 import { monremEnabled, validCallback, type MonremTx } from '@/lib/monrem'
 import { applyCallback } from '@/lib/payments'
+import { readBody, tooLarge } from '@/lib/read-body'
 
 // Monrem's callback (IPN): the transaction object, sent on every status
 // change. It needs a valid integrity hash, and is then confirmed with
@@ -8,7 +9,9 @@ import { applyCallback } from '@/lib/payments'
 export async function POST(req: Request) {
   if (!monremEnabled()) return new Response('Not configured', { status: 404 })
   const type = req.headers.get('content-type') ?? ''
-  const raw = await req.text()
+  // A transaction object is a few hundred bytes.
+  const raw = await readBody(req, 32 * 1024)
+  if (raw === null) return tooLarge()
   let tx: Partial<MonremTx>
   try {
     tx = type.includes('application/x-www-form-urlencoded') ? (Object.fromEntries(new URLSearchParams(raw)) as unknown as Partial<MonremTx>) : (JSON.parse(raw) as Partial<MonremTx>)

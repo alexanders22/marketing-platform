@@ -2,7 +2,7 @@ import 'server-only'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { ffmpeg, posterFrame, probe } from './ffmpeg'
+import { checkImage, ffmpeg, input as mediaInput, pngInput, posterFrame, probe } from './ffmpeg'
 import { prisma } from './prisma'
 import { mediaFile, renderJobDir, saveMediaFile, tempDir } from './storage'
 import { FORMATS, isFormat, timeline, type VideoDoc } from './video'
@@ -165,12 +165,13 @@ async function render(videoId: string, queuedAt: Date, signal: AbortSignal) {
       const media = s?.media ? byId.get(s.media.id) : null
       const v = input++
       if (media && media.kind === 'VIDEO') {
-        args.push('-ss', num(Math.max(0, s!.clipStart)), '-t', num(d), '-i', mediaFile(media.path))
+        args.push('-ss', num(Math.max(0, s!.clipStart)), '-t', num(d), ...mediaInput(mediaFile(media.path), media.mime))
         filters.push(
           `[${v}:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},fps=${FPS},setsar=1,format=yuv420p,tpad=stop_mode=clone:stop_duration=${num(d)},trim=duration=${num(d)},setpts=PTS-STARTPTS[b${i}]`,
         )
       } else if (media && media.kind === 'IMAGE') {
-        args.push('-i', mediaFile(media.path))
+        await checkImage(mediaFile(media.path))
+        args.push(...mediaInput(mediaFile(media.path), media.mime))
         // Ken Burns on a 1.5× canvas so zooms stay sharp.
         const BW = Math.round(W * 1.5 / 2) * 2
         const BH = Math.round(H * 1.5 / 2) * 2
@@ -187,7 +188,8 @@ async function render(videoId: string, queuedAt: Date, signal: AbortSignal) {
       const file = path.join(job, `o${i}.png`)
       if (existsSync(file)) {
         const o = input++
-        args.push('-loop', '1', '-t', num(d), '-i', file)
+        await checkImage(file)
+        args.push('-loop', '1', '-t', num(d), ...pngInput(file, true))
         // Text fades in; the end card is the whole frame, no fade.
         const fadeIn = s ? `,fade=in:st=0.15:d=0.35:alpha=1` : ''
         filters.push(`[${o}:v]format=rgba,scale=${W}:${H}${fadeIn}[o${i}]`, `[b${i}][o${i}]overlay=0:0:shortest=1,format=yuv420p,fps=${FPS}[s${i}]`)
@@ -217,7 +219,8 @@ async function render(videoId: string, queuedAt: Date, signal: AbortSignal) {
       if (!existsSync(file)) throw new Error(INTERRUPTED)
       const o = input++
       // One still frame; the overlay keeps showing it while enabled.
-      args.push('-i', file)
+      await checkImage(file)
+      args.push(...pngInput(file))
       const out = i === subs.length - 1 ? '[vout]' : `[u${i}]`
       filters.push(`[${o}:v]format=rgba[t${i}]`, `${under}[t${i}]overlay=0:${Math.round(sub.y)}:enable='between(t,${num(sub.at)},${num(sub.until)})'${out}`)
       under = out
@@ -229,9 +232,9 @@ async function render(videoId: string, queuedAt: Date, signal: AbortSignal) {
     for (const [i, p] of parts.entries()) {
       const s = p.scene
       const media = s?.keepAudio && s.media?.kind === 'video' ? byId.get(s.media.id) : null
-      if (!media || !(await probe(mediaFile(media.path))).audio) continue
+      if (!media || !(await probe(mediaFile(media.path), media.mime)).audio) continue
       const a = input++
-      args.push('-ss', num(Math.max(0, s!.clipStart)), '-t', num(p.seconds), '-i', mediaFile(media.path))
+      args.push('-ss', num(Math.max(0, s!.clipStart)), '-t', num(p.seconds), ...mediaInput(mediaFile(media.path), media.mime))
       const ms = Math.round(p.start * 1000)
       filters.push(`[${a}:a]aformat=sample_rates=44100:channel_layouts=stereo,afade=t=in:d=0.2,afade=t=out:st=${num(Math.max(0, p.seconds - 0.3))}:d=0.3,adelay=${ms}|${ms}[c${i}]`)
       voices.push(`[c${i}]`)
@@ -241,7 +244,7 @@ async function render(videoId: string, queuedAt: Date, signal: AbortSignal) {
       const media = id ? byId.get(id) : null
       if (!media) continue
       const a = input++
-      args.push('-i', mediaFile(media.path))
+      args.push(...mediaInput(mediaFile(media.path), media.mime))
       const ms = Math.round((p.start + 0.25) * 1000)
       filters.push(`[${a}:a]aformat=sample_rates=44100:channel_layouts=stereo,adelay=${ms}|${ms}[v${i}]`)
       voices.push(`[v${i}]`)
@@ -251,7 +254,7 @@ async function render(videoId: string, queuedAt: Date, signal: AbortSignal) {
     if (voices.length) filters.push(`${voices.join('')}amix=inputs=${voices.length}:normalize=0,apad,atrim=duration=${T}[voice]`)
     if (music) {
       const m = input++
-      args.push('-stream_loop', '-1', '-i', mediaFile(music.path))
+      args.push('-stream_loop', '-1', ...mediaInput(mediaFile(music.path), music.mime))
       const vol = Math.min(1, Math.max(0, doc.music!.volume ?? 0.6))
       filters.push(
         `[${m}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=${vol.toFixed(2)},atrim=duration=${T},afade=t=out:st=${num(Math.max(0, total - 1.5))}:d=1.5[mus]`,
@@ -292,9 +295,9 @@ async function render(videoId: string, queuedAt: Date, signal: AbortSignal) {
       },
     })
 
-    const info = await probe(out)
+    const info = await probe(out, 'video/mp4')
     const poster = path.join(dir, 'poster.jpg')
-    await posterFrame(out, poster, Math.min(1, total / 2))
+    await posterFrame(out, 'video/mp4', poster, Math.min(1, total / 2))
     const posterMedia = await saveMediaFile(video.workspaceId, poster, 'image/jpeg', `Poster: ${video.name}`)
     const media = await saveMediaFile(video.workspaceId, out, 'video/mp4', `Studio video: ${video.name}`, {
       width: W,

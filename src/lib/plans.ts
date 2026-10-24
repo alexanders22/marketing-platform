@@ -39,7 +39,7 @@ export const PLANS: {
   {
     id: 'TEAM',
     name: 'Business',
-    blurb: 'For growing businesses with a few brands, ads and a team.',
+    blurb: 'For a growing business with a few brands or locations.',
     monthly: 75,
     monthlyGel: 199,
     profiles: 5,
@@ -106,9 +106,14 @@ export function planLimits(plan: string): Limits {
 }
 export const companyLimit = (plan: string) => planLimits(plan).companies
 // Customers who came through a partner (Upla, Zavnili, Dotcom…) pay by
-// credits, without a plan: until they pick one they get Business limits.
+// credits, without a plan: until they pick one — or once its trial or paid
+// period is over — they get Business limits.
 export const PARTNER_PLAN = 'TEAM'
-export const limitsFor = (a: { plan: string; partnerId?: string | null }) => planLimits(a.plan === 'NONE' && a.partnerId ? PARTNER_PLAN : a.plan)
+export const limitsFor = (a: Billable & { partnerId?: string | null }) => {
+  if (!a.partnerId) return planLimits(a.plan)
+  const state = billingState(a)
+  return planLimits(state === 'trial' || state === 'active' ? a.plan : PARTNER_PLAN)
+}
 
 // none: no plan picked · trial: free trial running · active: paid through
 // paidUntil · expired: trial over and not paid.
@@ -121,22 +126,22 @@ export function billingState(a: Billable, now = new Date()): BillingState {
   return 'expired'
 }
 
-// A paying customer. Premium features (AI clips with Veo) need it — the end
-// of a trial alone is not a payment.
-export const isPaid = (a: Billable, now = new Date()) => billingState(a, now) === 'active'
+// The days after a paid period ends when everything still works (see serviceOn).
+export const GRACE_MS = 3 * 86_400_000
+const paidOrGrace = (a: Billable, now: Date) => a.plan !== 'NONE' && !!a.paidUntil && a.paidUntil.getTime() > now.getTime() - GRACE_MS
+
+// A paying customer, the grace days included. Premium features (AI clips
+// with Veo) need it — the end of a trial alone is not a payment.
+export const isPaid = (a: Billable, now = new Date()) => paidOrGrace(a, now)
 
 // The API is part of Agency; any plan may try it during the free trial.
-export const apiAllowed = (a: Billable, now = new Date()) => {
-  const state = billingState(a, now)
-  return state === 'trial' || (state === 'active' && planLimits(a.plan).api)
-}
+export const apiAllowed = (a: Billable, now = new Date()) => billingState(a, now) === 'trial' || (paidOrGrace(a, now) && planLimits(a.plan).api)
 
 // After a paid period ends everything keeps working for a few days (the
 // renewal reminders go out meanwhile); then publishing, connecting channels
 // and the free background AI stop until the plan is renewed. Credits stay
 // spendable — bought credits never expire. Partner customers pay by credits
 // and are always served.
-export const GRACE_MS = 3 * 86_400_000
 type Served = Billable & { partnerId?: string | null }
 export function serviceOn(a: Served | null | undefined, now = new Date()) {
   if (!a || a.partnerId) return true

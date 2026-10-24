@@ -25,6 +25,11 @@ export function proxy(req: NextRequest) {
   if ((path === '/app' || path.startsWith('/app/') || path === '/demo-shop') && !req.cookies.has('khma_session')) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
+  // Admin without a session: not found, before any page code runs (each admin
+  // page still checks the super admin itself).
+  if ((path === '/admin' || path.startsWith('/admin/')) && !req.cookies.has('khma_session')) {
+    return new NextResponse(null, { status: 404 })
+  }
   return NextResponse.next()
 }
 
