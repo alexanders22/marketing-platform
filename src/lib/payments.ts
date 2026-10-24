@@ -1,5 +1,6 @@
 import 'server-only'
 import { Prisma, type BillingCycle, type Payment } from '@prisma/client'
+import { notifyPayment } from './admin-notify'
 import { convertRemaining, extendPaidUntil, grantPlanCredits } from './billing'
 import { phoneParts, type BillingAddress } from './billing-address'
 import { getPlans, getPricing } from './credits'
@@ -266,6 +267,8 @@ async function fulfil(id: string) {
   })
   // This month's plan credits (idempotent per period).
   if (done?.kind === 'PLAN') await grantPlanCredits(done.accountId)
+  // The admins hear of every card payment, once (the claim above).
+  if (done) await notifyPayment(done).catch((e) => console.error('payment notification failed', done.id, e instanceof Error ? e.message : e))
 }
 
 // The subscription a first auto-renewal payment started: from its callback,

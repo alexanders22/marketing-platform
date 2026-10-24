@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { FAKE_MONREM_PORT, signed, startFakeMonrem } from './fake-monrem'
-import { newAccount, onceAppDialog, sql } from './helpers'
+import { latestMail, newAccount, onceAppDialog, sql } from './helpers'
 
 // Card payments through Monrem's hosted checkout (fake-monrem.ts): credit
 // packs and plan periods, fulfilled exactly once from the callback, the
@@ -13,6 +13,7 @@ test.describe.configure({ mode: 'serial' })
 const monrem = startFakeMonrem()
 let page: Page
 let accountId: string
+let adminEmail = ''
 const balance = () => Number(sql(`select "creditBalance" from "Account" where id='${accountId}'`))
 const lastPayment = () => sql(`select id||'|'||status||'|'||kind||'|'||amount||'|'||currency||'|'||(("fulfilledAt" is not null)::text) from "Payment" where "accountId"='${accountId}' order by "createdAt" desc limit 1`).split('|')
 const webhook = `http://localhost:3100/api/payments/monrem`
@@ -31,6 +32,11 @@ test.beforeAll(async ({ browser }) => {
   page = await browser.newPage()
   const { email } = await newAccount(page, 'pay')
   accountId = sql(`select m."accountId" from "AccountMember" m join "User" u on u.id=m."userId" where u.email='${email}'`)
+  // An admin who is emailed about every payment.
+  const observer = await browser.newPage()
+  adminEmail = (await newAccount(observer, 'payadmin')).email
+  sql(`update "User" set role='SUPER_ADMIN' where email='${adminEmail}'`)
+  await observer.close()
 })
 test.afterAll(async () => {
   await page.close()
@@ -76,6 +82,8 @@ test('a credit pack: Monrem checkout, callback, credits added once', async () =>
   await expect(page.getByText('Billing: Nino Beridze, 1 Rustaveli Ave, Tbilisi, Tbilisi, 0108, Georgia · +995 555 12 34 56')).toBeVisible()
   expect(lastPayment().slice(1)).toEqual(['APPROVED', 'PACK', '2006', 'USD', 'true'])
   expect(sql(`select count(*) from "CreditEntry" where "idempotencyKey"='payment:${id}' and reason='PURCHASE' and amount=100`)).toBe('1')
+  // The admins are emailed about the purchase.
+  expect((await latestMail(adminEmail, 'Credits bought: pay Brand · 100 credits · $20.06')).Text).toContain('bought 100 credits for $20.06 (VAT included)')
 
   // Replayed callbacks and a reload never add credits twice.
   await monrem.callback(order)
@@ -96,6 +104,7 @@ test('a plan year: approved without a callback, picked up from the status on ret
   // Paid for a year from today; the trial is over; this month's plan credits granted.
   expect(Number(sql(`select extract(day from "paidUntil" - now()) from "Account" where id='${accountId}'`))).toBeGreaterThan(360)
   expect(sql(`select "billingCycle" from "Account" where id='${accountId}'`)).toBe('YEARLY')
+  expect((await latestMail(adminEmail, 'Plan paid: pay Brand · Start')).Text).toContain('for Start, 1 year.')
   expect(Number(sql(`select count(*) from "CreditEntry" where "accountId"='${accountId}' and "idempotencyKey" like 'plan:%'`))).toBe(1)
   await expect(page.getByText(/^Paid until /)).toBeVisible()
 })
@@ -262,6 +271,7 @@ test.describe('auto-renewal', () => {
     await expect.poll(() => sql(`select count(*) from "Payment" where "subscriptionId"='${subId}' and status='APPROVED' and "fulfilledAt" is not null`)).toBe('2')
     const afterSecond = paidUntil()
     expect(afterSecond - afterFirst).toBeGreaterThan(27 * DAY)
+    expect((await latestMail(adminEmail, 'Plan renewed: pay Brand')).Text).toContain('an automatic renewal')
 
     // A charge whose callback never comes is found by the hourly subscription check — once.
     await monrem.renew(subId, { notify: false })
