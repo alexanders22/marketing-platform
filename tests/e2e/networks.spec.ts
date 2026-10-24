@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { startFakeGoogle } from './fake-google'
-import { startFakeSocial } from './fake-social'
+import { startFakeSocial, TG_NO_POST_ADMIN, TG_OWNER, TG_STRANGER } from './fake-social'
 import { newAccount, sql, onceAppDialog } from './helpers'
 
 // TikTok, LinkedIn, YouTube, X, Threads, Pinterest and Telegram: connect,
@@ -70,34 +70,87 @@ test.afterAll(async () => {
   await social.close()
 })
 
-test('Telegram: the bot must be an admin that may post; then the channel is connected', async () => {
+// A channel no other account (or earlier run) has connected.
+const CHANNEL = `bloomnews_${Date.now().toString(36)}`
+const startLink = (p: Page) => p.getByRole('form', { name: 'Connect Telegram' }).getByRole('link', { name: 'open @LoudpilotTestBot' })
+const startCode = async (p: Page) => new URL((await startLink(p).getAttribute('href'))!).searchParams.get('start')!
+
+test('Telegram: the bot must be an admin that may post, and Start must come from someone who runs the channel', async () => {
   await page.goto('/app/channels')
   const tg = card('Telegram channel')
   await tg.getByRole('button', { name: 'Connect' }).click()
   const form = page.getByRole('form', { name: 'Connect Telegram' })
-  await expect(form.getByText('@LoudpilotTestBot')).toBeVisible()
-  await form.getByPlaceholder('@yourchannel or t.me/yourchannel').fill('@nobot')
-  await form.getByRole('button', { name: 'Connect channel' }).click()
+  await expect(form.getByText('@LoudpilotTestBot').first()).toBeVisible()
+  await expect(startLink(page)).toHaveAttribute('href', /^https:\/\/t\.me\/LoudpilotTestBot\?start=[\w-]{20,}$/)
+  const channel = form.getByPlaceholder('@yourchannel or t.me/yourchannel')
+  const connect = () => form.getByRole('button', { name: 'Connect channel' }).click()
+  await channel.fill('@nobot')
+  await connect()
   await expect(form.getByText(/Add the bot as a channel admin first/)).toBeVisible()
-  await form.getByPlaceholder('@yourchannel or t.me/yourchannel').fill('t.me/readonlychan')
-  await form.getByRole('button', { name: 'Connect channel' }).click()
+  await channel.fill('t.me/readonlychan')
+  await connect()
   await expect(form.getByText(/Turn on "Post messages"/)).toBeVisible()
-  await form.getByPlaceholder('@yourchannel or t.me/yourchannel').fill('@bloomnews')
-  await form.getByRole('button', { name: 'Connect channel' }).click()
+
+  // The bot may post, but nothing shows who is connecting.
+  await channel.fill(`@${CHANNEL}`)
+  await connect()
+  await expect(form.getByText(/press Start \(step 2\)/)).toBeVisible()
+  // Start from someone who doesn't run the channel: refused, and that link is spent.
+  const first = await startCode(page)
+  social.tgSay(TG_STRANGER, `/start ${first}`)
+  await connect()
+  await expect(form.getByText(/is not an admin of Bloom News who can post/)).toBeVisible()
+  await expect.poll(() => startCode(page)).not.toBe(first)
+  social.tgSay(TG_OWNER, `/start ${first}`)
+  await connect()
+  await expect(form.getByText(/press Start \(step 2\)/)).toBeVisible()
+  // An admin without "Post messages" is not enough either.
+  const second = await startCode(page)
+  social.tgSay(TG_NO_POST_ADMIN, `/start ${second}`)
+  await connect()
+  await expect(form.getByText(/is not an admin of Bloom News who can post/)).toBeVisible()
+  await expect.poll(() => startCode(page)).not.toBe(second)
+
+  // The channel's creator presses Start with the new link.
+  social.tgSay(TG_OWNER, `/start ${await startCode(page)}`)
+  await connect()
   await expect(tg.getByText('Bloom News')).toBeVisible()
   const row = sql(`select "externalId"||'|'||handle||'|'||"accessTokenEnc" from "SocialAccount" where "workspaceId"='${workspaceId}' and network='TELEGRAM'`)
-  expect(row).toMatch(/^-1001234567890\|bloomnews\|/)
+  expect(row).toMatch(new RegExp(`^-100\\d+\\|${CHANNEL}\\|`))
   expect(row).not.toContain('platform-token')
+  // Codes are stored as hashes only.
+  expect(sql(`select count(*) from "TelegramCode" where "codeHash"='${first}'`)).toBe('0')
 })
 
 test('Telegram: a post with a photo goes out with the text as its caption', async () => {
   const id = addPost('Fresh rye today', ['TELEGRAM'], [addMedia('IMAGE')])
   await publish(id)
-  expect(delivery(id, 'TELEGRAM')).toMatch(/^PUBLISHED\|\d+\|https:\/\/t\.me\/bloomnews\/\d+\|$/)
+  expect(delivery(id, 'TELEGRAM')).toMatch(new RegExp(`^PUBLISHED\\|\\d+\\|https://t\\.me/${CHANNEL}/\\d+\\|$`))
   const sent = social.calls.filter((c) => c.path.endsWith('/sendPhoto')).at(-1)!
   expect(sent.path).toContain('111:platform-token')
   expect((sent.body as { caption: string }).caption).toBe('Fresh rye today\n\n#bakery')
   expect(social.fetched.at(-1)!.status).toBe(200)
+})
+
+test('Telegram: a channel connected through Loudpilot’s bot can’t be connected in another account (its own bot can)', async ({ browser }) => {
+  const other = await browser.newPage()
+  try {
+    await newAccount(other, 'nets-other')
+    await other.goto('/app/channels')
+    const tg = other.getByRole('region', { name: 'Telegram channel', exact: true })
+    await tg.getByRole('button', { name: 'Connect' }).click()
+    const form = other.getByRole('form', { name: 'Connect Telegram' })
+    // Even with Start from the channel's creator.
+    social.tgSay(TG_OWNER, `/start ${await startCode(other)}`)
+    await form.getByPlaceholder('@yourchannel or t.me/yourchannel').fill(`@${CHANNEL}`)
+    await form.getByRole('button', { name: 'Connect channel' }).click()
+    await expect(form.getByText(/already connected to another Loudpilot account/)).toBeVisible()
+    await form.getByLabel(/Your own bot token/).fill('222:own-token-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
+    await form.getByRole('button', { name: 'Connect channel' }).click()
+    await expect(tg.getByText('Bloom News')).toBeVisible()
+  } finally {
+    await other.close()
+  }
 })
 
 test('OAuth networks connect; tokens are stored encrypted; X uses PKCE', async () => {

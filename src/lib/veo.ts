@@ -176,9 +176,9 @@ export async function advanceClip(jobId: string) {
     return prisma.clipJob.findUnique({ where: { id: job.id } })
   }
   try {
-    const info = await probe(outcome.file)
+    const info = await probe(outcome.file, 'video/mp4')
     const poster = path.join(outcome.dir, 'poster.jpg')
-    await posterFrame(outcome.file, poster, 0.5)
+    await posterFrame(outcome.file, 'video/mp4', poster, 0.5)
     const posterMedia = await saveMediaFile(job.workspaceId, poster, 'image/jpeg', 'Video poster')
     const media = await saveMediaFile(job.workspaceId, outcome.file, 'video/mp4', `AI clip: ${job.prompt.slice(0, 300)}`, {
       durationMs: info.durationMs ?? job.seconds * 1000,
@@ -236,6 +236,6 @@ export async function advanceClipsDue(now = new Date()) {
 }
 
 // Re-encode a clip's own sound check: whether the file has audio at all.
-export async function hasAudio(rel: string) {
-  return (await probe(mediaFile(rel))).audio
+export async function hasAudio(rel: string, mime: string) {
+  return (await probe(mediaFile(rel), mime)).audio
 }

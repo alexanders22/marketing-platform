@@ -5,7 +5,7 @@ import { readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { parse } from 'node-html-parser'
 import { analyzeImageStyle, analyzeVideoStyle, videoForAI, type ImageLook, type VideoLook } from './ai'
-import { posterFrame } from './ffmpeg'
+import { imageTooBig, MAX_IMAGE_SIDE, posterFrame, sniffType } from './ffmpeg'
 import { IMAGE_STYLES, isRefStyle, type ImageStyle, type ImageStyleDef } from './image-styles'
 import { prisma } from './prisma'
 import { safeFetchBytes } from './safe-fetch'
@@ -58,7 +58,7 @@ async function videoFile(file: string, mime: string): Promise<Loaded> {
   const dir = await tempDir('style')
   try {
     const still = path.join(dir, 'still.jpg')
-    await posterFrame(file, still, 1).catch(() => null)
+    await posterFrame(file, mime, still, 1).catch(() => null)
     const stillData = await readFile(still).catch(() => null)
     const { part, done } = await videoForAI(file, mime)
     return { part, still: stillData ? { data: stillData, mime: 'image/jpeg' } : null, done }
@@ -105,7 +105,8 @@ async function fromUrl(raw: string, want: StyleKind): Promise<Loaded> {
   const yt = youtubeId(url)
   if (yt) {
     const thumb = await safeFetchBytes(`https://i.ytimg.com/vi/${yt}/hqdefault.jpg`, { maxBytes: 2_000_000, timeoutMs: 10_000, accept: 'image/*' }).catch(() => null)
-    const still = thumb?.bytes.length ? { data: thumb.bytes, mime: 'image/jpeg' } : null
+    const thumbType = thumb ? sniffType(thumb.bytes, 'image') : null
+    const still = thumb && thumbType && !imageTooBig(thumb.bytes) ? { data: thumb.bytes, mime: thumbType } : null
     if (want === 'IMAGE') {
       if (!still) throw new RefError('Could not get a picture from that video')
       return { part: inline(still.data, still.mime), still, done: noop }
@@ -122,19 +123,23 @@ async function fromUrl(raw: string, want: StyleKind): Promise<Loaded> {
     if (r.bytes.length >= max) throw new RefError(want === 'VIDEO' ? 'That video is too big — upload a shorter one' : 'That picture is too big')
     return r
   }
+  // The type comes from the bytes; Content-Type only tells a page from a file.
+  const kind = want === 'VIDEO' ? 'video' : 'image'
   let res = await get(url.toString())
-  let type = res.contentType?.split(';')[0].trim().toLowerCase() ?? ''
-  if (type === 'text/html' || type === 'application/xhtml+xml') {
+  let type = sniffType(res.bytes, kind)
+  const declared = res.contentType?.split(';')[0].trim().toLowerCase() ?? ''
+  if (!type && (declared === 'text/html' || declared === 'application/xhtml+xml')) {
     const inner = metaUrl(res.bytes.toString('utf8'), res.url, want)
     if (!inner) throw new RefError(want === 'VIDEO' ? 'No video found on that page — upload the file instead.' : 'No picture found on that page — upload it instead.')
     res = await get(inner)
-    type = res.contentType?.split(';')[0].trim().toLowerCase() ?? ''
+    type = sniffType(res.bytes, kind)
   }
   if (want === 'IMAGE') {
-    if (!/^image\/(jpeg|png|webp|gif)$/.test(type)) throw new RefError('That link is not a picture')
+    if (!type) throw new RefError('That link is not a picture')
+    if (imageTooBig(res.bytes)) throw new RefError(`That picture is too big — up to ${MAX_IMAGE_SIDE} pixels on a side`)
     return { part: inline(res.bytes, type), still: { data: res.bytes, mime: type }, done: noop }
   }
-  if (!/^video\/(mp4|quicktime|webm)$/.test(type)) throw new RefError('That link is not a video file')
+  if (!type) throw new RefError('That link is not a video file')
   const dir = await tempDir('style')
   const file = path.join(dir, `ref.${type === 'video/webm' ? 'webm' : type === 'video/quicktime' ? 'mov' : 'mp4'}`)
   await writeFile(file, res.bytes)

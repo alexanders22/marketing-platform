@@ -1,10 +1,17 @@
 import 'server-only'
+import { randomBytes } from 'node:crypto'
 import type { SocialAccount } from '@prisma/client'
+import { sha256 } from '../crypto'
+import { prisma } from '../prisma'
 import { NetworkError, type Connector, type Outgoing } from './types'
 
 // Telegram channels through the Bot API. The company adds a bot as an admin
 // of its channel with "Post messages": Loudpilot's own bot (TELEGRAM_BOT_TOKEN)
-// or its own bot from @BotFather. The Bot API gives no view counts.
+// or its own bot from @BotFather. Loudpilot's bot is shared by everyone, so
+// with it the person connecting also proves they run the channel: they press
+// Start in the bot from their own Telegram (a one-time code, see startedWith)
+// and must be the channel's creator or an admin who may post. The Bot API
+// gives no view counts.
 
 const BASE = () => (process.env.TELEGRAM_API_URL || 'https://api.telegram.org').replace(/\/$/, '')
 export const PLATFORM_BOT = 'platform'
@@ -67,6 +74,73 @@ export async function findChannel(stored: string, channel: string) {
   if (member.status === 'administrator' && member.can_post_messages === false)
     throw new NetworkError(`@${me.username} can't post in ${chat.title ?? channel}. Turn on "Post messages" for it.`)
   return { externalId: String(chat.id), name: chat.title ?? channel, handle: chat.username ?? null, bot: me.username }
+}
+
+// Whether this Telegram user runs the channel: its creator, or an admin who
+// may post. (Only the bot's view of the admins counts — never a code posted
+// in the channel, which anyone can read.)
+export async function runsChannel(stored: string, chatId: string, userId: number) {
+  const admins = await tg<{ status: string; user: { id: number; is_bot?: boolean }; can_post_messages?: boolean }[]>(botToken(stored), 'getChatAdministrators', { chat_id: chatId })
+  return admins.some((a) => a.user.id === userId && !a.user.is_bot && (a.status === 'creator' || (a.status === 'administrator' && a.can_post_messages === true)))
+}
+
+/* ─── "/start <code>" to Loudpilot's bot ───────────────────────────────── */
+
+// One-time codes (TelegramCode): 15 minutes, used once, only the hash kept.
+const CODE_TTL_MS = 15 * 60_000
+
+export async function newStartCode(workspaceId: string, target: string) {
+  // Deep-link payloads allow A-Z, a-z, 0-9, _ and -.
+  const code = randomBytes(18).toString('base64url')
+  await prisma.telegramCode.deleteMany({ where: { expiresAt: { lt: new Date(Date.now() - 86_400_000) } } })
+  await prisma.telegramCode.create({ data: { workspaceId, target, codeHash: sha256(code), expiresAt: new Date(Date.now() + CODE_TTL_MS) } })
+  return code
+}
+
+type TgUser = { id: number; is_bot?: boolean; username?: string; first_name?: string }
+export type TgChat = { id: number; title?: string; username?: string; first_name?: string; type: string }
+type Update = { update_id: number; message?: { text?: string; chat: TgChat; from?: TgUser } }
+export type Started = { codeId: string; chat: TgChat; from: TgUser | null }
+
+export const chatName = (c: TgChat | TgUser) => ('title' in c && c.title) || (c.username ? `@${c.username}` : (c.first_name ?? 'Telegram chat'))
+
+// Who sent "/start <code>" for a live code of this target (the newest that
+// was sent). Null: nobody yet. A code sent from more than one chat was seen
+// by someone else: it is spent and refused.
+export async function startedWith(workspaceId: string, target: string): Promise<Started | null | { error: string }> {
+  if (!platformBot()) return { error: 'Loudpilot’s Telegram bot is not set up on this server yet.' }
+  let updates: Update[]
+  try {
+    // The latest 100 messages to the bot (Telegram keeps them for a day).
+    updates = await tg<Update[]>(platformBot(), 'getUpdates', { offset: -100, limit: 100, allowed_updates: ['message'] })
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Telegram did not answer.' }
+  }
+  const sent = new Map<string, NonNullable<Update['message']>[]>()
+  for (const u of updates) {
+    const m = u.message?.text?.trim().match(/^\/start(?:@\w+)?\s+([\w-]{16,64})$/)
+    if (!m || !u.message) continue
+    const hash = sha256(m[1])
+    sent.set(hash, [...(sent.get(hash) ?? []), u.message])
+  }
+  if (!sent.size) return null
+  const code = await prisma.telegramCode.findFirst({
+    where: { workspaceId, target, codeHash: { in: [...sent.keys()] }, usedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: 'desc' },
+  })
+  if (!code) return null
+  const messages = sent.get(code.codeHash)!
+  if (new Set(messages.map((m) => m.chat.id)).size > 1) {
+    await spendStartCode(code.id)
+    return { error: 'This link was used from more than one Telegram chat, so it no longer works. Get a new one and keep it to yourself.' }
+  }
+  const last = messages.at(-1)!
+  return { codeId: code.id, chat: last.chat, from: last.from ?? null }
+}
+
+// Marks a code used; false when it already was (or ran out).
+export async function spendStartCode(id: string, db: Pick<typeof prisma, 'telegramCode'> = prisma) {
+  return (await db.telegramCode.updateMany({ where: { id, usedAt: null, expiresAt: { gt: new Date() } }, data: { usedAt: new Date() } })).count === 1
 }
 
 async function sendVideo(token: string, chat: string, out: Outgoing, caption?: string) {

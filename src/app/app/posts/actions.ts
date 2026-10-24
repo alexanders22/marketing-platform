@@ -8,7 +8,7 @@ import { publishPostNow, scheduleProblem, targetsFor } from '@/lib/publisher'
 import { aiEnabled, generateImage } from '@/lib/ai'
 import { charge, notEnough, prices } from '@/lib/credits'
 import { withDossier } from '@/lib/dossier'
-import { mediaUrl, saveMedia } from '@/lib/storage'
+import { deleteMedia, mediaUrl, saveMedia } from '@/lib/storage'
 import { aiError } from '@/lib/ai-health'
 import { resolveImageStyle } from '@/lib/style-ref'
 import { Prisma } from '@prisma/client'
@@ -230,7 +230,7 @@ export async function generatePostImages(input: { prompt: string; caption: strin
     { amount: media.length * COST.image, reason: 'AI_IMAGE', note: `${media.length} post image${media.length > 1 ? 's' : ''}`, action: 'image', units: media.length },
   ])
   if (!ok) {
-    await prisma.media.deleteMany({ where: { id: { in: media.map((m) => m.id) } } })
+    await deleteMedia(media.map((m) => m.id))
     return { error: 'You ran out of credits while this was generating. Choose a plan to get more.' }
   }
   revalidatePath('/app', 'layout')

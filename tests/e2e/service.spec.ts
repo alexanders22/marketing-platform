@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { startFakeSocial } from './fake-social'
+import { startFakeSocial, TG_OWNER } from './fake-social'
 import { newAccount, onceAppDialog, sql } from './helpers'
 
 // When a plan has ended (after 3 grace days for a paid one): scheduled posts
@@ -43,7 +43,10 @@ test.beforeAll(async ({ browser }) => {
   await page.goto('/app/channels')
   await page.getByRole('region', { name: 'Telegram channel', exact: true }).getByRole('button', { name: 'Connect' }).click()
   const form = page.getByRole('form', { name: 'Connect Telegram' })
-  await form.getByPlaceholder('@yourchannel or t.me/yourchannel').fill('@bloomnews')
+  // Start in Loudpilot's bot from the account that runs the channel.
+  const start = await form.getByRole('link', { name: 'open @LoudpilotTestBot' }).getAttribute('href')
+  social.tgSay(TG_OWNER, `/start ${new URL(start!).searchParams.get('start')}`)
+  await form.getByPlaceholder('@yourchannel or t.me/yourchannel').fill(`@bloomnews_svc${Date.now().toString(36)}`)
   await form.getByRole('button', { name: 'Connect channel' }).click()
   await expect(page.getByText('Bloom News')).toBeVisible()
 })

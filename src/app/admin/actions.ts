@@ -13,6 +13,7 @@ import { WORKSPACE_COOKIE } from '@/lib/context'
 import { forgetPricing, getPlans } from '@/lib/credits'
 import { cancelAutoRenew, cancelOtherRenewals, RECURRING_KEY, type RecurringRefs } from '@/lib/payments'
 import { prisma } from '@/lib/prisma'
+import { removeWorkspaceFiles } from '@/lib/storage'
 import { ACTION_KEYS, VEO_PLANS, type Pricing } from '@/lib/pricing'
 import type { Economics } from '@/lib/economics'
 
@@ -166,15 +167,25 @@ export async function deleteAccount(accountId: string, _: AdminState, f: FormDat
   // Monrem would keep charging a deleted account.
   const stopped = await cancelAutoRenew(accountId)
   if (stopped.error) return { error: `Auto-renewal could not be cancelled at Monrem: ${stopped.error}` }
-  await prisma.$transaction(async (tx) => {
-    await tx.workspace.deleteMany({ where: { accountId } })
+  const workspaces = await prisma.$transaction(async (tx) => {
+    const ids = (await tx.workspace.findMany({ where: { accountId }, select: { id: true } })).map((w) => w.id)
+    await tx.workspace.deleteMany({ where: { id: { in: ids } } })
     await tx.account.delete({ where: { id: accountId } })
+    return ids
   })
+  // Their files go too (pictures, videos, music).
+  await removeFiles(workspaces)
   await logAdmin(admin, 'account.delete', 'account', accountId, { name: account.name })
   redirect('/admin/companies?deleted=1')
 }
 
 /* ─── Workspaces ───────────────────────────────────────────────────────── */
+
+// A deleted workspace's stored files. The rows are gone already; a folder
+// that can't be removed is logged, not shown as a failed delete.
+async function removeFiles(workspaceIds: string[]) {
+  for (const id of workspaceIds) await removeWorkspaceFiles(id).catch((e) => console.error('workspace files not removed', id, e instanceof Error ? e.message : e))
+}
 
 export async function renameWorkspace(workspaceId: string, _: AdminState, f: FormData): Promise<AdminState> {
   const admin = await requireSuperAdmin()
@@ -192,6 +203,7 @@ export async function deleteWorkspace(workspaceId: string, _: AdminState, f: For
   if (!ws) return { error: 'Already deleted' }
   if (text(f, 'confirm') !== ws.name) return { error: `Type “${ws.name}” to confirm` }
   await prisma.workspace.delete({ where: { id: workspaceId } })
+  await removeFiles([workspaceId])
   await logAdmin(admin, 'workspace.delete', 'workspace', workspaceId, { name: ws.name, accountId: ws.accountId })
   revalidatePath(`/admin/companies/${ws.accountId}`)
   return { ok: 'Deleted' }

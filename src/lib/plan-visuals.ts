@@ -6,7 +6,7 @@ import { charge } from './credits'
 import { withDossier } from './dossier'
 import type { Prices } from './pricing'
 import { prisma } from './prisma'
-import { saveMedia, mediaUrl } from './storage'
+import { deleteMedia, saveMedia, mediaUrl } from './storage'
 import type { PlanData } from './strategist'
 import { emptyDoc, newScene, type VideoDoc } from './video'
 import { enqueueRender, waitForRender } from './video-render'
@@ -83,7 +83,7 @@ export async function generatePlanVisuals(planId: string, price: number) {
       if (!ok) {
         // The post was free, so the credits ran out.
         if (bare) stop = true
-        await prisma.media.delete({ where: { id: media.id } })
+        await deleteMedia([media.id])
         return null
       }
       return media
