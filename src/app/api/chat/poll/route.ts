@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { publicMessage, tokenConversation } from '@/lib/chatbot'
 import { prisma } from '@/lib/prisma'
 import { overLimit } from '@/lib/rate-limit'
+import { readBody } from '@/lib/read-body'
 import { CORS, corsJson, requestMeta } from '@/lib/tag'
 
 // New messages in a conversation (a teammate's answers), for the widget.
@@ -10,9 +11,11 @@ const schema = z.object({ token: z.string().max(400), after: z.string().max(40).
 export async function POST(req: Request) {
   const meta = requestMeta(req)
   if (overLimit(`chat-poll:${meta.ip ?? 'unknown'}`, 120, 60_000)) return corsJson({ error: { code: 'rate_limited', message: 'Slow down' } }, 429)
+  const raw = await readBody(req)
+  if (raw === null) return corsJson({ error: { code: 'too_large', message: 'Request too large' } }, 413)
   let body: z.infer<typeof schema>
   try {
-    body = schema.parse(JSON.parse(await req.text()))
+    body = schema.parse(JSON.parse(raw))
   } catch {
     return corsJson({ error: { code: 'invalid_request', message: 'Invalid request' } }, 400)
   }

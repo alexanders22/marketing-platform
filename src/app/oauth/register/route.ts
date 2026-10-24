@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { CORS } from '@/lib/mcp/server'
 import { prisma } from '@/lib/prisma'
 import { validRedirect } from '@/lib/oauth'
+import { readBody } from '@/lib/read-body'
 
 const Input = z.object({
   client_name: z.string().max(100).optional(),
@@ -14,9 +15,11 @@ const Input = z.object({
 export async function POST(req: Request) {
   const fail = (description: string) =>
     Response.json({ error: 'invalid_client_metadata', error_description: description }, { status: 400, headers: CORS })
+  const text = await readBody(req)
+  if (text === null) return Response.json({ error: 'invalid_client_metadata', error_description: 'Body too large' }, { status: 413, headers: CORS })
   let raw: unknown
   try {
-    raw = await req.json()
+    raw = JSON.parse(text)
   } catch {
     return fail('Body must be JSON')
   }

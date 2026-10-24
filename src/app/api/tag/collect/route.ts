@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { overLimit } from '@/lib/rate-limit'
+import { readBody, tooLarge } from '@/lib/read-body'
 import { collectBody, CORS, hostAllowed, isBot, recordBatch, requestMeta } from '@/lib/tag'
 
 // Events from /t.js (sendBeacon, text/plain so no preflight). Always 204 for
@@ -10,9 +11,11 @@ export async function POST(req: Request) {
   const meta = requestMeta(req)
   if (isBot(meta.ua)) return done()
   if (overLimit(`tag:${meta.ip ?? 'unknown'}`, 600, 60_000)) return new Response(null, { status: 429, headers: CORS })
+  const raw = await readBody(req)
+  if (raw === null) return tooLarge(CORS)
   let parsed
   try {
-    parsed = collectBody.safeParse(JSON.parse(await req.text()))
+    parsed = collectBody.safeParse(JSON.parse(raw))
   } catch {
     return new Response(null, { status: 400, headers: CORS })
   }

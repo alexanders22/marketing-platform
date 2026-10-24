@@ -63,6 +63,11 @@ test('connect link: the customer connects Meta without a Loudpilot login', async
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   await page.goto(url)
+  // A Loudpilot page first says who asks and for which company; nothing happens without a click.
+  await expect(page.getByRole('heading', { name: 'Connect Facebook and Instagram to Arca Development' })).toBeVisible()
+  await expect(page.getByText('Test MULTI asks you to connect')).toBeVisible()
+  expect(page.url()).toContain('/connect/meta?token=')
+  await page.getByRole('link', { name: 'Continue to Facebook' }).click()
   await page.waitForURL(/loudpilot_status=/)
   expect(page.url()).toContain('from=upla&loudpilot_status=connected&loudpilot_accounts=3')
   await ctx.close()
@@ -125,6 +130,20 @@ test('another partner cannot reach the workspace', async () => {
     expect((await other.get(`/api/v1/workspaces/${ext}${path}`)).status()).toBe(404)
   }
   expect((await other.post(`/api/v1/workspaces/${ext}/connect-links`, { data: { network: 'meta', returnUrl: 'https://x.test/' } })).status()).toBe(404)
+})
+
+test("a customer's own API key cannot make connect links", async ({ playwright }) => {
+  const id = `own${stamp}`
+  const key = `lp_live_${randomBytes(30).toString('base64url')}`
+  sql(`insert into "Account"(id,name,email,plan,"trialEndsAt","updatedAt") values ('a${id}','Own Co','${id}@khma.test','TEAM',now() + interval '14 days',now())`)
+  sql(`insert into "Partner"(id,name,slug,mode,"ownerAccountId","updatedAt") values ('${id}','Own Co','account-a${id}','MULTI','a${id}',now())`)
+  sql(`insert into "ApiKey"(id,"partnerId",name,prefix,"keyHash") values ('k${id}','${id}','own','${key.slice(0, 12)}','${createHash('sha256').update(key).digest('hex')}')`)
+  sql(`insert into "Workspace"(id,name,"partnerId","externalId","accountId","updatedAt") values ('w${id}','Own Co','${id}','w${id}','a${id}',now())`)
+  const own = await playwright.request.newContext({ baseURL: 'http://localhost:3100', extraHTTPHeaders: { authorization: `Bearer ${key}` } })
+  const res = await own.post(`/api/v1/workspaces/w${id}/connect-links`, { data: { network: 'meta', returnUrl: 'https://x.test/' } })
+  expect(res.status()).toBe(403)
+  expect((await res.json()).error.code).toBe('partner_only')
+  await own.dispose()
 })
 
 test('website tag: the snippet for the customer’s site, only for own workspaces', async () => {

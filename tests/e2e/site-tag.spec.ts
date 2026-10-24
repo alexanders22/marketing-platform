@@ -261,3 +261,50 @@ test('the demo shop shows the chat before it is switched on, as a test', async (
   const cfg = await (await page.request.get(`/api/tag/config?s=${key}`)).json()
   expect(cfg.chat).toBeNull()
 })
+
+test('the owner preview works only on Loudpilot itself', async () => {
+  // The chat is still off (previous test): only the demo shop's preview gets it.
+  await page.goto('/demo-shop')
+  const preview = (await page.locator('script[data-preview]').getAttribute('data-preview'))!
+  const send = (origin: string, n: number) =>
+    page.request.post('/api/chat/send', {
+      headers: { 'content-type': 'text/plain', origin },
+      data: JSON.stringify({ s: key, v: `preview-${Date.now()}-${n}`, preview, text: 'Hello' }),
+    })
+  expect((await send(`http://127.0.0.1:${SITE_PORT}`, 1)).status()).toBe(404)
+  expect((await send('http://localhost:3100', 2)).status()).toBe(200)
+})
+
+test('the edge: security headers, the widget still loads cross-site, big bodies are refused', async () => {
+  const home = await page.request.get('/')
+  expect(home.headers()['x-frame-options']).toBe('DENY')
+  expect(home.headers()['content-security-policy']).toContain("frame-ancestors 'none'")
+  expect(home.headers()['x-content-type-options']).toBe('nosniff')
+  expect(home.headers()['strict-transport-security']).toContain('max-age=31536000')
+  expect(home.headers()['referrer-policy']).toBe('strict-origin-when-cross-origin')
+  expect(home.headers()['x-powered-by']).toBeUndefined()
+  // Monrem's return page opens in our own payment frame.
+  expect((await page.request.get('/pay/done')).headers()['x-frame-options']).toBe('SAMEORIGIN')
+
+  for (const script of ['/t.js', '/w.js']) {
+    const r = await page.request.get(script)
+    expect(r.status()).toBe(200)
+    expect(r.headers()['access-control-allow-origin']).toBe('*')
+    expect(r.headers()['content-type']).toContain('javascript')
+  }
+  const pre = await page.request.fetch('/api/chat/send', { method: 'OPTIONS', headers: { origin: `http://127.0.0.1:${SITE_PORT}` } })
+  expect(pre.status()).toBe(204)
+  expect(pre.headers()['access-control-allow-origin']).toBe('*')
+
+  const big = 'x'.repeat(100_000)
+  for (const path of ['/api/tag/collect', '/api/chat/send', '/api/chat/poll', '/api/client-errors']) {
+    const r = await page.request.post(path, { headers: { 'content-type': 'text/plain' }, data: JSON.stringify({ s: key, pad: big }) })
+    expect(r.status(), path).toBe(413)
+  }
+  // An over-long user id is refused, not stored cut short.
+  const long = await page.request.post('/api/tag/v1/events', {
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
+    data: { site: key, events: [{ name: 'Lead', user_id: 'u'.repeat(500) }] },
+  })
+  expect(long.status()).toBe(400)
+})

@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { sha256 } from '@/lib/crypto'
+import { clientIp as ipOf } from '@/lib/client-ip'
 import { actionEmail, mailEnabled, sendMail } from '@/lib/mail'
 import { terminalUrl } from '@/lib/hosts'
 import { hashPassword, verifyPassword } from '@/lib/password'
@@ -104,7 +105,7 @@ const PasswordLogin = z.object({ email: Email, password: z.string().min(1) })
 const LOGIN_WINDOW = 15 * 60 * 1000
 async function clientIp() {
   const h = await headers()
-  return h.get('x-forwarded-for')?.split(',')[0].trim() || h.get('x-real-ip') || 'unknown'
+  return ipOf(h) ?? 'unknown'
 }
 
 export async function passwordLogin(_: FormState, form: FormData): Promise<FormState> {

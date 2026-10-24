@@ -29,7 +29,9 @@ import { applyIdentity, normEmail, normPhone, recordServerEvents, signBody, site
 //    conversation so details can't be guessed.
 //  - Red-flag topics, a request for a person, no credits, the site's daily
 //    limit of paid chats or no AI: the conversation is handed over and the
-//    team is told by e-mail / Telegram.
+//    team is told by e-mail / Telegram (up to ALERTS_PER_DAY a site).
+//  - A site starts at most NEW_CHATS_PER_DAY conversations a day; the
+//    owner's preview (demo shop) PREVIEW_CHATS_PER_DAY.
 
 export type BotAction = { key: string; description: string; params: string[]; verified: boolean }
 
@@ -122,6 +124,11 @@ export async function visitorSays(site: Site, conv: ChatConversation, text: stri
 const MAX_REPLIES = 40
 const CHARGED_CHATS_PER_DAY = 300
 const LOOKUPS_PER_HOUR = 15
+// Past the charged ones, chats go to people: a script on the public site key
+// must not open conversations, or e-mail and message the team, without end.
+const NEW_CHATS_PER_DAY = 1000
+const PREVIEW_CHATS_PER_DAY = 50
+const ALERTS_PER_DAY = 100
 
 const HANDOFF_NOTE = 'A teammate will join this chat.'
 
@@ -319,7 +326,7 @@ async function saveContact(site: Site, conv: ChatConversation, args: Record<stri
   } else if (visitor) {
     await applyIdentity(site, visitor, { email: email ?? undefined, phone: phone ?? undefined, name: name ?? undefined })
   }
-  if (conv.status === 'HUMAN') after(() => notifyTeam(conv.id, 'The visitor left a contact').catch((e) => console.error('chat notify failed', e)))
+  if (conv.status === 'HUMAN') alertTeam(conv, 'The visitor left a contact')
   return { ok: true }
 }
 
@@ -362,6 +369,21 @@ export async function callAction(url: string, site: Site, conv: Pick<ChatConvers
   }
 }
 
+// Whether the site may start another conversation today (previews counted apart).
+export async function newChatAllowed(site: Pick<Site, 'id' | 'workspaceId'>, preview: boolean) {
+  const today = await prisma.chatConversation.count({
+    where: { workspaceId: site.workspaceId, siteId: site.id, test: preview, createdAt: { gte: new Date(Date.now() - 86_400_000) } },
+  })
+  return today < (preview ? PREVIEW_CHATS_PER_DAY : NEW_CHATS_PER_DAY)
+}
+
+// The team's alert for something a visitor did, at most ALERTS_PER_DAY a
+// site; the chats stay in the inbox either way.
+function alertTeam(conv: Pick<ChatConversation, 'id' | 'siteId'>, reason: string) {
+  if (overLimit(`chat-alert:${conv.siteId}`, ALERTS_PER_DAY, 86_400_000)) return
+  after(() => notifyTeam(conv.id, reason).catch((e) => console.error('chat notify failed', e)))
+}
+
 /* ─── Hand-over to a person ────────────────────────────────────────────── */
 
 export async function handoff(conv: ChatConversation, reason: string, summary?: string, sayIt = false) {
@@ -372,7 +394,7 @@ export async function handoff(conv: ChatConversation, reason: string, summary?: 
   await assignOperator(conv)
   // The model says it in its own words; otherwise a short note does.
   const note = await say(conv, 'NOTE', sayIt || !summary ? HANDOFF_NOTE + (conv.email || conv.phone ? '' : ' You can leave your phone or e-mail here.') : HANDOFF_NOTE)
-  after(() => notifyTeam(conv.id, reason).catch((e) => console.error('chat notify failed', e)))
+  alertTeam(conv, reason)
   return note
 }
 
